@@ -1,0 +1,1510 @@
+{
+  "ServiceRequest": {
+    "files": [
+      "src\\pages\\AfterSalesjsx",
+      "src\\pages\\ServiceReportsjsx",
+      "src\\pages\\ServiceRequestsjsx",
+      "src\\components\\dashboard\\widgets\\OpenRequestsWidgetjsx"
+    ],
+    "methods": [
+      "filter",
+      "create"
+    ],
+    "inferredFields": [
+      "company_id",
+      "enabled",
+      "staleTime",
+      "refetchInterval",
+      "request_number",
+      "client_name",
+      "order_number",
+      "product_name",
+      "status"
+    ]
+  },
+  "ServiceOrder": {
+    "files": [
+      "src\\pages\\AfterSalesjsx",
+      "src\\pages\\ReportGeneratorjsx",
+      "src\\pages\\ServiceOrderDetailjsx",
+      "src\\pages\\ServiceOrdersjsx",
+      "src\\pages\\ServiceReportsjsx",
+      "src\\pages\\ServiceRequestsjsx",
+      "src\\pages\\ServiceSchedulejsx"
+    ],
+    "methods": [
+      "filter",
+      "create"
+    ],
+    "inferredFields": [
+      "company_id",
+      "enabled",
+      "staleTime",
+      "refetchInterval",
+      "id",
+      "os_number",
+      "request_id",
+      "client_id",
+      "client_name",
+      "product_id",
+      "product_name",
+      "serial_number",
+      "type",
+      "priority",
+      "description",
+      "status"
+    ]
+  },
+  "ProductionOrder": {
+    "files": [
+      "src\\pages\\BOMDeliveryPickingjsx",
+      "src\\pages\\BOMDeliveryPickingListjsx",
+      "src\\pages\\CreateInventoryMovejsx",
+      "src\\pages\\FactoryDashboardjsx",
+      "src\\pages\\OPConsumptionControljsx",
+      "src\\pages\\ProductionDashboardjsx",
+      "src\\pages\\ProductionOrderDetailjsx",
+      "src\\pages\\ProductionOrdersjsx",
+      "src\\pages\\ProductionRequestsjsx",
+      "src\\pages\\ProductionSchedulejsx",
+      "src\\pages\\ProductionSyncFixjsx",
+      "src\\pages\\QuoteDetailjsx",
+      "src\\pages\\Reportsjsx",
+      "src\\pages\\SalesOrderDetailjsx",
+      "src\\pages\\SalesOrdersjsx",
+      "src\\pages\\StockPledgeQueryjsx",
+      "src\\components\\dashboard\\widgets\\ProductionOPWidgetjsx",
+      "src\\components\\erp\\ERPSyncPaneljsx",
+      "src\\components\\labels\\ProductionOrderLabelGeneratorjsx",
+      "src\\components\\NotificationsPaneljsx",
+      "src\\components\\production\\ConsumptionFormjsx",
+      "src\\components\\production\\OPSearchSelectjsx",
+      "src\\components\\reports\\ProductionOrdersExportjsx"
+    ],
+    "methods": [
+      "filter",
+      "create"
+    ],
+    "inferredFields": [
+      "company_id",
+      "id",
+      "status",
+      "nin",
+      "enabled",
+      "refetchInterval",
+      "parent_op_id",
+      "op_number",
+      "numero_op_externo",
+      "request_id",
+      "product_id",
+      "product_name",
+      "route_id",
+      "route_name",
+      "qty_planned",
+      "qty_produced",
+      "qty_attended",
+      "priority",
+      "due_date",
+      "warehouse_id",
+      "warehouse_name",
+      "location_id",
+      "location_barcode",
+      "in",
+      "staleTime",
+      "gcTime",
+      "refetchOnMount",
+      "title",
+      "message",
+      "severity",
+      "page"
+    ]
+  },
+  "BOMDeliveryControl": {
+    "files": [
+      "src\\pages\\BOMDeliveryPickingjsx",
+      "src\\pages\\CreateInventoryMovejsx",
+      "src\\pages\\OPConsumptionControljsx",
+      "src\\pages\\ProductionOrderDetailjsx",
+      "src\\pages\\ProductionOrdersjsx",
+      "src\\pages\\StockPledgeQueryjsx",
+      "src\\components\\consumption\\ReverseConsumptionDialogjsx",
+      "src\\components\\production\\MaterialTrackingjsx"
+    ],
+    "methods": [
+      "filter"
+    ],
+    "inferredFields": [
+      "company_id",
+      "op_id",
+      "id",
+      "component_id",
+      "status",
+      "enabled"
+    ]
+  },
+  "BOM": {
+    "files": [
+      "src\\pages\\BOMDeliveryPickingjsx",
+      "src\\pages\\BOMDetailjsx",
+      "src\\pages\\BOMsjsx",
+      "src\\pages\\ImportBOMsjsx",
+      "src\\pages\\ProductionOrderDetailjsx",
+      "src\\pages\\ProductionOrdersjsx",
+      "src\\pages\\ProductionRequestsjsx",
+      "src\\pages\\StockPledgeQueryjsx"
+    ],
+    "methods": [
+      "filter",
+      "create"
+    ],
+    "inferredFields": [
+      "company_id",
+      "product_id",
+      "active",
+      "enabled",
+      "product_sku",
+      "product_name"
+    ]
+  },
+  "BOMItem": {
+    "files": [
+      "src\\pages\\BOMDeliveryPickingjsx",
+      "src\\pages\\BOMDetailjsx",
+      "src\\pages\\ImportBOMsjsx",
+      "src\\pages\\ProductionOrderDetailjsx",
+      "src\\pages\\ProductionOrdersjsx",
+      "src\\pages\\ProductionRequestsjsx",
+      "src\\pages\\StockPledgeQueryjsx"
+    ],
+    "methods": [
+      "filter",
+      "create"
+    ],
+    "inferredFields": [
+      "company_id",
+      "bom_version_id",
+      "enabled",
+      "bom_id",
+      "component_id",
+      "component_sku",
+      "component_name",
+      "quantity",
+      "sequence",
+      "unit"
+    ]
+  },
+  "ProductionRouteStep": {
+    "files": [
+      "src\\pages\\BOMDeliveryPickingjsx",
+      "src\\pages\\ImportRoutesjsx",
+      "src\\pages\\ProductionOrderDetailjsx",
+      "src\\pages\\ProductionOrdersjsx",
+      "src\\pages\\ProductionRequestsjsx",
+      "src\\pages\\ProductionRouteStepsjsx",
+      "src\\pages\\ProductionSimulationjsx",
+      "src\\pages\\RouteStepsjsx"
+    ],
+    "methods": [
+      "filter",
+      "create"
+    ],
+    "inferredFields": [
+      "company_id",
+      "route_id",
+      "enabled"
+    ]
+  },
+  "Location": {
+    "files": [
+      "src\\pages\\BOMDeliveryPickingjsx",
+      "src\\pages\\CreateInventoryMovejsx",
+      "src\\pages\\InventoryCountjsx",
+      "src\\pages\\InventoryCountDetailjsx",
+      "src\\pages\\InventoryMovesjsx",
+      "src\\pages\\InventoryReceivejsx",
+      "src\\pages\\Kardexjsx",
+      "src\\pages\\Locationsjsx",
+      "src\\pages\\OPConsumptionControljsx",
+      "src\\pages\\PickingOptimizedjsx",
+      "src\\pages\\ProductionOrderDetailjsx",
+      "src\\pages\\ProductionOrdersjsx",
+      "src\\pages\\ProductionRequestsjsx",
+      "src\\pages\\StockBalancesjsx",
+      "src\\pages\\StockConsistencyCheckjsx",
+      "src\\pages\\StockLocatorjsx",
+      "src\\pages\\StockReportsjsx",
+      "src\\pages\\StorageAllocationjsx",
+      "src\\pages\\StorageScannerjsx",
+      "src\\components\\consumption\\ReverseConsumptionDialogjsx",
+      "src\\components\\labels\\LocationLabelGeneratorjsx",
+      "src\\components\\reports\\StockByAllocationExportjsx",
+      "src\\components\\sales\\ReservationDialogjsx"
+    ],
+    "methods": [
+      "filter",
+      "create"
+    ],
+    "inferredFields": [
+      "company_id",
+      "active",
+      "id",
+      "enabled",
+      "warehouse_id",
+      "staleTime",
+      "gcTime",
+      "refetchOnMount"
+    ]
+  },
+  "StockBalance": {
+    "files": [
+      "src\\pages\\BOMDeliveryPickingjsx",
+      "src\\pages\\CreateInventoryMovejsx",
+      "src\\pages\\InventoryCountjsx",
+      "src\\pages\\InventoryCountDetailjsx",
+      "src\\pages\\PickingOptimizedjsx",
+      "src\\pages\\ProductionOrderDetailjsx",
+      "src\\pages\\ProductionSyncFixjsx",
+      "src\\pages\\RecalculateProductBalancejsx",
+      "src\\pages\\Reportsjsx",
+      "src\\pages\\Reservationsjsx",
+      "src\\pages\\ReverseInventoryMovesjsx",
+      "src\\pages\\SalesOrderDetailjsx",
+      "src\\pages\\Separationjsx",
+      "src\\pages\\Shippingjsx",
+      "src\\pages\\StockBalancesjsx",
+      "src\\pages\\StockConsistencyCheckjsx",
+      "src\\pages\\StockLocatorjsx",
+      "src\\pages\\StockPledgeQueryjsx",
+      "src\\pages\\StockReportsjsx",
+      "src\\pages\\StorageAllocationjsx",
+      "src\\pages\\StorageScannerjsx",
+      "src\\components\\consumption\\ReverseConsumptionDialogjsx",
+      "src\\components\\dashboard\\widgets\\StockStatusWidgetjsx",
+      "src\\components\\reports\\StockByAllocationExportjsx",
+      "src\\components\\reports\\StockExportjsx",
+      "src\\components\\sales\\ReservationDialogjsx"
+    ],
+    "methods": [
+      "filter",
+      "create"
+    ],
+    "inferredFields": [
+      "company_id",
+      "product_id",
+      "warehouse_id",
+      "location_id",
+      "qty_available",
+      "qty_reserved",
+      "qty_separated",
+      "avg_cost",
+      "product_sku",
+      "product_name",
+      "warehouse_name",
+      "qty"
+    ]
+  },
+  "InventoryMove": {
+    "files": [
+      "src\\pages\\BOMDeliveryPickingjsx",
+      "src\\pages\\CreateInventoryMovejsx",
+      "src\\pages\\InventoryCountjsx",
+      "src\\pages\\InventoryCountDetailjsx",
+      "src\\pages\\InventoryMovesjsx",
+      "src\\pages\\Kardexjsx",
+      "src\\pages\\OPConsumptionControljsx",
+      "src\\pages\\PickingOptimizedjsx",
+      "src\\pages\\ProductionOrderDetailjsx",
+      "src\\pages\\ProductionSyncFixjsx",
+      "src\\pages\\Productsjsx",
+      "src\\pages\\QuoteDetailjsx",
+      "src\\pages\\RecalculateProductBalancejsx",
+      "src\\pages\\Reportsjsx",
+      "src\\pages\\ReverseInventoryMovesjsx",
+      "src\\pages\\SalesOrderDetailjsx",
+      "src\\pages\\Separationjsx",
+      "src\\pages\\Shippingjsx",
+      "src\\pages\\StockConsistencyCheckjsx",
+      "src\\pages\\StockLocatorjsx",
+      "src\\pages\\StockPledgeQueryjsx",
+      "src\\pages\\StockReportsjsx",
+      "src\\pages\\StorageAllocationjsx",
+      "src\\pages\\StorageScannerjsx",
+      "src\\components\\consumption\\ReverseConsumptionDialogjsx",
+      "src\\components\\NotificationsPaneljsx",
+      "src\\components\\production\\ConsumptionFormjsx",
+      "src\\components\\production\\MaterialTrackingjsx"
+    ],
+    "methods": [
+      "create",
+      "filter"
+    ],
+    "inferredFields": [
+      "company_id",
+      "type",
+      "product_id",
+      "qty",
+      "from_warehouse_id",
+      "from_location_id",
+      "related_type",
+      "related_id",
+      "reason",
+      "enabled",
+      "unit_cost",
+      "to_warehouse_id",
+      "to_location_id",
+      "baixa_motivo"
+    ]
+  },
+  "OPConsumptionControl": {
+    "files": [
+      "src\\pages\\BOMDeliveryPickingjsx",
+      "src\\pages\\OPConsumptionControljsx",
+      "src\\pages\\ProductionOrderDetailjsx",
+      "src\\components\\consumption\\ReverseConsumptionDialogjsx",
+      "src\\components\\production\\ConsumptionFormjsx"
+    ],
+    "methods": [
+      "filter",
+      "create"
+    ],
+    "inferredFields": [
+      "company_id",
+      "op_id",
+      "consumed_product_id",
+      "op_number",
+      "numero_op_externo",
+      "product_id",
+      "product_name",
+      "consumed_product_sku",
+      "consumed_product_name",
+      "qty",
+      "inventory_move_id",
+      "op_status",
+      "control_status",
+      "notes"
+    ]
+  },
+  "Product": {
+    "files": [
+      "src\\pages\\BOMDetailjsx",
+      "src\\pages\\BOMsjsx",
+      "src\\pages\\CreateInventoryMovejsx",
+      "src\\pages\\ImportBOMsjsx",
+      "src\\pages\\ImportRoutesjsx",
+      "src\\pages\\InventoryCountjsx",
+      "src\\pages\\InventoryCountDetailjsx",
+      "src\\pages\\InventoryMovesjsx",
+      "src\\pages\\InventoryReceivejsx",
+      "src\\pages\\Kardexjsx",
+      "src\\pages\\MaterialRequestDetailjsx",
+      "src\\pages\\OPConsumptionControljsx",
+      "src\\pages\\ProductionDashboardjsx",
+      "src\\pages\\ProductionOrdersjsx",
+      "src\\pages\\ProductionRequestsjsx",
+      "src\\pages\\ProductionSimulationjsx",
+      "src\\pages\\Productsjsx",
+      "src\\pages\\ProspectionVisitFormjsx",
+      "src\\pages\\QuoteDetailjsx",
+      "src\\pages\\RecalculateProductBalancejsx",
+      "src\\pages\\Reportsjsx",
+      "src\\pages\\Reservationsjsx",
+      "src\\pages\\ReturnDetailjsx",
+      "src\\pages\\SalesAppointmentsjsx",
+      "src\\pages\\SalesOrderDetailjsx",
+      "src\\pages\\SalesOrdersjsx",
+      "src\\pages\\SerialNumberControljsx",
+      "src\\pages\\ServiceRequestsjsx",
+      "src\\pages\\StockBalancesjsx",
+      "src\\pages\\StockConsistencyCheckjsx",
+      "src\\pages\\StockLocatorjsx",
+      "src\\pages\\StockPledgeQueryjsx",
+      "src\\pages\\StockReportsjsx",
+      "src\\pages\\StorageAllocationjsx",
+      "src\\pages\\StorageScannerjsx",
+      "src\\components\\erp\\ERPSyncPaneljsx",
+      "src\\components\\labels\\ProductLabelGeneratorjsx",
+      "src\\components\\NotificationsPaneljsx",
+      "src\\components\\production\\ConsumptionFormjsx",
+      "src\\components\\production\\MaterialTrackingjsx",
+      "src\\components\\products\\ProductSearchSelectjsx",
+      "src\\components\\reports\\StockByAllocationExportjsx",
+      "src\\components\\reports\\StockExportjsx"
+    ],
+    "methods": [
+      "filter"
+    ],
+    "inferredFields": [
+      "active",
+      "company_id",
+      "id",
+      "enabled",
+      "staleTime",
+      "sku",
+      "name",
+      "unit",
+      "category",
+      "min_stock",
+      "max_stock",
+      "cost_price",
+      "sale_price",
+      "gcTime",
+      "refetchOnMount"
+    ]
+  },
+  "ProductionRoute": {
+    "files": [
+      "src\\pages\\BOMDetailjsx",
+      "src\\pages\\ImportRoutesjsx",
+      "src\\pages\\ProductionOrdersjsx",
+      "src\\pages\\ProductionRequestsjsx",
+      "src\\pages\\ProductionRoutesjsx",
+      "src\\pages\\ProductionRouteStepsjsx",
+      "src\\pages\\ProductionSimulationjsx",
+      "src\\pages\\RouteStepsjsx"
+    ],
+    "methods": [
+      "filter",
+      "create"
+    ],
+    "inferredFields": [
+      "active",
+      "product_id",
+      "code",
+      "name",
+      "company_id",
+      "enabled",
+      "id"
+    ]
+  },
+  "BOMVersion": {
+    "files": [
+      "src\\pages\\BOMDetailjsx",
+      "src\\pages\\BOMsjsx",
+      "src\\pages\\ImportBOMsjsx"
+    ],
+    "methods": [
+      "filter",
+      "create"
+    ],
+    "inferredFields": [
+      "bom_id",
+      "enabled",
+      "company_id",
+      "version_number",
+      "is_active",
+      "effective_date"
+    ]
+  },
+  "Client": {
+    "files": [
+      "src\\pages\\Clientsjsx",
+      "src\\pages\\ProspectionProjectsjsx",
+      "src\\pages\\QuoteDetailjsx",
+      "src\\pages\\Quotesjsx",
+      "src\\pages\\Returnsjsx",
+      "src\\pages\\SalesOrdersjsx",
+      "src\\pages\\SerialNumberControljsx",
+      "src\\pages\\ServiceRequestsjsx",
+      "src\\components\\clients\\ClientSearchSelectjsx",
+      "src\\components\\erp\\ERPSyncPaneljsx",
+      "src\\components\\reports\\ClientsExportjsx"
+    ],
+    "methods": [
+      "filter",
+      "create"
+    ],
+    "inferredFields": [
+      "company_id",
+      "enabled",
+      "active",
+      "id"
+    ]
+  },
+  "Company": {
+    "files": [
+      "src\\pages\\CompanyManagementjsx",
+      "src\\pages\\DeleteCompanyDatajsx",
+      "src\\pages\\RestoreCompanyDatajsx",
+      "src\\pages\\UserManagementjsx",
+      "src\\components\\CompanySelectorjsx"
+    ],
+    "methods": [
+      "filter"
+    ],
+    "inferredFields": [
+      "active"
+    ]
+  },
+  "ConfigurationHistory": {
+    "files": [
+      "src\\pages\\ConfigurationHistoryjsx",
+      "src\\pages\\ConfigurationTestingjsx"
+    ],
+    "methods": [
+      "create"
+    ],
+    "inferredFields": [
+      "config_id",
+      "config_key",
+      "old_value",
+      "new_value",
+      "change_type",
+      "reason",
+      "version",
+      "test_id",
+      "teste"
+    ]
+  },
+  "SystemConfiguration": {
+    "files": [
+      "src\\pages\\ConfigurationHistoryjsx",
+      "src\\pages\\ConfigurationTestingjsx",
+      "src\\pages\\SystemConfigurationjsx"
+    ],
+    "methods": [],
+    "inferredFields": []
+  },
+  "ConfigurationTest": {
+    "files": [
+      "src\\pages\\ConfigurationTestingjsx"
+    ],
+    "methods": [],
+    "inferredFields": []
+  },
+  "CostCenter": {
+    "files": [
+      "src\\pages\\CostCentersjsx",
+      "src\\pages\\CreateInventoryMovejsx"
+    ],
+    "methods": [
+      "filter",
+      "create"
+    ],
+    "inferredFields": [
+      "company_id",
+      "enabled",
+      "code",
+      "name",
+      "description",
+      "active"
+    ]
+  },
+  "Warehouse": {
+    "files": [
+      "src\\pages\\CreateInventoryMovejsx",
+      "src\\pages\\InventoryCountjsx",
+      "src\\pages\\InventoryMovesjsx",
+      "src\\pages\\InventoryReceivejsx",
+      "src\\pages\\Kardexjsx",
+      "src\\pages\\Locationsjsx",
+      "src\\pages\\OPConsumptionControljsx",
+      "src\\pages\\PickingOptimizedjsx",
+      "src\\pages\\ProductionOrderDetailjsx",
+      "src\\pages\\ProductionOrdersjsx",
+      "src\\pages\\ProductionRequestsjsx",
+      "src\\pages\\ProductionSyncFixjsx",
+      "src\\pages\\RecalculateProductBalancejsx",
+      "src\\pages\\StockBalancesjsx",
+      "src\\pages\\StockConsistencyCheckjsx",
+      "src\\pages\\StockLocatorjsx",
+      "src\\pages\\StockReportsjsx",
+      "src\\pages\\StorageAllocationjsx",
+      "src\\pages\\Warehousesjsx",
+      "src\\components\\consumption\\ReverseConsumptionDialogjsx",
+      "src\\components\\labels\\WarehouseLabelGeneratorjsx",
+      "src\\components\\reports\\StockByAllocationExportjsx",
+      "src\\components\\sales\\ReservationDialogjsx"
+    ],
+    "methods": [
+      "filter",
+      "create"
+    ],
+    "inferredFields": [
+      "company_id",
+      "active",
+      "type",
+      "code",
+      "id",
+      "enabled",
+      "staleTime",
+      "gcTime",
+      "refetchOnMount"
+    ]
+  },
+  "SalesOrder": {
+    "files": [
+      "src\\pages\\CreateInventoryMovejsx",
+      "src\\pages\\PickingOptimizedjsx",
+      "src\\pages\\QuoteDetailjsx",
+      "src\\pages\\ReportGeneratorjsx",
+      "src\\pages\\Reportsjsx",
+      "src\\pages\\Reservationsjsx",
+      "src\\pages\\Returnsjsx",
+      "src\\pages\\SalesOrderDetailjsx",
+      "src\\pages\\SalesOrdersjsx",
+      "src\\pages\\SalesOrdersMissingjsx",
+      "src\\pages\\Separationjsx",
+      "src\\pages\\SerialNumberControljsx",
+      "src\\pages\\ServiceRequestsjsx",
+      "src\\pages\\Shippingjsx",
+      "src\\components\\dashboard\\widgets\\RecentOrdersWidgetjsx",
+      "src\\components\\dashboard\\widgets\\SalesKPIWidgetjsx",
+      "src\\components\\erp\\ERPSyncPaneljsx",
+      "src\\components\\NotificationsPaneljsx",
+      "src\\components\\reports\\OrdersExportjsx",
+      "src\\components\\reports\\SalesExportjsx",
+      "src\\components\\sales\\ReservationDialogjsx"
+    ],
+    "methods": [
+      "filter",
+      "create"
+    ],
+    "inferredFields": [
+      "company_id",
+      "enabled",
+      "id",
+      "numero_pedido_externo",
+      "client_id",
+      "client_name",
+      "seller_id",
+      "seller_name",
+      "payment_condition_id",
+      "payment_condition_name",
+      "status",
+      "total_amount",
+      "delivery_date",
+      "notes",
+      "order_number"
+    ]
+  },
+  "AuditLog": {
+    "files": [
+      "src\\pages\\CreateInventoryMovejsx",
+      "src\\pages\\PickingOptimizedjsx",
+      "src\\pages\\SalesOrderDetailjsx",
+      "src\\pages\\StockLocatorjsx",
+      "src\\pages\\StorageAllocationjsx",
+      "src\\pages\\UserManagementjsx"
+    ],
+    "methods": [
+      "create"
+    ],
+    "inferredFields": [
+      "action",
+      "entity_type",
+      "entity_id",
+      "new_data",
+      "type",
+      "product",
+      "qty",
+      "from",
+      "to",
+      "related_type",
+      "related_id",
+      "location",
+      "items_count",
+      "details",
+      "company_id",
+      "remaining"
+    ]
+  },
+  "Seller": {
+    "files": [
+      "src\\pages\\DailyVehicleLogjsx",
+      "src\\pages\\ProspectionProjectsjsx",
+      "src\\pages\\ProspectionVisitFormjsx",
+      "src\\pages\\QuoteDetailjsx",
+      "src\\pages\\Quotesjsx",
+      "src\\pages\\SalesAppointmentsjsx",
+      "src\\pages\\SalesOrdersjsx",
+      "src\\pages\\Sellersjsx",
+      "src\\pages\\UserManagementjsx"
+    ],
+    "methods": [
+      "filter",
+      "create"
+    ],
+    "inferredFields": [
+      "company_id",
+      "active",
+      "email",
+      "name",
+      "enabled",
+      "code"
+    ]
+  },
+  "DailyVehicleLog": {
+    "files": [
+      "src\\pages\\DailyVehicleLogjsx",
+      "src\\pages\\ProspectionDashboardjsx"
+    ],
+    "methods": [
+      "filter",
+      "create"
+    ],
+    "inferredFields": [
+      "company_id",
+      "enabled",
+      "seller_id",
+      "seller_name",
+      "status",
+      "refetchInterval"
+    ]
+  },
+  "DashboardConfig": {
+    "files": [
+      "src\\pages\\Dashboardjsx"
+    ],
+    "methods": [
+      "filter",
+      "create"
+    ],
+    "inferredFields": [
+      "user_id",
+      "company_id",
+      "widgets"
+    ]
+  },
+  "ReceivingItem": {
+    "files": [
+      "src\\pages\\DataConsistencyFixjsx",
+      "src\\pages\\InventoryReceivejsx",
+      "src\\pages\\NonConformityReportsjsx",
+      "src\\pages\\ReceivingConferencejsx",
+      "src\\pages\\ReceivingConferenceListjsx",
+      "src\\pages\\StorageAllocationjsx",
+      "src\\pages\\StorageScannerjsx",
+      "src\\components\\dashboard\\widgets\\PendingItemsWidgetjsx",
+      "src\\components\\receiving\\ConferenceWorkflowjsx"
+    ],
+    "methods": [
+      "create",
+      "filter"
+    ],
+    "inferredFields": [
+      "company_id",
+      "batch_id",
+      "product_id",
+      "product_sku",
+      "product_name",
+      "qty",
+      "unit_cost",
+      "warehouse_id",
+      "warehouse_name",
+      "location_barcode",
+      "status",
+      "receiving_batch_id",
+      "quantity_expected",
+      "quantity_received",
+      "enabled"
+    ]
+  },
+  "EngineeringProjectItem": {
+    "files": [
+      "src\\pages\\EngineeringComponentHistoryjsx",
+      "src\\pages\\EngineeringComponentsjsx",
+      "src\\pages\\EngineeringDashboardjsx",
+      "src\\pages\\EngineeringProjectDetailjsx"
+    ],
+    "methods": [
+      "filter",
+      "create"
+    ],
+    "inferredFields": [
+      "company_id",
+      "project_id",
+      "quantity",
+      "drawings"
+    ]
+  },
+  "EngineeringProject": {
+    "files": [
+      "src\\pages\\EngineeringComponentHistoryjsx",
+      "src\\pages\\EngineeringComponentsjsx",
+      "src\\pages\\EngineeringDashboardjsx",
+      "src\\pages\\EngineeringProjectDetailjsx",
+      "src\\pages\\EngineeringProjectsjsx"
+    ],
+    "methods": [
+      "filter",
+      "create"
+    ],
+    "inferredFields": [
+      "company_id",
+      "id",
+      "estimated_hours",
+      "progress_percent",
+      "actual_hours"
+    ]
+  },
+  "EngineeringProjectUpdate": {
+    "files": [
+      "src\\pages\\EngineeringComponentHistoryjsx",
+      "src\\pages\\EngineeringDashboardjsx",
+      "src\\pages\\EngineeringProjectDetailjsx"
+    ],
+    "methods": [
+      "filter"
+    ],
+    "inferredFields": [
+      "company_id",
+      "project_id"
+    ]
+  },
+  "ProductionStep": {
+    "files": [
+      "src\\pages\\FactoryDashboardjsx",
+      "src\\pages\\ProductionDashboardjsx",
+      "src\\pages\\ProductionOrderDetailjsx",
+      "src\\pages\\ProductionOrdersjsx",
+      "src\\pages\\ProductionRequestsjsx",
+      "src\\pages\\ProductionSchedulejsx",
+      "src\\components\\NotificationsPaneljsx"
+    ],
+    "methods": [
+      "filter",
+      "create"
+    ],
+    "inferredFields": [
+      "company_id",
+      "enabled",
+      "op_id",
+      "sequence",
+      "name",
+      "description",
+      "status",
+      "refetchInterval"
+    ]
+  },
+  "Resource": {
+    "files": [
+      "src\\pages\\FactoryDashboardjsx",
+      "src\\pages\\ImportRoutesjsx",
+      "src\\pages\\ProductionRouteStepsjsx",
+      "src\\pages\\ProductionSimulationjsx",
+      "src\\pages\\Resourcesjsx",
+      "src\\pages\\RouteStepsjsx"
+    ],
+    "methods": [
+      "filter",
+      "create"
+    ],
+    "inferredFields": [
+      "company_id",
+      "active",
+      "enabled"
+    ]
+  },
+  "InventoryCount": {
+    "files": [
+      "src\\pages\\InventoryCountjsx",
+      "src\\pages\\InventoryCountDetailjsx"
+    ],
+    "methods": [
+      "filter"
+    ],
+    "inferredFields": [
+      "company_id",
+      "enabled",
+      "id"
+    ]
+  },
+  "InventoryCountItem": {
+    "files": [
+      "src\\pages\\InventoryCountjsx",
+      "src\\pages\\InventoryCountDetailjsx"
+    ],
+    "methods": [
+      "create",
+      "filter"
+    ],
+    "inferredFields": [
+      "company_id",
+      "count_id",
+      "product_id",
+      "product_sku",
+      "product_name",
+      "location_id",
+      "location_barcode",
+      "qty_system",
+      "qty_counted",
+      "qty_divergence",
+      "status",
+      "stock_balance_id"
+    ]
+  },
+  "MaterialRequest": {
+    "files": [
+      "src\\pages\\InventoryReceivejsx",
+      "src\\pages\\MaterialRequestDetailjsx",
+      "src\\pages\\MaterialRequestsjsx",
+      "src\\pages\\NonConformityReportsjsx",
+      "src\\pages\\ReceivingConferencejsx",
+      "src\\components\\dashboard\\widgets\\OpenRequestsWidgetjsx"
+    ],
+    "methods": [
+      "filter",
+      "create"
+    ],
+    "inferredFields": [
+      "id",
+      "company_id",
+      "request_number",
+      "status",
+      "enabled",
+      "description",
+      "requester",
+      "department",
+      "priority",
+      "notes"
+    ]
+  },
+  "MaterialRequestItem": {
+    "files": [
+      "src\\pages\\InventoryReceivejsx",
+      "src\\pages\\MaterialRequestDetailjsx",
+      "src\\pages\\NonConformityReportsjsx",
+      "src\\pages\\ReceivingConferencejsx"
+    ],
+    "methods": [
+      "filter",
+      "create"
+    ],
+    "inferredFields": [
+      "request_id",
+      "company_id",
+      "product_id",
+      "product_sku",
+      "product_name",
+      "qty_requested",
+      "qty_received",
+      "qty_pending",
+      "notes"
+    ]
+  },
+  "ReceivingBatch": {
+    "files": [
+      "src\\pages\\InventoryReceivejsx",
+      "src\\pages\\NonConformityReportsjsx",
+      "src\\pages\\ReceivingConferencejsx",
+      "src\\pages\\ReceivingConferenceListjsx",
+      "src\\pages\\ReceivingListjsx",
+      "src\\pages\\StorageAllocationjsx",
+      "src\\pages\\StorageScannerjsx"
+    ],
+    "methods": [
+      "create",
+      "filter"
+    ],
+    "inferredFields": [
+      "company_id",
+      "batch_number",
+      "reason",
+      "o",
+      "total_value",
+      "received_date",
+      "status",
+      "notes",
+      "id",
+      "enabled"
+    ]
+  },
+  "NonConformityReport": {
+    "files": [
+      "src\\pages\\NonConformityReportsjsx",
+      "src\\pages\\ReceivingConferencejsx",
+      "src\\components\\receiving\\ConferenceWorkflowjsx"
+    ],
+    "methods": [
+      "filter",
+      "create"
+    ],
+    "inferredFields": [
+      "company_id",
+      "status",
+      "report_number",
+      "receiving_batch_id",
+      "receiving_item_id",
+      "product_id",
+      "product_sku",
+      "product_name",
+      "quantity_expected",
+      "quantity_received",
+      "variance",
+      "variance_type",
+      "order_id",
+      "order_number",
+      "action_type",
+      "description"
+    ]
+  },
+  "MaterialConsumption": {
+    "files": [
+      "src\\pages\\OPConsumptionControljsx",
+      "src\\pages\\ProductionOrderDetailjsx",
+      "src\\components\\consumption\\ReverseConsumptionDialogjsx"
+    ],
+    "methods": [
+      "filter",
+      "create"
+    ],
+    "inferredFields": [
+      "company_id",
+      "op_id",
+      "product_id",
+      "product_sku",
+      "product_name",
+      "qty_consumed",
+      "warehouse_id",
+      "location_id",
+      "registered_by",
+      "registered_date"
+    ]
+  },
+  "PaymentCondition": {
+    "files": [
+      "src\\pages\\PaymentConditionsjsx",
+      "src\\pages\\QuoteDetailjsx",
+      "src\\pages\\Quotesjsx",
+      "src\\pages\\SalesOrdersjsx"
+    ],
+    "methods": [
+      "filter",
+      "create"
+    ],
+    "inferredFields": [
+      "company_id",
+      "enabled",
+      "id",
+      "active"
+    ]
+  },
+  "SalesOrderItem": {
+    "files": [
+      "src\\pages\\PickingOptimizedjsx",
+      "src\\pages\\QuoteDetailjsx",
+      "src\\pages\\ReceivingConferencejsx",
+      "src\\pages\\Reservationsjsx",
+      "src\\pages\\SalesOrderDetailjsx",
+      "src\\pages\\SalesOrdersjsx",
+      "src\\pages\\SalesOrdersMissingjsx",
+      "src\\pages\\Separationjsx",
+      "src\\pages\\Shippingjsx",
+      "src\\components\\reports\\SalesExportjsx",
+      "src\\components\\sales\\ReservationDialogjsx",
+      "src\\components\\shipping\\SerialNumberInputjsx"
+    ],
+    "methods": [
+      "filter",
+      "create"
+    ],
+    "inferredFields": [
+      "company_id",
+      "order_id",
+      "product_id",
+      "product_sku",
+      "product_name",
+      "qty",
+      "unit_price",
+      "total_price",
+      "fulfill_mode",
+      "qty_reserved",
+      "qty_separated"
+    ]
+  },
+  "Reservation": {
+    "files": [
+      "src\\pages\\PickingOptimizedjsx",
+      "src\\pages\\Reservationsjsx",
+      "src\\pages\\SalesOrderDetailjsx",
+      "src\\pages\\Separationjsx",
+      "src\\pages\\Shippingjsx",
+      "src\\pages\\StockPledgeQueryjsx",
+      "src\\components\\sales\\ReservationDialogjsx"
+    ],
+    "methods": [
+      "filter",
+      "create"
+    ],
+    "inferredFields": [
+      "company_id",
+      "order_id",
+      "status",
+      "enabled",
+      "order_item_id",
+      "product_id",
+      "qty",
+      "warehouse_id",
+      "location_id"
+    ]
+  },
+  "ProductionRequest": {
+    "files": [
+      "src\\pages\\ProductionRequestsjsx",
+      "src\\pages\\QuoteDetailjsx",
+      "src\\pages\\SalesOrderDetailjsx",
+      "src\\pages\\SalesOrdersjsx",
+      "src\\pages\\SalesOrdersMissingjsx",
+      "src\\components\\dashboard\\widgets\\PendingProductionRequestsWidgetjsx",
+      "src\\components\\NotificationsPaneljsx"
+    ],
+    "methods": [
+      "filter",
+      "create"
+    ],
+    "inferredFields": [
+      "company_id",
+      "enabled",
+      "origin_id",
+      "origin_type",
+      "order_id",
+      "order_number",
+      "product_id",
+      "product_name",
+      "qty_requested",
+      "qty_fulfilled",
+      "qty_residue",
+      "priority",
+      "status",
+      "due_date",
+      "request_number",
+      "user_email",
+      "is_read"
+    ]
+  },
+  "ProspectionVisit": {
+    "files": [
+      "src\\pages\\ProspectionDashboardjsx",
+      "src\\pages\\ProspectionVisitDetailjsx",
+      "src\\pages\\ProspectionVisitFormjsx",
+      "src\\pages\\ProspectionVisitsjsx",
+      "src\\pages\\SalesAppointmentsjsx"
+    ],
+    "methods": [
+      "filter",
+      "create"
+    ],
+    "inferredFields": [
+      "company_id",
+      "enabled",
+      "refetchInterval",
+      "id",
+      "visit_number",
+      "seller_name",
+      "interested_products",
+      "interested_products_names",
+      "vendedor",
+      "seller_id",
+      "refetchOnMount"
+    ]
+  },
+  "Quote": {
+    "files": [
+      "src\\pages\\ProspectionDashboardjsx",
+      "src\\pages\\QuoteDetailjsx",
+      "src\\pages\\Quotesjsx",
+      "src\\pages\\ReportGeneratorjsx",
+      "src\\pages\\SalesOrderDetailjsx",
+      "src\\components\\NotificationsPaneljsx"
+    ],
+    "methods": [
+      "filter"
+    ],
+    "inferredFields": [
+      "company_id",
+      "enabled",
+      "refetchInterval",
+      "id",
+      "quote_number",
+      "client_id",
+      "client_name",
+      "client_document",
+      "seller_id",
+      "seller_name",
+      "payment_condition_id",
+      "payment_condition_name",
+      "validity_date",
+      "delivery_date",
+      "notes",
+      "status",
+      "total_amount"
+    ]
+  },
+  "ProspectionProjectItem": {
+    "files": [
+      "src\\pages\\ProspectionProjectsjsx"
+    ],
+    "methods": [
+      "filter"
+    ],
+    "inferredFields": [
+      "company_id"
+    ]
+  },
+  "User": {
+    "files": [
+      "src\\pages\\ProspectionProjectsjsx",
+      "src\\pages\\SalesAppointmentsjsx",
+      "src\\pages\\Sellersjsx",
+      "src\\pages\\UserManagementjsx"
+    ],
+    "methods": [
+      "filter"
+    ],
+    "inferredFields": [
+      "id"
+    ]
+  },
+  "QuoteItem": {
+    "files": [
+      "src\\pages\\QuoteDetailjsx"
+    ],
+    "methods": [
+      "filter",
+      "create"
+    ],
+    "inferredFields": [
+      "quote_id",
+      "company_id",
+      "product_id",
+      "product_sku",
+      "product_name",
+      "qty",
+      "unit_price",
+      "base_total",
+      "subitems_total",
+      "final_total",
+      "line_sequence"
+    ]
+  },
+  "QuoteSubitem": {
+    "files": [
+      "src\\pages\\QuoteDetailjsx"
+    ],
+    "methods": [
+      "create"
+    ],
+    "inferredFields": [
+      "company_id",
+      "total_price",
+      "line_sequence"
+    ]
+  },
+  "QuoteAttachment": {
+    "files": [
+      "src\\pages\\QuoteDetailjsx"
+    ],
+    "methods": [
+      "filter",
+      "create"
+    ],
+    "inferredFields": [
+      "quote_id",
+      "file_name",
+      "file_type",
+      "description"
+    ]
+  },
+  "ReportTemplate": {
+    "files": [
+      "src\\pages\\ReportGeneratorjsx",
+      "src\\pages\\ReportTemplatesjsx"
+    ],
+    "methods": [
+      "filter",
+      "create"
+    ],
+    "inferredFields": [
+      "id",
+      "company_id"
+    ]
+  },
+  "GeneratedReport": {
+    "files": [
+      "src\\pages\\ReportGeneratorjsx"
+    ],
+    "methods": [
+      "create"
+    ],
+    "inferredFields": [
+      "company_id",
+      "template_id",
+      "template_name",
+      "type",
+      "status",
+      "date_from",
+      "date_to",
+      "filters_applied"
+    ]
+  },
+  "Return": {
+    "files": [
+      "src\\pages\\ReturnDetailjsx",
+      "src\\pages\\Returnsjsx"
+    ],
+    "methods": [
+      "filter"
+    ],
+    "inferredFields": [
+      "id",
+      "company_id",
+      "enabled"
+    ]
+  },
+  "ReturnItem": {
+    "files": [
+      "src\\pages\\ReturnDetailjsx"
+    ],
+    "methods": [
+      "filter",
+      "create"
+    ],
+    "inferredFields": [
+      "return_id"
+    ]
+  },
+  "Notification": {
+    "files": [
+      "src\\pages\\SalesAppointmentsjsx",
+      "src\\components\\NotificationsPaneljsx"
+    ],
+    "methods": [
+      "filter",
+      "create"
+    ],
+    "inferredFields": [
+      "user_email",
+      "related_visit_id",
+      "type",
+      "company_id",
+      "title",
+      "message",
+      "locale"
+    ]
+  },
+  "SerialNumber": {
+    "files": [
+      "src\\pages\\SerialNumberControljsx",
+      "src\\components\\shipping\\SerialNumberInputjsx"
+    ],
+    "methods": [
+      "filter",
+      "create"
+    ],
+    "inferredFields": [
+      "company_id",
+      "enabled",
+      "product_sku",
+      "product_name",
+      "client_name",
+      "order_number",
+      "sale_date",
+      "status",
+      "warranty_expires",
+      "serial_number",
+      "product_id",
+      "client_id",
+      "order_id",
+      "warranty_months"
+    ]
+  },
+  "Technician": {
+    "files": [
+      "src\\pages\\ServiceOrderDetailjsx",
+      "src\\pages\\ServiceSchedulejsx",
+      "src\\pages\\Techniciansjsx"
+    ],
+    "methods": [
+      "filter",
+      "create"
+    ],
+    "inferredFields": [
+      "active",
+      "company_id",
+      "enabled"
+    ]
+  },
+  "TechnicianHistory": {
+    "files": [
+      "src\\pages\\ServiceOrderDetailjsx"
+    ],
+    "methods": [
+      "filter",
+      "create"
+    ],
+    "inferredFields": [
+      "service_order_id",
+      "enabled",
+      "from_technician_id",
+      "from_technician_name",
+      "to_technician_id",
+      "to_technician_name",
+      "reason",
+      "changed_by"
+    ]
+  },
+  "UserInvite": {
+    "files": [
+      "src\\pages\\UserManagementjsx"
+    ],
+    "methods": [
+      "create"
+    ],
+    "inferredFields": [
+      "email",
+      "full_name",
+      "modules",
+      "is_seller",
+      "company_ids",
+      "status",
+      "invited_at",
+      "expires_at",
+      "invited_by"
+    ]
+  },
+  "ERPSync": {
+    "files": [
+      "src\\components\\erp\\ERPSyncPaneljsx"
+    ],
+    "methods": [
+      "filter",
+      "create"
+    ],
+    "inferredFields": [
+      "entity_type",
+      "entity_id",
+      "erp_id",
+      "status",
+      "direction",
+      "last_sync",
+      "sync_count",
+      "data_snapshot"
+    ]
+  },
+  "ERPLog": {
+    "files": [
+      "src\\components\\erp\\ERPSyncPaneljsx"
+    ],
+    "methods": [
+      "create"
+    ],
+    "inferredFields": [
+      "action",
+      "entity_type",
+      "entity_id",
+      "direction",
+      "status",
+      "duration_ms",
+      "details",
+      "provider",
+      "error_message"
+    ]
+  },
+  "SalesAppointment": {
+    "files": [
+      "src\\components\\NotificationsPaneljsx"
+    ],
+    "methods": [],
+    "inferredFields": []
+  }
+}

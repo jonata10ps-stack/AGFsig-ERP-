@@ -1,0 +1,72 @@
+{
+  "name": "PaymentCondition",
+  "type": "object",
+  "properties": {
+    "company_id": {
+      "type": "string",
+      "description": "ID da empresa propriet\u00e1ria"
+    },
+    "code": {
+      "type": "string",
+      "description": "C\u00f3digo da condi\u00e7\u00e3o"
+    },
+    "name": {
+      "type": "string",
+      "description": "Nome da condi\u00e7\u00e3o"
+    },
+    "description": {
+      "type": "string",
+      "description": "Descri\u00e7\u00e3o completa"
+    },
+    "discount_percentage": {
+      "type": "number",
+      "description": "Desconto % geral",
+      "default": 0
+    },
+    "interest_percentage": {
+      "type": "number",
+      "description": "Juros % ao m\u00eas",
+      "default": 0
+    },
+    "active": {
+      "type": "boolean",
+      "default": true
+    },
+    "parcelas": {
+      "type": "array",
+      "description": "Lista de parcelas configuradas manualmente",
+      "items": {
+        "type": "object",
+        "properties": {
+          "tipo": {
+            "type": "string",
+            "enum": [
+              "ENTRADA",
+              "PARCELA",
+              "SALDO"
+            ],
+            "description": "Tipo da parcela"
+          },
+          "percentual": {
+            "type": "number",
+            "description": "% do valor total (0-100)"
+          },
+          "dias": {
+            "type": "number",
+            "description": "Dias ap\u00f3s a emiss\u00e3o para vencimento"
+          },
+          "descricao": {
+            "type": "string",
+            "description": "Descri\u00e7\u00e3o/label da parcela"
+          }
+        }
+      },
+      "default": []
+    }
+  },
+  "required": [
+    "company_id",
+    "code",
+    "name"
+  ]
+}
