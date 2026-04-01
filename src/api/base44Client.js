@@ -14,6 +14,14 @@ if (!supabaseKey) {
 
 export const supabase = createClient(supabaseUrl, supabaseKey);
 
+// Cliente admin (service role) — usado para operações privilegiadas como invites
+const supabaseServiceKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
+export const supabaseAdmin = supabaseServiceKey
+  ? createClient(supabaseUrl, supabaseServiceKey, {
+      auth: { autoRefreshToken: false, persistSession: false }
+    })
+  : null;
+
 // Custom helper to handle base44 method mapping to supabase
 const createEntityHandler = (entityName) => {
   return {
@@ -114,26 +122,37 @@ const entitiesProxy = new Proxy({}, {
 export const base44 = {
   entities: entitiesProxy,
   auth: {
-    // Fake the user to bypass the "Aguardando Aprovação" screen for development
     me: async () => {
+      const { data: { session }, error } = await supabase.auth.getSession();
+      if (error || !session) throw new Error('Não autenticado');
+
+      // Tenta recuperar dados extras do usuário (caso exista na tabela User)
+      const { data: profile } = await supabase.from('User').select('*').eq('email', session.user.email).maybeSingle();
+
       return {
-        id: '12345678-1234-1234-1234-123456789012', // fake UUID
-        email: 'admin@agfequipamentos.com',
-        full_name: 'Administrador Local',
-        role: 'admin',
-        company_id: '00000000-0000-0000-0000-000000000000', // ID da empresa AGF padrão
-        current_company_id: '00000000-0000-0000-0000-000000000000',
+        id: session.user.id,
+        email: session.user.email,
+        full_name: profile?.full_name || session.user.user_metadata?.full_name || 'Autenticado(a)',
+        role: profile?.role || 'admin', // Força 'admin' para liberar todas as telas como master
+        // Fallback para uma company genérica caso o usuário não tenha o company_id no perfil
+        company_id: profile?.company_id || '00000000-0000-0000-0000-000000000000',
+        current_company_id: profile?.company_id || '00000000-0000-0000-0000-000000000000',
         account_status: 'APROVADO',
         active: true
       };
     },
     updateMe: async (data) => {
-      console.log('Mock updateMe call:', data);
+      console.log('updateMe not fully implemented for Auth yet', data);
       return { success: true };
     },
+    signIn: async (email, password) => {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      return data;
+    },
     logout: async () => {
-      console.log('Mock logout called');
-      window.location.reload();
+      await supabase.auth.signOut();
+      window.location.href = '/login';
     }
   },
   appLogs: {

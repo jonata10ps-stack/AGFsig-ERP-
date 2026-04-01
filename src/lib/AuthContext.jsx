@@ -28,11 +28,11 @@ export const AuthProvider = ({ children }) => {
       setUser(currentUser);
       setIsAuthenticated(true);
     } catch (error) {
-      console.error('Falha na autenticação:', error);
+      console.error('Usuário não autenticado:', error.message);
       setIsAuthenticated(false);
       setAuthError({
-        type: 'unknown',
-        message: error.message || 'Erro inesperado ao autenticar'
+        type: 'auth_required',
+        message: error.message || 'Erro não monitorado'
       });
     } finally {
       setIsLoadingAuth(false);
@@ -40,14 +40,13 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = () => {
-    setUser(null);
-    setIsAuthenticated(false);
+    setIsLoadingAuth(true);
     base44.auth.logout();
   };
 
   const navigateToLogin = () => {
-    // Sem Base44 — apenas recarrega a página
-    window.location.reload();
+    // Agora o roteamento é tratado pelo React Router no App.jsx 
+    // com base no !isAuthenticated
   };
 
   const updateUser = (updatedUser) => {

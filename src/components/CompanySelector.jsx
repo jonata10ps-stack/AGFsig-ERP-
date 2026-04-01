@@ -57,7 +57,7 @@ export default function CompanySelector() {
           <div className="flex flex-col items-start">
             <span className="text-xs text-slate-500">Empresa</span>
             <span className="text-sm font-semibold text-slate-900">
-              {currentCompany ? `${currentCompany.code}` : '-'}
+              {currentCompany?.name || currentCompany?.code || 'AGF'}
             </span>
           </div>
           <ChevronDown className="h-4 w-4 opacity-50 ml-2" />

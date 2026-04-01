@@ -105,8 +105,7 @@ export default function Warehouses() {
 
   const { data: warehouses, isLoading } = useQuery({
     queryKey: ['warehouses', companyId],
-    queryFn: () => companyId ? base44.entities.Warehouse.filter({ company_id: companyId }, '-created_date') : Promise.resolve([]),
-    enabled: !!companyId,
+    queryFn: () => base44.entities.Warehouse.filter({ company_id: companyId }, '-created_date'),
   });
 
   const createMutation = useMutation({
@@ -116,6 +115,7 @@ export default function Warehouses() {
       setDialogOpen(false);
       toast.success('Armazém criado com sucesso');
     },
+    onError: (error) => toast.error('Erro ao criar armazém: ' + error.message),
   });
 
   const updateMutation = useMutation({
@@ -126,6 +126,7 @@ export default function Warehouses() {
       setEditing(null);
       toast.success('Armazém atualizado com sucesso');
     },
+    onError: (error) => toast.error('Erro ao atualizar armazém: ' + error.message),
   });
 
   const deleteMutation = useMutation({
@@ -135,6 +136,7 @@ export default function Warehouses() {
       setDeleteConfirm(null);
       toast.success('Armazém excluído com sucesso');
     },
+    onError: (error) => toast.error('Erro ao excluir armazém: ' + error.message),
   });
 
   const handleSave = (data) => {

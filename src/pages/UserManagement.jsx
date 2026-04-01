@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { base44 } from '@/api/base44Client';
+import { base44, supabaseAdmin } from '@/api/base44Client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -33,6 +33,13 @@ const AVAILABLE_MODULES = [
   { id: 'GerenciamentoDados', name: 'Gerenciamento de Dados', description: 'Dados Gerais, Integração ERP, Consistência' },
 ];
 
+// Converte texto JSON ou array para array de forma segura
+const parseArr = (val) => {
+  if (!val) return [];
+  if (Array.isArray(val)) return val;
+  try { const p = JSON.parse(val); return Array.isArray(p) ? p : []; } catch { return []; }
+};
+
 export default function UserManagement() {
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState('');
@@ -44,10 +51,10 @@ export default function UserManagement() {
   const [inviteDialog, setInviteDialog] = useState(false);
   const [inviteForm, setInviteForm] = useState({ email: '', full_name: '', modules: [], is_seller: false, company_ids: [] });
 
-  const { data: users, isLoading } = useQuery({
+  const { data: users = [], isLoading } = useQuery({
     queryKey: ['users-management'],
     queryFn: async () => {
-      const allUsers = await base44.entities.User.list();
+      const allUsers = await base44.entities.User.list('-created_at');
       return allUsers;
     },
   });
@@ -108,8 +115,8 @@ export default function UserManagement() {
 
   const openPermissionsDialog = (user) => {
     setPermissionsDialog(user);
-    setSelectedModules(user.allowed_modules || []);
-    setSelectedCompanies(user.company_ids || []);
+    setSelectedModules(parseArr(user.allowed_modules));
+    setSelectedCompanies(parseArr(user.company_ids));
   };
 
   const savePermissions = () => {
@@ -152,44 +159,55 @@ export default function UserManagement() {
 
   const inviteMutation = useMutation({
     mutationFn: async () => {
-      const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + 60);
-      
-      await base44.entities.UserInvite.create({
+      if (!supabaseAdmin) throw new Error('Chave de admin não configurada no .env');
+
+      // 1. Envia o convite pelo Supabase Auth (o email é enviado automaticamente)
+      const { data: authData, error: authError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
+        inviteForm.email,
+        {
+          data: {
+            full_name: inviteForm.full_name,
+          }
+        }
+      );
+      if (authError) throw authError;
+
+      // 2. Cria o registro na tabela User com as permissões definidas
+      await base44.entities.User.create({
         email: inviteForm.email,
         full_name: inviteForm.full_name,
-        modules: inviteForm.modules,
+        allowed_modules: JSON.stringify(inviteForm.modules),
+        company_ids: JSON.stringify(inviteForm.company_ids),
         is_seller: inviteForm.is_seller,
-        company_ids: inviteForm.company_ids,
-        status: 'PENDENTE',
-        invited_at: new Date().toISOString(),
-        expires_at: expiresAt.toISOString(),
-        invited_by: currentUser?.email
+        account_status: 'PENDENTE',
+        role: 'user',
+        active: true,
       });
-      
+
+      // 3. Se for vendedor, cria o registro de vendedor também
       if (inviteForm.is_seller) {
         await base44.entities.Seller.create({
-          code: inviteForm.email.split('@')[0],
+          code: inviteForm.email.split('@')[0].toUpperCase(),
           name: inviteForm.full_name,
           email: inviteForm.email,
-          active: true
+          active: true,
         });
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users-management'] });
-      toast.success(`Convite criado! Agora envie o link no Dashboard do Base44 (Settings > Invite Users).`);
+      toast.success(`✉️ Convite enviado para ${inviteForm.email}! O usuário receberá um e-mail para definir a senha.`);
       setInviteDialog(false);
       setInviteForm({ email: '', full_name: '', modules: [], is_seller: false, company_ids: [] });
     },
     onError: (error) => {
-      toast.error('Erro ao criar convite: ' + error.message);
+      toast.error('Erro ao enviar convite: ' + error.message);
     },
   });
 
   const handleInvite = () => {
-    if (!inviteForm.email || !inviteForm.full_name || inviteForm.company_ids.length === 0) {
-      toast.error('Preencha email, nome e selecione pelo menos uma empresa');
+    if (!inviteForm.email || !inviteForm.full_name) {
+      toast.error('Preencha e-mail e nome completo do usuário');
       return;
     }
     inviteMutation.mutate();
@@ -204,15 +222,15 @@ export default function UserManagement() {
     }));
   };
 
-  const filteredUsers = users?.filter(user => {
+  const filteredUsers = (users || []).filter(user => {
     const matchesSearch = 
-      user.full_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.email?.toLowerCase().includes(searchTerm.toLowerCase());
+      (user.full_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (user.email || '').toLowerCase().includes(searchTerm.toLowerCase());
     
     const matchesStatus = 
       filterStatus === 'all' || 
-      filterStatus === 'active' && user.active !== false ||
-      filterStatus === 'inactive' && user.active === false ||
+      (filterStatus === 'active' && user.active !== false) ||
+      (filterStatus === 'inactive' && user.active === false) ||
       user.account_status === filterStatus ||
       (!user.account_status && filterStatus === 'PENDENTE');
     
@@ -331,18 +349,18 @@ export default function UserManagement() {
                     </div>
                     <p className="text-sm text-slate-500 mb-2">{user.email}</p>
                     
-                    {user.company_ids?.length > 0 && (
+                    {parseArr(user.company_ids).length > 0 && (
                       <div className="flex flex-wrap gap-2 mb-2">
-                        {user.company_ids.map(companyId => {
+                        {parseArr(user.company_ids).map(companyId => {
                           const company = companies.find(c => c.id === companyId);
                           return company ? <Badge key={companyId} variant="secondary">{company.code}</Badge> : null;
                         })}
                       </div>
                     )}
                     
-                    {user.allowed_modules?.length > 0 && (
+                    {parseArr(user.allowed_modules).length > 0 && (
                       <div className="text-xs text-slate-500">
-                        <p>Módulos: {user.allowed_modules.join(', ')}</p>
+                        <p>Módulos: {parseArr(user.allowed_modules).join(', ')}</p>
                       </div>
                     )}
                     
