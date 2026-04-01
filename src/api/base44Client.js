@@ -121,6 +121,7 @@ export const base44 = {
         email: 'admin@agfequipamentos.com',
         full_name: 'Administrador Local',
         role: 'admin',
+        company_id: '00000000-0000-0000-0000-000000000000', // ID da empresa AGF padrão
         account_status: 'APROVADO',
         active: true
       };
