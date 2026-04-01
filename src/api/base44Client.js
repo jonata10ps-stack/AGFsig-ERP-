@@ -122,9 +122,14 @@ export const base44 = {
         full_name: 'Administrador Local',
         role: 'admin',
         company_id: '00000000-0000-0000-0000-000000000000', // ID da empresa AGF padrão
+        current_company_id: '00000000-0000-0000-0000-000000000000',
         account_status: 'APROVADO',
         active: true
       };
+    },
+    updateMe: async (data) => {
+      console.log('Mock updateMe call:', data);
+      return { success: true };
     },
     logout: async () => {
       console.log('Mock logout called');
