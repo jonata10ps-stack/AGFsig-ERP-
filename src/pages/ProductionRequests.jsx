@@ -295,7 +295,7 @@ export default function ProductionRequests() {
         request_id: request.id,
         product_id: request.product_id,
         product_name: request.product_name,
-        route_id: routeId || '',
+        route_id: routeId || null,
         route_name: routeName,
         qty_planned: quantidade,
         qty_produced: 0,
@@ -305,7 +305,7 @@ export default function ProductionRequests() {
         due_date: request.due_date,
         warehouse_id: warehouseId,
         warehouse_name: warehouse?.name || '',
-        location_id: locationId || '',
+        location_id: locationId || null,
         location_barcode: location?.barcode || ''
       });
       

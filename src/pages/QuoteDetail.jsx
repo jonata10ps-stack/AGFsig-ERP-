@@ -374,11 +374,11 @@ export default function QuoteDetail() {
       const quoteItem = quoteItems?.find(qi => qi.id === subitem.quote_item_id);
       if (quoteItem) {
         const itemSubitems = subitems?.filter(s => s.quote_item_id === quoteItem.id) || [];
-        const subitemTotal = itemSubitems.reduce((sum, s) => sum + (s.total_price || 0), 0) + totalPrice;
+        const subitemTotal = itemSubitems.reduce((sum, s) => Number(sum) + Number(s.total_price || 0), 0) + Number(totalPrice);
         
         await base44.entities.QuoteItem.update(quoteItem.id, {
           subitems_total: subitemTotal,
-          final_total: quoteItem.base_total + subitemTotal,
+          final_total: Number(quoteItem.base_total || 0) + subitemTotal,
         });
       }
     },
@@ -419,11 +419,11 @@ export default function QuoteDetail() {
         const quoteItem = quoteItems?.find(qi => qi.id === subitem.quote_item_id);
         if (quoteItem) {
           const remainingSubitems = subitems?.filter(s => s.quote_item_id === quoteItem.id && s.id !== subitemId) || [];
-          const subitemTotal = remainingSubitems.reduce((sum, s) => sum + (s.total_price || 0), 0);
+          const subitemTotal = remainingSubitems.reduce((sum, s) => Number(sum) + Number(s.total_price || 0), 0);
           
           await base44.entities.QuoteItem.update(quoteItem.id, {
             subitems_total: subitemTotal,
-            final_total: quoteItem.base_total + subitemTotal,
+            final_total: Number(quoteItem.base_total || 0) + subitemTotal,
           });
         }
       }
@@ -691,15 +691,15 @@ export default function QuoteDetail() {
   // Recalculate total whenever items change
   React.useEffect(() => {
     if (!quoteItems?.length) {
-      if (quote?.total_amount !== 0) {
+      if (Number(quote?.total_amount || 0) !== 0) {
         base44.entities.Quote.update(quoteId, { total_amount: 0 });
         queryClient.invalidateQueries({ queryKey: ['quote', quoteId] });
       }
       return;
     }
     
-    const total = quoteItems.reduce((sum, item) => sum + (item.final_total || 0), 0);
-    if (total !== quote?.total_amount) {
+    const total = quoteItems.reduce((sum, item) => Number(sum) + Number(item.final_total || 0), 0);
+    if (total !== Number(quote?.total_amount || 0)) {
       base44.entities.Quote.update(quoteId, { total_amount: total });
       queryClient.invalidateQueries({ queryKey: ['quote', quoteId] });
     }

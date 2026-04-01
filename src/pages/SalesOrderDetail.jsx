@@ -192,14 +192,15 @@ export default function SalesOrderDetail() {
 
   const addItemMutation = useMutation({
     mutationFn: async (data) => {
-      // Validar estoque em tempo real
+      // Calcular estoque disponível para o aviso (opcional)
       const balances = await base44.entities.StockBalance.filter({
         product_id: data.product_id
       });
       const totalAvailable = balances.reduce((sum, b) => sum + (b.qty_available || 0), 0);
-      
+
+      // Apenas avisar se o estoque está baixo, sem bloquear
       if (data.fulfill_mode !== 'PRODUCAO' && totalAvailable < data.qty) {
-        throw new Error(`Estoque insuficiente! Disponível: ${totalAvailable}, Solicitado: ${data.qty}`);
+        toast.warning(`Aviso: Estoque baixo para este item (Disponível: ${totalAvailable})`);
       }
       
       await base44.entities.SalesOrderItem.create({ ...data, order_id: orderId });
@@ -232,21 +233,9 @@ export default function SalesOrderDetail() {
 
   const updateStatusMutation = useMutation({
     mutationFn: async (status) => {
-      // Validar estoque ao confirmar pedido
+      // O pedido agora pode ser confirmado mesmo com estoque zero.
+      // O PCP tratará a produção via Solicitação de Produção.
       if (status === 'CONFIRMADO') {
-        for (const item of items) {
-          if (item.fulfill_mode !== 'PRODUCAO') {
-            const balances = await base44.entities.StockBalance.filter({
-              product_id: item.product_id
-            });
-            const totalAvailable = balances.reduce((sum, b) => sum + (b.qty_available || 0), 0);
-            
-            if (totalAvailable < item.qty) {
-              throw new Error(`Estoque insuficiente para ${item.product_name}! Disponível: ${totalAvailable}, Solicitado: ${item.qty}`);
-            }
-          }
-        }
-
         // Criar solicitações de produção para itens que requerem produção
         for (const item of items) {
           if (item.fulfill_mode === 'PRODUCAO' || item.fulfill_mode === 'AUTO') {

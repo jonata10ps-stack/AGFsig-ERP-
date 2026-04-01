@@ -111,6 +111,7 @@ export default function StorageAllocation() {
   const [qtyToAllocate, setQtyToAllocate] = useState(0);
   const [manualMode, setManualMode] = useState(false);
   const [manualLocationCode, setManualLocationCode] = useState('');
+  const isSubmittingRef = React.useRef(false);
 
   const { data: pendingItems } = useQuery({
     queryKey: ['pending-allocation', companyId],
@@ -259,7 +260,8 @@ export default function StorageAllocation() {
        to_location_id: locationId,
        related_type: 'COMPRA',
        related_id: item.batch_id,
-       reason: `Recebimento/Alocação - Lote ${batch?.batch_number || 'N/A'}`
+       reason: `Recebimento/Alocação - Lote ${batch?.batch_number || 'N/A'}`,
+       created_date: new Date().toISOString()
      });
 
       // Calcular quantidade restante no item (arredondar para evitar imprecisão float)
@@ -322,6 +324,9 @@ export default function StorageAllocation() {
         toast.success('Item totalmente alocado!');
       }
     },
+    onSettled: () => {
+      isSubmittingRef.current = false;
+    },
     onError: (error) => {
       toast.error('Erro ao alocar: ' + error.message);
     }
@@ -371,6 +376,9 @@ export default function StorageAllocation() {
       toast.error('Quantidade inválida');
       return;
     }
+
+    if (isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
 
     allocateMutation.mutate({
       item: selectedItem,
