@@ -25,30 +25,33 @@ export default function CompanyManagement() {
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.Company.create(data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['companies']);
+      queryClient.invalidateQueries({ queryKey: ['companies'] });
       setDialogOpen(false);
       setForm({ code: '', name: '', document: '', email: '', phone: '', address: '', city: '', state: '', active: true });
       toast.success('Empresa criada com sucesso');
     },
+    onError: (error) => toast.error('Erro ao criar empresa: ' + error.message),
   });
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.Company.update(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['companies']);
+      queryClient.invalidateQueries({ queryKey: ['companies'] });
       setDialogOpen(false);
       setEditingCompany(null);
       setForm({ code: '', name: '', document: '', email: '', phone: '', address: '', city: '', state: '', active: true });
       toast.success('Empresa atualizada');
     },
+    onError: (error) => toast.error('Erro ao atualizar empresa: ' + error.message),
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id) => base44.entities.Company.delete(id),
     onSuccess: () => {
-      queryClient.invalidateQueries(['companies']);
+      queryClient.invalidateQueries({ queryKey: ['companies'] });
       toast.success('Empresa removida');
     },
+    onError: (error) => toast.error('Erro ao remover empresa: ' + error.message),
   });
 
   const handleSave = () => {

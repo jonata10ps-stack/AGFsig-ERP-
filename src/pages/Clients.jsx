@@ -323,7 +323,7 @@ export default function Clients() {
     c.code?.toLowerCase().includes(search.toLowerCase()) ||
     c.document?.includes(search) ||
     c.email?.toLowerCase().includes(search.toLowerCase())
-  );
+  ).sort((a, b) => (a.code || '').localeCompare(b.code || '', undefined, { numeric: true }));
 
   const formatCurrency = (value) => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);
@@ -337,43 +337,36 @@ export default function Clients() {
 
     setImporting(true);
     try {
-      const { file_url } = await base44.integrations.Core.UploadFile({ file: importFile });
+      const arrayBuffer = await importFile.arrayBuffer();
+      const XLSX = await import('xlsx');
+      const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+      const firstSheetName = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[firstSheetName];
+      const data = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
 
-      const result = await base44.integrations.Core.ExtractDataFromUploadedFile({
-        file_url,
-        json_schema: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              code: { type: "string" },
-              name: { type: "string" },
-              document: { type: "string" },
-              email: { type: "string" },
-              phone: { type: "string" },
-              address: { type: "string" },
-              city: { type: "string" },
-              state: { type: "string" },
-              credit_limit: { type: "number" }
-            },
-            required: ["name"]
-          }
-        }
-      });
+      const clients = data.map((row) => {
+        const getVal = (possibleKeys) => {
+          const key = Object.keys(row).find((k) =>
+            possibleKeys.some((pk) => k.toLowerCase().includes(pk))
+          );
+          return key && row[key] ? String(row[key]).trim() : '';
+        };
 
-      if (result.status === 'error') {
-        throw new Error(result.details);
-      }
-
-      let clients = [];
-      if (Array.isArray(result.output)) {
-        clients = result.output;
-      } else {
-        throw new Error('Nenhum cliente encontrado no arquivo');
-      }
+        return {
+          name: getVal(['name', 'nome', 'razão', 'razao']),
+          code: getVal(['code', 'código', 'codigo']),
+          document: getVal(['document', 'cpf', 'cnpj', 'doc']),
+          email: getVal(['email', 'e-mail']),
+          phone: getVal(['phone', 'telefone', 'celular', 'contato']),
+          address: getVal(['address', 'endereço', 'endereco', 'rua', 'logradouro']),
+          city: getVal(['city', 'cidade', 'município', 'municipio']),
+          state: getVal(['state', 'estado', 'uf']),
+          credit_limit: parseFloat(getVal(['credit', 'limite'])) || 0,
+        };
+      }).filter((c) => c.name);
 
       if (clients.length === 0) {
-        throw new Error('Nenhum cliente encontrado no arquivo');
+        throw new Error('Nenhum cliente encontrado no arquivo. Verifique se a coluna "Nome" existe.');
       }
 
       await base44.entities.Client.bulkCreate(clients.map(c => ({
