@@ -14,13 +14,9 @@ if (!supabaseKey) {
 
 export const supabase = createClient(supabaseUrl, supabaseKey);
 
-// Cliente admin (service role) — usado para operações privilegiadas como invites
-const supabaseServiceKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
-export const supabaseAdmin = supabaseServiceKey
-  ? createClient(supabaseUrl, supabaseServiceKey, {
-      auth: { autoRefreshToken: false, persistSession: false }
-    })
-  : null;
+// O admin key deve ser evitado no navegador por questões de segurança.
+// Para operações administrativas, utilize o fluxo de pré-autorização.
+export const supabaseAdmin = null;
 
 // Custom helper to handle base44 method mapping to supabase
 const createEntityHandler = (entityName) => {
@@ -144,6 +140,17 @@ export const base44 = {
     updateMe: async (data) => {
       console.log('updateMe not fully implemented for Auth yet', data);
       return { success: true };
+    },
+    signUp: async (email, password, metadata = {}) => {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: metadata
+        }
+      });
+      if (error) throw error;
+      return data;
     },
     signIn: async (email, password) => {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });

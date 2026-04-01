@@ -9,7 +9,9 @@ import { toast } from 'sonner';
 import { Loader2, Lock, Mail, Factory } from 'lucide-react';
 
 export default function Login() {
+  const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
+  const [fullName, setFullName] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const { checkAppState } = useAuth();
@@ -36,6 +38,26 @@ export default function Login() {
     }
   };
 
+  const handleSignUp = async (e) => {
+    e.preventDefault();
+    if (!email || !password || !fullName) {
+      toast.error('Preencha todos os campos para criar sua conta');
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      await base44.auth.signUp(email, password, { full_name: fullName });
+      toast.success('Conta criada com sucesso! Verifique seu e-mail se necessário.');
+      setIsSignUp(false); // Volta para o login após cadastrar
+    } catch (error) {
+      console.error(error);
+      toast.error('Erro ao criar conta: ' + (error.message || 'Erro desconhecido'));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-950 px-4 relative overflow-hidden">
       {/* Background decoration */}
@@ -49,10 +71,28 @@ export default function Login() {
         
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-white mb-2">AGF ERP</h1>
-          <p className="text-slate-400">Acesse sua conta para continuar</p>
+          <p className="text-slate-400">
+            {isSignUp ? 'Crie sua conta para acessar' : 'Acesse sua conta para continuar'}
+          </p>
         </div>
 
-        <form onSubmit={handleLogin} className="space-y-6">
+        <form onSubmit={isSignUp ? handleSignUp : handleLogin} className="space-y-6">
+          {isSignUp && (
+            <div className="space-y-2">
+              <Label className="text-slate-300">Nome Completo</Label>
+              <div className="relative">
+                <Input 
+                  type="text" 
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder="Seu nome"
+                  className="bg-slate-950 border-slate-800 text-white placeholder:text-slate-600 focus-visible:ring-indigo-500 h-11"
+                  required
+                />
+              </div>
+            </div>
+          )}
+
           <div className="space-y-2">
             <Label className="text-slate-300">E-mail</Label>
             <div className="relative">
@@ -93,12 +133,22 @@ export default function Login() {
             {isLoading ? (
               <>
                 <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                Validando credenciais...
+                {isSignUp ? 'Criando conta...' : 'Validando credenciais...'}
               </>
             ) : (
-              'Entrar no Sistema'
+              isSignUp ? 'Criar Minha Conta' : 'Entrar no Sistema'
             )}
           </Button>
+
+          <div className="text-center">
+            <button
+              type="button"
+              onClick={() => setIsSignUp(!isSignUp)}
+              className="text-indigo-400 hover:text-indigo-300 text-sm font-medium transition-colors"
+            >
+              {isSignUp ? 'Já tem uma conta? Entrar agora' : 'Ainda não tem conta? Clique aqui'}
+            </button>
+          </div>
         </form>
       </div>
     </div>

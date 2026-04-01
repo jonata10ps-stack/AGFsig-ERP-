@@ -159,18 +159,9 @@ export default function UserManagement() {
 
   const inviteMutation = useMutation({
     mutationFn: async () => {
-      if (!supabaseAdmin) throw new Error('Chave de admin não configurada no .env');
-
-      // 1. Envia o convite pelo Supabase Auth (o email é enviado automaticamente)
-      const { data: authData, error: authError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
-        inviteForm.email,
-        {
-          data: {
-            full_name: inviteForm.full_name,
-          }
-        }
-      );
-      if (authError) throw authError;
+      // 1. O envio automático de e-mail foi removido por segurança (exigia Service Role Key).
+      // Agora o Admin pré-autoriza o e-mail no banco e o usuário se cadastra no site.
+      console.log('Iniciando pré-autorização para:', inviteForm.email);
 
       // 2. Cria o registro na tabela User com as permissões definidas
       await base44.entities.User.create({
@@ -196,7 +187,7 @@ export default function UserManagement() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users-management'] });
-      toast.success(`✉️ Convite enviado para ${inviteForm.email}! O usuário receberá um e-mail para definir a senha.`);
+      toast.success(`✉️ Usuário ${inviteForm.email} pré-autorizado! Peça para ele acessar o sistema e "Criar Conta" para ativar o acesso.`);
       setInviteDialog(false);
       setInviteForm({ email: '', full_name: '', modules: [], is_seller: false, company_ids: [] });
     },
