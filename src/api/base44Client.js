@@ -90,6 +90,13 @@ const createEntityHandler = (entityName) => {
       const { error } = await supabase.from(entityName).delete().eq('id', id);
       if (error) throw error;
       return true;
+    },
+
+    // Mock subscription to avoid crashes
+    subscribe(callback) {
+      console.log(`[Mock] Inscrito em eventos da entidade: ${entityName}`);
+      // Return a no-op unsubscribe function
+      return () => console.log(`[Mock] Desinscrito de: ${entityName}`);
     }
   };
 };
@@ -121,6 +128,12 @@ export const base44 = {
     logout: async () => {
       console.log('Mock logout called');
       window.location.reload();
+    }
+  },
+  appLogs: {
+    logUserInApp: async (pageName) => {
+      console.log(`[Mock Log] Usuário acessou a página: ${pageName}`);
+      return true;
     }
   },
   integrations: {
