@@ -25,7 +25,8 @@ export default function InventoryReceive() {
   const queryClient = useQueryClient();
   const urlParams = new URLSearchParams(window.location.search);
   const requestId = urlParams.get('request');
-  
+  const [selectedRequestId, setSelectedRequestId] = useState(requestId || 'none');
+  const lastPopulatedRequestId = React.useRef(null);
   const [items, setItems] = useState([]);
   const [currentItem, setCurrentItem] = useState({
     product_id: '',
@@ -36,16 +37,21 @@ export default function InventoryReceive() {
   });
   const [reason, setReason] = useState('');
 
+  const { data: openRequests } = useQuery({
+    queryKey: ['material-requests-open'],
+    queryFn: () => base44.entities.MaterialRequest.filter({ status: ['ABERTA', 'PARCIAL'] }, '-created_date'),
+  });
+
   const { data: materialRequest } = useQuery({
-    queryKey: ['material-request', requestId],
-    queryFn: () => base44.entities.MaterialRequest.filter({ id: requestId }).then(r => r?.[0]),
-    enabled: !!requestId,
+    queryKey: ['material-request', selectedRequestId],
+    queryFn: () => base44.entities.MaterialRequest.filter({ id: selectedRequestId }).then(r => r?.[0]),
+    enabled: !!selectedRequestId && selectedRequestId !== 'none',
   });
 
   const { data: requestItems } = useQuery({
-    queryKey: ['material-request-items', requestId],
-    queryFn: () => base44.entities.MaterialRequestItem.filter({ request_id: requestId }),
-    enabled: !!requestId,
+    queryKey: ['material-request-items', selectedRequestId],
+    queryFn: () => base44.entities.MaterialRequestItem.filter({ request_id: selectedRequestId }),
+    enabled: !!selectedRequestId && selectedRequestId !== 'none',
   });
 
   const { data: products } = useQuery({
@@ -76,6 +82,10 @@ export default function InventoryReceive() {
 
   const receiveMutation = useMutation({
     mutationFn: async () => {
+      if (items.some(item => !item.warehouse_id || !item.location_id)) {
+        throw new Error('Todos os itens devem ter um armazém e local de destino selecionado.');
+      }
+
       const user = await base44.auth.me();
       const batchNumber = `REC-${Date.now().toString().slice(-8)}`;
       const totalValue = items.reduce((sum, item) => sum + (item.qty * item.unit_cost), 0);
@@ -110,7 +120,8 @@ export default function InventoryReceive() {
       }
 
       // Atualizar solicitação de materiais se vinculada
-      if (requestId && requestItems) {
+      const isLinked = selectedRequestId && selectedRequestId !== 'none';
+      if (isLinked && requestItems) {
         for (const item of items) {
           const requestItem = requestItems.find(ri => ri.product_id === item.product_id);
           if (requestItem) {
@@ -125,7 +136,7 @@ export default function InventoryReceive() {
         }
 
         await new Promise(resolve => setTimeout(resolve, 500));
-        const allItems = await base44.entities.MaterialRequestItem.filter({ request_id: requestId });
+        const allItems = await base44.entities.MaterialRequestItem.filter({ request_id: selectedRequestId });
 
         const totalRequested = allItems.reduce((sum, ri) => sum + (ri.qty_requested || 0), 0);
         const totalReceived = allItems.reduce((sum, ri) => sum + (ri.qty_received || 0), 0);
@@ -139,7 +150,7 @@ export default function InventoryReceive() {
           newStatus = 'PARCIAL';
         }
 
-        await base44.entities.MaterialRequest.update(requestId, {
+        await base44.entities.MaterialRequest.update(selectedRequestId, {
           status: newStatus
         });
       }
@@ -150,8 +161,8 @@ export default function InventoryReceive() {
       queryClient.invalidateQueries({ queryKey: ['receiving-batches', 'receiving-items-pending'] });
       setItems([]);
       setReason('');
-      toast.success('Recebimento registrado com sucesso! Agora faça a alocação no armazém.');
-      window.location.href = createPageUrl('StorageAllocation');
+      toast.success('Recebimento registrado com sucesso! Redirecionando para a conferência.');
+      window.location.href = createPageUrl('ReceivingConferenceList');
     },
     onError: (error) => {
       toast.error('Erro ao processar recebimento: ' + error.message);
@@ -159,13 +170,13 @@ export default function InventoryReceive() {
   });
 
   const handleAddItem = () => {
-    if (!currentItem.product_id || !currentItem.warehouse_id || currentItem.qty <= 0) {
-      toast.error('Preencha todos os campos obrigatórios');
+    if (!currentItem.product_id || !currentItem.warehouse_id || !currentItem.location_id || currentItem.qty <= 0) {
+      toast.error('Preencha os dados e local de destino');
       return;
     }
 
     // Se há solicitação vinculada, verificar se o produto está na solicitação
-    if (requestId && requestItems) {
+    if (selectedRequestId && requestItems) {
       const requestItem = requestItems.find(ri => ri.product_id === currentItem.product_id);
       if (!requestItem || (requestItem.qty_pending || 0) <= 0) {
         toast.error('Este produto não está na solicitação ou já foi totalmente recebido');
@@ -210,15 +221,59 @@ export default function InventoryReceive() {
     });
   };
 
+  const updateItem = (index, field, value) => {
+    const newItems = [...items];
+    const item = { ...newItems[index], [field]: value };
+    
+    if (field === 'warehouse_id') {
+      const warehouse = warehouses?.find(w => w.id === value);
+      item.warehouse_name = warehouse?.name || '';
+      item.location_id = '';
+      item.location_barcode = '';
+    }
+    
+    if (field === 'location_id') {
+      const location = locations?.find(l => l.id === value);
+      item.location_barcode = location?.barcode || '';
+    }
+    
+    newItems[index] = item;
+    setItems(newItems);
+  };
+
   // Pré-carregar itens da solicitação
   React.useEffect(() => {
-    if (requestItems && items.length === 0) {
-      const pendingItems = requestItems.filter(ri => (ri.qty_pending || 0) > 0);
+    const isReady = requestItems && requestItems.length > 0 && selectedRequestId !== 'none';
+    const isNewRequest = lastPopulatedRequestId.current !== selectedRequestId;
+
+    if (isReady && isNewRequest) {
+      const selectedIds = urlParams.get('items')?.split(',') || [];
+      const pendingItems = requestItems.filter(ri => {
+        const isPending = (ri.qty_pending ?? ri.qty_requested) > 0;
+        if (selectedIds.length > 0 && selectedIds[0] !== '') {
+          return isPending && selectedIds.includes(ri.id);
+        }
+        return isPending;
+      });
+      
       if (pendingItems.length > 0) {
-        toast.info(`${pendingItems.length} item(ns) pendente(s) da solicitação`);
+        setItems(pendingItems.map(ri => ({
+          id: ri.id, // ID original do item da solicitação
+          product_id: ri.product_id,
+          product_sku: ri.product_sku,
+          product_name: ri.product_name,
+          qty: ri.qty_pending ?? ri.qty_requested,
+          pending_reference: ri.qty_pending ?? ri.qty_requested,
+          unit_cost: 0, 
+          warehouse_id: '', 
+          warehouse_name: '',
+          location_id: '',
+          location_barcode: ''
+        })));
+        lastPopulatedRequestId.current = selectedRequestId;
       }
     }
-  }, [requestItems]);
+  }, [requestItems, warehouses, selectedRequestId, urlParams]);
 
   const formatCurrency = (value) => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);
@@ -231,11 +286,31 @@ export default function InventoryReceive() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Recebimento de Mercadoria</h1>
-          <p className="text-slate-500">
-            {materialRequest 
-              ? `Vinculado à Solicitação: ${materialRequest.request_number}` 
-              : 'Registre a entrada de produtos no estoque'}
-          </p>
+          <div className="flex items-center gap-4 mt-2">
+            <p className="text-slate-500">
+              {materialRequest 
+                ? `Vinculado à Solicitação: ${materialRequest.request_number}` 
+                : 'Registre a entrada de produtos no estoque'}
+            </p>
+            {!requestId && (
+              <Select value={selectedRequestId} onValueChange={(val) => {
+                setSelectedRequestId(val);
+                setItems([]); // Clear local items to reload from new request
+              }}>
+                <SelectTrigger className="w-[300px] h-8 text-xs bg-indigo-50 border-indigo-200">
+                  <SelectValue placeholder="Vincular a uma solicitação aberta..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">(Nenhuma solicitação)</SelectItem>
+                  {openRequests?.map(req => (
+                    <SelectItem key={req.id} value={req.id}>
+                      {req.request_number} - {req.description || 'Sem descrição'}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
         </div>
         <Link to={createPageUrl('ReceivingList')}>
           <Button variant="outline">
@@ -270,7 +345,7 @@ export default function InventoryReceive() {
                 label="Ou busque manualmente"
                 value={currentItem.product_id}
                 onSelect={handleProductChange}
-                placeholder={requestId ? "Buscar produto da solicitação..." : "Buscar por código ou descrição..."}
+                placeholder={(selectedRequestId && selectedRequestId !== 'none') ? "Buscar produto da solicitação..." : "Buscar por código ou descrição..."}
                 required
               />
             </div>
@@ -369,42 +444,83 @@ export default function InventoryReceive() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Produto</TableHead>
+                    <TableHead>Produto / Ref</TableHead>
+                    <TableHead>Armazém</TableHead>
                     <TableHead>Local</TableHead>
-                    <TableHead className="text-right">Qtd</TableHead>
-                    <TableHead className="text-right">Custo</TableHead>
+                    <TableHead className="text-right">Qtd Rec.</TableHead>
                     <TableHead className="text-right">Total</TableHead>
                     <TableHead className="w-12"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {items.map((item, index) => (
-                    <TableRow key={index}>
-                      <TableCell>
-                        <div>
-                          <span className="font-mono text-indigo-600 text-sm">{item.product_sku}</span>
-                          <p className="font-medium text-sm">{item.product_name}</p>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-sm text-slate-500">
-                        {item.warehouse_name}
-                        {item.location_barcode && ` / ${item.location_barcode}`}
-                      </TableCell>
-                      <TableCell className="text-right font-medium">{item.qty}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(item.unit_cost)}</TableCell>
-                      <TableCell className="text-right font-medium">{formatCurrency(item.qty * item.unit_cost)}</TableCell>
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleRemoveItem(index)}
-                          className="text-red-500 hover:text-red-600"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {items.map((item, index) => {
+                    const rowLocations = locations?.filter(l => l.warehouse_id === item.warehouse_id);
+                    return (
+                      <TableRow key={index} className={(!item.warehouse_id || !item.location_id) ? 'bg-amber-50/30' : ''}>
+                        <TableCell>
+                          <div>
+                            <span className="font-mono text-indigo-600 text-xs">{item.product_sku}</span>
+                            <p className="font-medium text-xs truncate max-w-[200px]">{item.product_name}</p>
+                            {item.pending_reference && (
+                              <p className="text-[10px] text-slate-400 mt-0.5">Saldo na Sol.: {item.pending_reference}</p>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="w-[180px]">
+                          <Select 
+                            value={item.warehouse_id} 
+                            onValueChange={(val) => updateItem(index, 'warehouse_id', val)}
+                          >
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue placeholder="Armazém..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {warehouses?.map(w => (
+                                <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                        <TableCell className="w-[180px]">
+                          <Select 
+                            value={item.location_id} 
+                            onValueChange={(val) => updateItem(index, 'location_id', val)}
+                            disabled={!item.warehouse_id}
+                          >
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue placeholder={item.warehouse_id ? "Local..." : "---"} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {rowLocations?.map(l => (
+                                <SelectItem key={l.id} value={l.id}>{l.barcode} ({l.name})</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                        <TableCell className="w-24">
+                          <Input
+                            type="number"
+                            value={item.qty}
+                            onChange={(e) => updateItem(index, 'qty', parseFloat(e.target.value) || 0)}
+                            className="h-8 text-xs text-right font-medium"
+                          />
+                        </TableCell>
+                        <TableCell className="text-right text-xs">
+                          {formatCurrency(item.unit_cost * item.qty)}
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleRemoveItem(index)}
+                            className="h-8 w-8 text-red-500 hover:text-red-700"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             )}

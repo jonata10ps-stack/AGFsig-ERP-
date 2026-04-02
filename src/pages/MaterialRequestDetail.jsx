@@ -4,7 +4,7 @@ import { base44 } from '@/api/base44Client';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import {
-  ArrowLeft, Plus, Trash2, Save, Printer, Package, CheckSquare
+  ArrowLeft, Plus, Trash2, Save, Printer, Package, CheckSquare, XCircle, Ban
 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { QRCodeSVG } from 'qrcode.react';
@@ -174,6 +174,8 @@ export default function MaterialRequestDetail() {
 
       const user = await base44.auth.me();
       const requestNumber = `SOL-${Date.now().toString().slice(-8)}`;
+      
+      // 1. Criar a Solicitação
       const newRequest = await base44.entities.MaterialRequest.create({
         company_id: user.company_id,
         ...form,
@@ -181,21 +183,35 @@ export default function MaterialRequestDetail() {
         status: 'ABERTA'
       });
 
-      await base44.entities.MaterialRequestItem.bulkCreate(
-        items.map(item => ({ 
-          company_id: user.company_id,
-          ...item, 
-          request_id: newRequest.id 
-        }))
-      );
+      // 2. Criar os Itens com colunas explícitas para garantir persistência
+      const itemsToCreate = items.map(item => ({ 
+        company_id: user.company_id,
+        request_id: newRequest.id,
+        product_id: item.product_id,
+        product_sku: item.product_sku,
+        product_name: item.product_name,
+        qty_requested: item.qty_requested,
+        qty_received: 0,
+        qty_pending: item.qty_requested,
+        notes: item.notes || ''
+      }));
+
+      await base44.entities.MaterialRequestItem.bulkCreate(itemsToCreate);
 
       return newRequest;
     },
     onSuccess: (newRequest) => {
       queryClient.invalidateQueries({ queryKey: ['material-requests'] });
-      toast.success('Solicitação criada com sucesso');
-      window.location.href = createPageUrl(`MaterialRequestDetail?id=${newRequest.id}`);
+      toast.success('Solicitação salva com sucesso');
+      // Forçar recarregamento para entrar no modo de edição com o novo ID
+      setTimeout(() => {
+        window.location.href = `?id=${newRequest.id}`;
+      }, 500);
     },
+    onError: (err) => {
+      toast.error('Erro ao salvar solicitação: ' + err.message);
+      console.error('Save error:', err);
+    }
   });
 
   const updateItemMutation = useMutation({
@@ -239,6 +255,39 @@ export default function MaterialRequestDetail() {
     },
   });
 
+  const cancelRequestMutation = useMutation({
+    mutationFn: async () => {
+      await base44.entities.MaterialRequest.update(requestId, { status: 'CANCELADA' });
+      // Também marcar itens como pendência zero
+      if (items.length > 0) {
+        await Promise.all(items.map(item => 
+          base44.entities.MaterialRequestItem.update(item.id, { qty_pending: 0 })
+        ));
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['material-request', requestId] });
+      queryClient.invalidateQueries({ queryKey: ['material-request-items', requestId] });
+      toast.success('Solicitação cancelada');
+    },
+  });
+
+  const clearAllResiduesMutation = useMutation({
+    mutationFn: async () => {
+      await base44.entities.MaterialRequest.update(requestId, { status: 'ATENDIDA' });
+      if (items.length > 0) {
+        await Promise.all(items.map(item => 
+          base44.entities.MaterialRequestItem.update(item.id, { qty_pending: 0 })
+        ));
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['material-request', requestId] });
+      queryClient.invalidateQueries({ queryKey: ['material-request-items', requestId] });
+      toast.success('Todos os resíduos foram limpos e solicitação encerrada');
+    },
+  });
+
   const handleAddItem = (item) => {
     if (requestId) {
       addItemToRequestMutation.mutate(item);
@@ -277,16 +326,18 @@ export default function MaterialRequestDetail() {
   }
 
   const canEdit = isNew || request?.status === 'ABERTA' || request?.status === 'PARCIAL';
-  const displayItems = requestId ? requestItems : items;
+  const displayItems = items; // Usar o estado 'items' que já é sincronizado pelo useEffect
 
-  const pendingItems = displayItems?.filter(item => (item.qty_pending || item.qty_requested) > 0) || [];
+  const pendingItems = displayItems?.filter(item => (item.qty_pending ?? item.qty_requested) > 0) || [];
 
   const handleReceiveItems = () => {
     if (selectedItems.length === 0) {
       toast.error('Selecione pelo menos um item para receber');
       return;
     }
-    setLabelsDialogOpen(true);
+    // Redireciona para recebimento com IDs selecionados
+    const selectedIds = selectedItems.map(i => i.id).join(',');
+    window.location.href = createPageUrl(`InventoryReceive?request=${requestId}&items=${selectedIds}`);
   };
 
   const toggleItemSelection = (item) => {
@@ -320,30 +371,73 @@ export default function MaterialRequestDetail() {
             )}
           </div>
         </div>
-        <div className="flex gap-2">
-          {!isNew && (
-            <>
-              <Button onClick={handlePrint} variant="outline">
-                <Printer className="h-4 w-4 mr-2" />
-                Imprimir
+          <div className="flex gap-2">
+            {!isNew && request?.status !== 'CANCELADA' && (
+              <>
+                <Button onClick={handlePrint} variant="outline">
+                  <Printer className="h-4 w-4 mr-2" />
+                  Imprimir
+                </Button>
+                {request?.status !== 'ATENDIDA' && (
+                  <>
+                    <Button 
+                      variant="outline" 
+                      className="text-red-600 border-red-200 hover:bg-red-50"
+                      onClick={() => {
+                        if (confirm('Tem certeza que deseja CALCELAR esta solicitação?')) {
+                          cancelRequestMutation.mutate();
+                        }
+                      }}
+                      disabled={cancelRequestMutation.isPending}
+                    >
+                      <Ban className="h-4 w-4 mr-2" />
+                      {cancelRequestMutation.isPending ? 'Cancelando...' : 'Cancelar Solicitação'}
+                    </Button>
+                    <Link to={createPageUrl(`InventoryReceive?request=${requestId}`)}>
+                      <Button className="bg-emerald-600 hover:bg-emerald-700">
+                        <Package className="h-4 w-4 mr-2" />
+                        Receber
+                      </Button>
+                    </Link>
+                  </>
+                )}
+              </>
+            )}
+            {isNew && (
+              <Button 
+                onClick={() => saveMutation.mutate()} 
+                disabled={saveMutation.isPending || items.length === 0}
+                className="bg-slate-900 text-white"
+              >
+                {saveMutation.isPending ? (
+                  <>
+                    <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
+                    Gravando Solicitação...
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-4 w-4 mr-2" />
+                    Salvar Solicitação
+                  </>
+                )}
               </Button>
-              {request?.status !== 'ATENDIDA' && request?.status !== 'CANCELADA' && (
-                <Link to={createPageUrl(`InventoryReceive?request=${requestId}`)}>
-                  <Button className="bg-emerald-600 hover:bg-emerald-700">
-                    <Package className="h-4 w-4 mr-2" />
-                    Receber
-                  </Button>
-                </Link>
-              )}
-            </>
-          )}
-          {isNew && (
-            <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending || items.length === 0}>
-              <Save className="h-4 w-4 mr-2" />
-              {saveMutation.isPending ? 'Salvando...' : 'Salvar'}
-            </Button>
-          )}
-        </div>
+            )}
+            {!isNew && request?.status === 'PARCIAL' && pendingItems.length > 0 && (
+              <Button 
+                variant="outline"
+                className="text-amber-700 border-amber-200 hover:bg-amber-50"
+                onClick={() => {
+                  if (confirm('Deseja encerrar esta solicitação e limpar todos os resíduos pendentes?')) {
+                    clearAllResiduesMutation.mutate();
+                  }
+                }}
+                disabled={clearAllResiduesMutation.isPending}
+              >
+                <CheckSquare className="h-4 w-4 mr-2" />
+                {clearAllResiduesMutation.isPending ? 'Limpando...' : 'Limpar Resíduos'}
+              </Button>
+            )}
+          </div>
       </div>
 
       {/* Print Template */}

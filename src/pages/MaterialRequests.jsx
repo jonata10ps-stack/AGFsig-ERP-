@@ -50,14 +50,32 @@ export default function MaterialRequests() {
   });
 
   const updateStatusMutation = useMutation({
-    mutationFn: ({ id, status }) => base44.entities.MaterialRequest.update(id, { 
-      status,
-      closed_at: status === 'CANCELADA' ? new Date().toISOString() : undefined
-    }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['material-requests', companyId] });
-      toast.success('Status atualizado');
+    mutationFn: async ({ id, status }) => {
+      const res = await base44.entities.MaterialRequest.update(id, { 
+        status
+      });
+
+      if (status === 'CANCELADA') {
+        const items = await base44.entities.MaterialRequestItem.filter({ request_id: id });
+        if (items?.length > 0) {
+          await Promise.all(items.map(item => 
+            base44.entities.MaterialRequestItem.update(item.id, { qty_pending: 0 })
+          ));
+        }
+      }
+      return res;
     },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['material-requests', companyId] });
+      if (variables.status === 'CANCELADA') {
+        toast.success('Solicitação cancelada com sucesso');
+      } else {
+        toast.success('Status atualizado');
+      }
+    },
+    onError: (err) => {
+      toast.error('Erro ao atualizar status: ' + err.message);
+    }
   });
 
   const filtered = requests?.filter(r => {
@@ -171,13 +189,18 @@ export default function MaterialRequests() {
                               Ver Detalhes
                             </Link>
                           </DropdownMenuItem>
-                          {request.status === 'ABERTA' && (
+                          {(request.status === 'ABERTA' || request.status === 'PARCIAL') && (
                             <DropdownMenuItem 
-                              onClick={() => updateStatusMutation.mutate({ id: request.id, status: 'CANCELADA' })}
+                              onClick={() => {
+                                if (confirm('Deseja realmente CANCELAR esta solicitação? Todos os itens pendentes serão zerados.')) {
+                                  updateStatusMutation.mutate({ id: request.id, status: 'CANCELADA' });
+                                }
+                              }}
                               className="text-red-600"
+                              disabled={updateStatusMutation.isPending}
                             >
                               <XCircle className="h-4 w-4 mr-2" />
-                              Cancelar
+                              {updateStatusMutation.isPending ? 'Cancelando...' : 'Cancelar'}
                             </DropdownMenuItem>
                           )}
                         </DropdownMenuContent>

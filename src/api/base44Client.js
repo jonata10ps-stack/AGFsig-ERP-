@@ -18,6 +18,19 @@ export const supabase = createClient(supabaseUrl, supabaseKey);
 // Para operações administrativas, utilize o fluxo de pré-autorização.
 export const supabaseAdmin = null;
 
+// Função para limpar dados: converte strings vazias em null (útil para campos UUID no Postgres)
+const sanitizeData = (data) => {
+  if (!data || typeof data !== 'object') return data;
+  
+  const sanitized = { ...data };
+  Object.keys(sanitized).forEach(key => {
+    if (sanitized[key] === '') {
+      sanitized[key] = null;
+    }
+  });
+  return sanitized;
+};
+
 // Custom helper to handle base44 method mapping to supabase
 const createEntityHandler = (entityName) => {
   return {
@@ -44,10 +57,14 @@ const createEntityHandler = (entityName) => {
     async filter(conditions = {}, sort) {
       let query = supabase.from(entityName).select('*');
       
-      // Apply exact matches
+      // Apply exact matches or IN matches for arrays
       for (const [key, value] of Object.entries(conditions)) {
         if (value !== undefined && value !== null) {
-          query = query.eq(key, value);
+          if (Array.isArray(value)) {
+            query = query.in(key, value);
+          } else {
+            query = query.eq(key, value);
+          }
         }
       }
 
@@ -68,21 +85,24 @@ const createEntityHandler = (entityName) => {
     },
     
     async create(data) {
+      const sanitized = sanitizeData(data);
       // base44 might not send id if it expects the backend to generate it 
       // which is fine since Supabase has uuid_generate_v4() default.
-      const { data: result, error } = await supabase.from(entityName).insert([data]).select().single();
+      const { data: result, error } = await supabase.from(entityName).insert([sanitized]).select().single();
       if (error) throw error;
       return result;
     },
     
     async bulkCreate(dataArray) {
-      const { data: result, error } = await supabase.from(entityName).insert(dataArray).select();
+      const sanitizedArray = (dataArray || []).map(item => sanitizeData(item));
+      const { data: result, error } = await supabase.from(entityName).insert(sanitizedArray).select();
       if (error) throw error;
       return result;
     },
     
     async update(id, data) {
-      const { data: result, error } = await supabase.from(entityName).update(data).eq('id', id).select().single();
+      const sanitized = sanitizeData(data);
+      const { data: result, error } = await supabase.from(entityName).update(sanitized).eq('id', id).select().single();
       if (error) {
         console.error(`Error updating ${entityName} with id ${id}:`, error);
         throw error;

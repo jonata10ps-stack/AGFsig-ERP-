@@ -197,13 +197,28 @@ export default function StorageAllocation() {
        });
      }
 
-     // Buscar saldo existente do item (criado no recebimento) - CRÍTICO: filtrar por company_id
-     const currentBalance = await base44.entities.StockBalance.filter({
+     // Verificar se o item já está no sistema (StockBalance) em algum lugar
+     // Se estiver, tratamos como TRANSFERÊNCIA. Se não, é ENTRADA.
+     const existingMove = await base44.entities.InventoryMove.filter({
        company_id: companyId,
        product_id: item.product_id,
-       warehouse_id: warehouseId,
-       location_id: item.location_id
+       related_id: item.id, // Usar item.id para ser específico deste recebimento
+       type: 'ENTRADA'
      });
+
+     const isNewEntry = existingMove.length === 0;
+
+     // Buscar saldo existente do item (se estiver sendo movido de uma localização para outra)
+     // Nota: Se item.location_id é null/undefined, não deve filtrar por ele para encontrar a origem correta
+     let currentBalance = [];
+     if (item.isFromStockBalance || item.location_id) {
+        currentBalance = await base44.entities.StockBalance.filter({
+          company_id: companyId,
+          product_id: item.product_id,
+          warehouse_id: warehouseId,
+          location_id: item.location_id || null // Forçar null se for pendente
+        });
+     }
 
      // Transferência: RETIRAR da localização original
      if (currentBalance.length > 0) {
@@ -211,17 +226,15 @@ export default function StorageAllocation() {
        const remainingQtyAfterAlloc = Math.round((balance.qty_available - qty) * 1000) / 1000;
 
        if (remainingQtyAfterAlloc > 0) {
-         // Ainda tem estoque na localização original
          await base44.entities.StockBalance.update(balance.id, {
            qty_available: remainingQtyAfterAlloc
          });
        } else {
-         // Removeu tudo da localização original
          await base44.entities.StockBalance.delete(balance.id);
        }
      }
 
-     // ADICIONAR na nova localização - CRÍTICO: filtrar por company_id
+     // ADICIONAR na nova localização
      const targetBalance = await base44.entities.StockBalance.filter({
        company_id: companyId,
        product_id: item.product_id,
@@ -250,17 +263,21 @@ export default function StorageAllocation() {
        });
      }
 
-     // Movimento de entrada no armazém (recebimento)
+     // Movimento no Kardex
      await base44.entities.InventoryMove.create({
        company_id: companyId,
-       type: 'ENTRADA',
+       type: isNewEntry ? 'ENTRADA' : 'TRANSFERENCIA',
        product_id: item.product_id,
        qty: qty,
+       from_warehouse_id: currentBalance[0]?.warehouse_id || null,
+       from_location_id: currentBalance[0]?.location_id || null,
        to_warehouse_id: warehouseId,
        to_location_id: locationId,
        related_type: 'COMPRA',
-       related_id: item.batch_id,
-       reason: `Recebimento/Alocação - Lote ${batch?.batch_number || 'N/A'}`,
+       related_id: item.id, // Usar id do item para evitar duplicar movimentos do mesmo item
+       reason: isNewEntry 
+         ? `Recebimento - Lote ${batch?.batch_number || 'N/A'}` 
+         : `Alocação - Lote ${batch?.batch_number || 'N/A'} (Origem: ${currentBalance[0]?.location_id ? 'Local' : 'Pendente'})`,
        created_date: new Date().toISOString()
      });
 

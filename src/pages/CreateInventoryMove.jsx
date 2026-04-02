@@ -147,7 +147,13 @@ export default function CreateInventoryMove() {
   }, [form.product_id, form.from_warehouse_id, form.from_location_id, form.qty, form.type, companyId]);
 
   const createMoveMutation = useMutation({
-     mutationFn: async (data) => {
+     mutationFn: async (formData) => {
+       // Sanitizar os dados: converter strings vazias em null para colunas UUID
+       const data = Object.keys(formData).reduce((acc, key) => {
+         acc[key] = formData[key] === '' ? null : formData[key];
+         return acc;
+       }, {});
+
        // Criar movimento
        const move = await base44.entities.InventoryMove.create({ ...data, company_id: companyId });
 

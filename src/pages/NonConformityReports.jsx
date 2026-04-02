@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { base44 } from '@/api/base44Client';
+import { toast } from 'sonner';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCompanyId } from '@/components/useCompanyId';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -53,86 +54,82 @@ export default function NonConformityReports() {
   });
 
   const resolveMutation = useMutation({
-    mutationFn: async ({ reportId, action }) => {
+    mutationFn: async ({ report, action }) => {
       const now = new Date().toISOString();
-      const report = selectedReport;
+      const reportId = report.id;
 
       // Verificar se já existe solicitação vinculada para evitar duplicação
       if (action === 'MATERIAL_REQUEST' && report.material_request_id) {
         throw new Error('Já existe uma solicitação de material vinculada a esta não conformidade.');
       }
 
-      await base44.entities.NonConformityReport.update(reportId, {
+      const reportUpdates = {
         status: 'RESOLVIDO',
         action_type: action,
         resolved_at: now,
         resolved_by: user?.email,
         notes: actionNotes,
-      });
+      };
 
       if (action === 'MATERIAL_REQUEST') {
-         // Criar a solicitação de material
-         const requestNumber = `MR-${Date.now()}`;
-         const newRequest = await base44.entities.MaterialRequest.create({
-           company_id: companyId,
-           request_number: requestNumber,
-           description: `Não conformidade #${report.report_number} - Item faltante`,
-           status: 'ABERTA',
-           requester: user?.full_name || user?.email,
-           department: 'Qualidade',
-           priority: 'ALTA',
-           notes: actionNotes,
-         });
+          // Criar a solicitação de material
+          const requestNumber = `SOL-${Date.now().toString().slice(-8)}`;
+          const newRequest = await base44.entities.MaterialRequest.create({
+            company_id: companyId,
+            request_number: requestNumber,
+            description: `Não conformidade #${report.report_number} - Item faltante`,
+            status: 'ABERTA',
+            requester: user?.full_name || user?.email,
+            department: 'Qualidade',
+            priority: 'ALTA',
+            notes: actionNotes,
+          });
 
-         // Criar o item da solicitação
-         await base44.entities.MaterialRequestItem.create({
-           company_id: companyId,
-           request_id: newRequest.id,
-           product_id: report.product_id,
-           product_sku: report.product_sku,
-           product_name: report.product_name,
-           qty_requested: Math.abs(report.variance),
-           qty_received: 0,
-           qty_pending: Math.abs(report.variance),
-           notes: `Não conformidade #${report.report_number}`,
-         });
+          // Criar o item da solicitação com campos explícitos para garantir exibição
+          await base44.entities.MaterialRequestItem.create({
+            company_id: companyId,
+            request_id: newRequest.id,
+            product_id: report.product_id,
+            product_sku: report.product_sku || '',
+            product_name: report.product_name || '',
+            qty_requested: Math.abs(report.variance),
+            qty_received: 0,
+            qty_pending: Math.abs(report.variance),
+            notes: `Referência NCR #${report.report_number}`,
+          });
 
-         // Atualizar a não conformidade com o ID da solicitação
-         await base44.entities.NonConformityReport.update(reportId, {
-           material_request_id: newRequest.id,
-         });
-       } else if (action === 'NEW_RECEIVING') {
-         const report = selectedReport;
-         const batch = await base44.entities.ReceivingBatch.create({
-           company_id: companyId,
-           batch_number: `REC-EXCESS-${Date.now()}`,
-           status: 'PENDENTE_CONF',
-           notes: `Recebimento de excesso #${report.report_number}`,
-         });
+          // Vincular via ID
+          reportUpdates.request_id = newRequest.id;
+          reportUpdates.notes = `Gerada Solicitação ${requestNumber}. ${actionNotes}`;
+        } else if (action === 'ACCEPT_EXCESS') {
+          // No excesso, o saldo já foi alimentado na conferência inicial.
+          // Apenas marcamos como resolvido sem criar novos registros/movimentações.
+          reportUpdates.notes = `Excesso aceito (saldo já conferido). ${actionNotes}`;
+        }
 
-         await base44.entities.ReceivingItem.create({
-           company_id: companyId,
-           receiving_batch_id: batch.id,
-           product_id: report.product_id,
-           product_sku: report.product_sku,
-           product_name: report.product_name,
-           quantity_expected: report.variance,
-           quantity_received: report.variance,
-           status: 'PENDENTE_CONF',
-         });
-
+        // Atualizar o relatório de não conformidade no final com campos explícitos para o schema
         await base44.entities.NonConformityReport.update(reportId, {
-          new_receiving_id: batch.id,
+          status: 'RESOLVIDO',
+          action_type: action,
+          resolved_at: now,
+          resolved_by: user?.email,
+          notes: reportUpdates.notes,
+          request_id: reportUpdates.request_id || null,
+          receiving_batch_id: reportUpdates.receiving_batch_id || null,
         });
-      }
     },
     onSuccess: () => {
-       queryClient.invalidateQueries({ queryKey: ['nonconformity-reports', statusFilter, companyId] });
-       setShowActionDialog(false);
-       setSelectedReport(null);
-       setActionType('');
-       setActionNotes('');
-     },
+      queryClient.invalidateQueries({ queryKey: ['nonconformity-reports', statusFilter, companyId] });
+      toast.success('Não conformidade resolvida com sucesso!');
+      setShowActionDialog(false);
+      setSelectedReport(null);
+      setActionType('');
+      setActionNotes('');
+    },
+    onError: (error) => {
+      toast.error('Erro ao resolver não conformidade: ' + error.message);
+      console.error('Resolution error:', error);
+    }
   });
 
   const filteredReports = reports.filter(report =>
@@ -243,10 +240,10 @@ export default function NonConformityReports() {
                   {report.action_type && report.action_type !== 'NENHUMA' && (
                     <div className="text-xs text-slate-500 mt-2">
                       {report.action_type === 'MATERIAL_REQUEST' && (
-                        <>Solicitação de Material: {report.material_request_id}</>
+                        <>Solicitação de Material: {report.request_id}</>
                       )}
-                      {report.action_type === 'NEW_RECEIVING' && (
-                        <>Novo Recebimento: {report.new_receiving_id}</>
+                      {report.action_type === 'ACCEPT_EXCESS' && (
+                        <>Excesso Aceito (Saldo Atualizado)</>
                       )}
                     </div>
                   )}
@@ -285,8 +282,8 @@ export default function NonConformityReports() {
                       </SelectItem>
                     )}
                     {selectedReport.variance > 0 && (
-                      <SelectItem value="NEW_RECEIVING">
-                        Gerar Novo Recebimento
+                      <SelectItem value="ACCEPT_EXCESS">
+                        Aceitar Excesso (Saldo já conferido)
                       </SelectItem>
                     )}
                     <SelectItem value="NENHUMA">Nenhuma ação</SelectItem>
@@ -311,7 +308,7 @@ export default function NonConformityReports() {
                   Cancelar
                 </Button>
                 <Button
-                  onClick={() => resolveMutation.mutate({ reportId: selectedReport.id, action: actionType })}
+                  onClick={() => resolveMutation.mutate({ report: selectedReport, action: actionType })}
                   disabled={!actionType || resolveMutation.isPending}
                 >
                   Resolver

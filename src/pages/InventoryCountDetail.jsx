@@ -25,8 +25,9 @@ import ProductSearchSelect from '@/components/products/ProductSearchSelect';
 
 const STATUS_CONFIG = {
   ABERTO: { color: 'bg-blue-100 text-blue-700', label: 'Aberto' },
-  EM_CONTAGEM: { color: 'bg-amber-100 text-amber-700', label: 'Em Contagem' },
-  CONCLUIDO: { color: 'bg-emerald-100 text-emerald-700', label: 'Concluído' },
+  CONTAGEM_1: { color: 'bg-amber-100 text-amber-700', label: '1ª Contagem' },
+  CONTAGEM_2: { color: 'bg-orange-100 text-orange-700', label: '2ª Contagem' },
+  RECONCILIACAO: { color: 'bg-indigo-100 text-indigo-700', label: 'Reconciliação' },
   AJUSTADO: { color: 'bg-purple-100 text-purple-700', label: 'Ajustado' },
   CANCELADO: { color: 'bg-slate-100 text-slate-700', label: 'Cancelado' },
 };
@@ -82,167 +83,132 @@ export default function InventoryCountDetail() {
     enabled: !!companyId,
   });
 
-  const startCountingMutation = useMutation({
-    mutationFn: async () => {
+  const changeStatusMutation = useMutation({
+    mutationFn: async (newStatus) => {
       await base44.entities.InventoryCount.update(countId, {
-        status: 'EM_CONTAGEM'
+        status: newStatus
       });
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['inventory-count', countId, companyId] });
-      toast.success('Contagem iniciada');
+      toast.success(`Estágio alterado para: ${STATUS_CONFIG[variables]?.label}`);
     },
     onError: (error) => {
-      toast.error('Erro ao iniciar contagem: ' + error.message);
+      toast.error('Erro ao alterar estágio: ' + error.message);
     }
   });
 
-  const completeCountingMutation = useMutation({
-    mutationFn: async () => {
-      await base44.entities.InventoryCount.update(countId, {
-        status: 'CONCLUIDO'
-      });
+  const updateItemMutation = useMutation({
+    mutationFn: async (payload) => {
+      const { itemId, data } = payload;
+      await base44.entities.InventoryCountItem.update(itemId, data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['inventory-count', countId, companyId] });
-      toast.success('Contagem concluída');
-    },
-    onError: (error) => {
-      toast.error('Erro ao concluir contagem: ' + error.message);
-    }
-  });
-
-  const updateItemQtyMutation = useMutation({
-    mutationFn: async () => {
-      const newQty = parseFloat(editQty);
-      if (isNaN(newQty) || newQty < 0) {
-        throw new Error('Quantidade inválida');
-      }
-
-      const item = editingItem;
-      const balance = stockBalances.find(b => 
-        b.product_id === item.product_id && 
-        b.location_id === item.location_id
-      );
-      const currentQty = balance?.qty_available || item.qty_system || 0;
-      const divergence = newQty - currentQty;
-
-      await base44.entities.InventoryCountItem.update(item.id, {
-        qty_counted: newQty,
-        qty_divergence: divergence,
-        status: 'CONTADO'
-      });
-
-      setEditingItem(null);
-      setEditQty('');
       refetchItems();
-    },
-    onSuccess: () => {
-      toast.success('Item atualizado');
     },
     onError: (error) => {
       toast.error('Erro: ' + error.message);
     }
   });
 
+  const handleUpdateQty = (item, field) => {
+    const val = parseFloat(editQty);
+    if (isNaN(val) || val < 0) {
+      toast.error('Quantidade inválida');
+      return;
+    }
+
+    const data = { [field]: val };
+    
+    // Se for 1ª ou 2ª contagem, marcar status como contado
+    if (field === 'qty_1' || field === 'qty_2') {
+      data.status = 'CONTADO';
+    }
+
+    // Se for qty_final (reconciliação), recalcular a divergência baseada no sistema
+    if (field === 'qty_final') {
+      data.qty_divergence = val - (item.qty_system || 0);
+      data.status = 'CONCILIADO';
+    }
+
+    updateItemMutation.mutate({ itemId: item.id, data });
+    setEditingItem(null);
+    setEditQty('');
+  };
+
   const applyAdjustmentsMutation = useMutation({
     mutationFn: async () => {
-      console.log('=== INICIANDO APLICAÇÃO DE AJUSTES ===');
-      console.log('countId:', countId);
-      console.log('companyId:', companyId);
-      console.log('countItems total:', countItems.length);
-      console.log('countItems:', countItems);
-
-      const itemsWithDivergence = countItems.filter(item => 
-        item.qty_divergence && item.qty_divergence !== 0
+      const itemsToAdjust = countItems.filter(item => 
+        item.qty_final !== undefined && item.qty_final !== null
       );
 
-      console.log('Items com divergência:', itemsWithDivergence.length);
-      console.log('Items com divergência:', itemsWithDivergence);
-
-      if (itemsWithDivergence.length === 0) {
-        throw new Error('Nenhum item com divergência para ajustar');
+      if (itemsToAdjust.length === 0) {
+        throw new Error('Nenhum item reconciliado para aplicar ajustes');
       }
 
-      for (const item of itemsWithDivergence) {
-        console.log('\n--- Processando item:', item.product_name, '---');
-        console.log('product_id:', item.product_id);
-        console.log('location_id:', item.location_id);
-        console.log('qty_divergence:', item.qty_divergence);
+      for (const item of itemsToAdjust) {
+        const divergence = (parseFloat(item.qty_final) || 0) - (parseFloat(item.qty_system) || 0);
+        
+        if (divergence === 0) {
+           await base44.entities.InventoryCountItem.update(item.id, { status: 'AJUSTADO' });
+           continue; 
+        }
 
         const balance = stockBalances.find(b => 
           b.product_id === item.product_id && 
           b.location_id === item.location_id
         );
 
-        console.log('Balance encontrado:', balance);
-
         if (!balance) {
-          throw new Error(`Saldo não encontrado para ${item.product_name} na localização ${item.location_id}`);
+          throw new Error(`Saldo não encontrado para ${item.product_name} em ${item.location_id}`);
         }
 
-        // 1. Criar movimento de inventário com warehouse e location corretos
+        // Criar movimento de inventário
         const moveData = {
           company_id: companyId,
-          type: 'AJUSTE',
+          type: divergence > 0 ? 'ENTRADA' : 'SAIDA',
           product_id: item.product_id,
-          qty: Math.abs(item.qty_divergence),
-          related_type: 'AJUSTE',
+          qty: Math.abs(divergence),
+          related_type: 'INVENTARIO',
           related_id: countId,
-          reason: `Ajuste de Inventário - Diferença: ${item.qty_divergence > 0 ? '+' : ''}${item.qty_divergence}`,
+          reason: `Ajuste de Inventário ${count.count_number}`,
           unit_cost: balance.avg_cost || 0,
           warehouse_id: balance.warehouse_id,
           location_id: balance.location_id
         };
 
-        // Se houver falta (saída), registrar origem da saída
-        if (item.qty_divergence < 0) {
+        if (divergence < 0) {
           moveData.from_warehouse_id = balance.warehouse_id;
           moveData.from_location_id = balance.location_id;
         } else {
-          // Se houver excesso (entrada), registrar destino da entrada
           moveData.to_warehouse_id = balance.warehouse_id;
           moveData.to_location_id = balance.location_id;
         }
 
-        console.log('Criando movimento:', moveData);
-        const createdMove = await base44.entities.InventoryMove.create(moveData);
-        console.log('Movimento criado:', createdMove);
+        await base44.entities.InventoryMove.create(moveData);
 
-        if (!createdMove || !createdMove.id) {
-          throw new Error(`Falha ao criar movimento para ${item.product_name}`);
-        }
-
-        // 2. Atualizar saldo de estoque com o novo volume
-        const newQty = Math.max(0, balance.qty_available + item.qty_divergence);
-        console.log('Atualizando saldo. Antigo:', balance.qty_available, 'Novo qty:', newQty);
+        // ATUALIZAR SALDO LOCALIZADO (Evita discrepância entre total e local)
+        const newQty = Math.max(0, balance.qty_available + divergence);
         await base44.entities.StockBalance.update(balance.id, {
-          qty_available: newQty
+          qty_available: newQty,
+          last_move_date: new Date().toISOString()
         });
 
-        // 3. Atualizar item de contagem com status ajustado
+        // Atualizar item da contagem
         await base44.entities.InventoryCountItem.update(item.id, {
           status: 'AJUSTADO'
         });
-
-        console.log('Item ajustado com sucesso');
       }
 
-      // 4. Atualizar status da contagem para concluído
-      console.log('Atualizando status da contagem para AJUSTADO');
       await base44.entities.InventoryCount.update(countId, {
         status: 'AJUSTADO'
       });
-
-      console.log('=== AJUSTES APLICADOS COM SUCESSO ===');
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['inventory-count', countId, companyId] });
-      queryClient.invalidateQueries({ queryKey: ['inventory-count-items', countId] });
-      queryClient.invalidateQueries({ queryKey: ['stock-balances', companyId] });
-      queryClient.invalidateQueries({ queryKey: ['inventory-moves'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory-count'] });
+      queryClient.invalidateQueries({ queryKey: ['stock-balances'] });
       setConfirmApplyOpen(false);
-      toast.success('Ajustes aplicados com sucesso!');
+      toast.success('Ajustes aplicados e saldos localizados atualizados!');
     },
     onError: (error) => {
       toast.error('Erro: ' + error.message);
@@ -349,7 +315,7 @@ export default function InventoryCountDetail() {
               {statusConfig.label}
             </Badge>
             <span className="text-sm text-slate-500">
-              {format(new Date(count.created_date), 'PPP', { locale: ptBR })}
+              {count.created_date ? format(new Date(count.created_date), 'PPP', { locale: ptBR }) : 'Data não disponível'}
             </span>
           </div>
         </div>
@@ -391,67 +357,42 @@ export default function InventoryCountDetail() {
         </Card>
       </div>
 
-      {/* Actions */}
-      {count.status === 'ABERTO' && (
-        <Button 
-          onClick={() => startCountingMutation.mutate()}
-          className="bg-blue-600 hover:bg-blue-700"
-          disabled={startCountingMutation.isPending}
-        >
-          {startCountingMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-          Iniciar Contagem
-        </Button>
-      )}
-
-      {count.status === 'EM_CONTAGEM' && (
-        <div className="flex gap-2">
-          <Button 
-            onClick={() => setAddItemOpen(true)}
-            className="bg-indigo-600 hover:bg-indigo-700"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Adicionar Item
+      {/* Workflow Actions */}
+      <div className="flex gap-2">
+        {count.status === 'ABERTO' && (
+          <Button onClick={() => changeStatusMutation.mutate('CONTAGEM_1')} className="bg-amber-600 hover:bg-amber-700">
+            Iniciar 1ª Contagem
           </Button>
-          <Button 
-            onClick={() => completeCountingMutation.mutate()}
-            className="bg-emerald-600 hover:bg-emerald-700"
-            disabled={completeCountingMutation.isPending}
-          >
-            {completeCountingMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-            Concluir Contagem
+        )}
+        
+        {count.status === 'CONTAGEM_1' && (
+          <Button onClick={() => changeStatusMutation.mutate('CONTAGEM_2')} className="bg-orange-600 hover:bg-orange-700">
+            Finalizar 1ª e Iniciar 2ª Contagem
           </Button>
-        </div>
-      )}
+        )}
 
-      {count.status === 'CONCLUIDO' && itemsWithDivergence === 0 && (
-        <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 flex items-center gap-3">
-          <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-          <div>
-            <p className="font-medium text-emerald-900">Contagem sem divergências</p>
-            <p className="text-sm text-emerald-700">Todos os itens conferem com o estoque</p>
-          </div>
-        </div>
-      )}
+        {count.status === 'CONTAGEM_2' && (
+          <Button onClick={() => changeStatusMutation.mutate('RECONCILIACAO')} className="bg-indigo-600 hover:bg-indigo-700">
+            Finalizar 2ª e Ir para Reconciliação
+          </Button>
+        )}
 
-      {count.status === 'CONCLUIDO' && itemsWithDivergence > 0 && (
-        <div className="space-y-4">
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-start gap-3">
-            <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
-            <div>
-              <p className="font-medium text-amber-900">Divergências encontradas</p>
-              <p className="text-sm text-amber-700 mt-1">
-                {itemsWithDivergence} item{itemsWithDivergence !== 1 ? 'ns' : ''} com diferença entre o esperado e o contado. Revise os itens abaixo e clique em "Aplicar Ajustes" para registrar as diferenças no sistema.
-              </p>
-            </div>
-          </div>
+        {count.status === 'RECONCILIACAO' && (
           <Button 
             onClick={() => setConfirmApplyOpen(true)}
             className="bg-purple-600 hover:bg-purple-700"
           >
             <CheckCircle2 className="h-4 w-4 mr-2" />
-            Aplicar Ajustes
+            Aplicar Ajustes Finais
           </Button>
-        </div>
+        )}
+      </div>
+
+      {count.status === 'ABERTO' && (
+        <Button onClick={() => setAddItemOpen(true)} variant="outline">
+          <Plus className="h-4 w-4 mr-2" />
+          Adicionar Item Manualmente
+        </Button>
       )}
 
       {/* Items Table */}
@@ -469,116 +410,128 @@ export default function InventoryCountDetail() {
                   <TableRow>
                     <TableHead>Produto</TableHead>
                     <TableHead>Localização</TableHead>
-                    <TableHead>Esperado</TableHead>
-                    <TableHead>Contado</TableHead>
-                    <TableHead>Divergência</TableHead>
-                    <TableHead>Status</TableHead>
+                    {count.status !== 'CONTAGEM_2' && <TableHead>Sistema</TableHead>}
+                    {count.status !== 'CONTAGEM_2' && <TableHead>1ª Cont.</TableHead>}
+                    {count.status !== 'CONTAGEM_1' && <TableHead>2ª Cont.</TableHead>}
+                    {count.status === 'RECONCILIACAO' && <TableHead>Diverg. C1/C2</TableHead>}
+                    {count.status === 'RECONCILIACAO' && <TableHead>Quantidade Final</TableHead>}
+                    {count.status === 'AJUSTADO' && <TableHead>Final</TableHead>}
                     <TableHead>Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                   {countItems.length > 0 && countItems
-                     .sort((a, b) => {
-                       // Mostrar itens com divergência primeiro
-                       const aDivergence = a.qty_divergence && a.qty_divergence !== 0;
-                       const bDivergence = b.qty_divergence && b.qty_divergence !== 0;
-                       if (aDivergence && !bDivergence) return -1;
-                       if (!aDivergence && bDivergence) return 1;
-                       return 0;
-                     })
-                     .map((item) => (
-                     <TableRow key={item.id} className={item.qty_divergence && item.qty_divergence !== 0 ? 'bg-amber-50' : ''}>
+                  {countItems.map((item) => (
+                    <TableRow key={item.id} className={(count.status === 'RECONCILIACAO' && item.qty_1 !== item.qty_2) ? 'bg-red-50' : ''}>
                       <TableCell>
                         <div>
-                          <p className="font-medium text-slate-900">{item.product_name}</p>
+                          <p className="font-medium">{item.product_name}</p>
                           <p className="text-xs text-slate-500">{item.product_sku}</p>
                         </div>
                       </TableCell>
-                      <TableCell>
-                        {locations.find(l => l.id === item.location_id)?.barcode || '-'}
-                      </TableCell>
-                      <TableCell>{item.qty_expected || 0}</TableCell>
-                      <TableCell>
-                        {editingItem?.id === item.id ? (
-                          <Input
-                            type="number"
-                            step="0.01"
-                            value={editQty}
-                            onChange={(e) => setEditQty(e.target.value)}
-                            className="w-20"
-                            autoFocus
-                          />
-                        ) : (
-                          item.qty_counted || 0
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {item.qty_divergence ? (
-                          <Badge className={item.qty_divergence > 0 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}>
-                            {item.qty_divergence > 0 ? '+' : ''}{item.qty_divergence}
-                          </Badge>
-                        ) : (
-                          '-'
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Badge className={
-                          item.status === 'OK' ? 'bg-emerald-100 text-emerald-700' :
-                          item.status === 'DIVERGENCIA' ? 'bg-amber-100 text-amber-700' :
-                          'bg-purple-100 text-purple-700'
-                        }>
-                          {item.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="flex gap-2">
-                        {editingItem?.id === item.id ? (
-                          <>
-                            <Button
-                              size="sm"
-                              onClick={() => updateItemQtyMutation.mutate()}
-                              disabled={updateItemQtyMutation.isPending}
-                              className="bg-emerald-600 hover:bg-emerald-700"
+                      <TableCell>{locations.find(l => l.id === item.location_id)?.barcode}</TableCell>
+                      
+                      {/* Sistema */}
+                      {count.status !== 'CONTAGEM_2' && (
+                        <TableCell className="font-mono">{item.qty_system || 0}</TableCell>
+                      )}
+                      
+                      {/* 1ª Contagem */}
+                      {count.status !== 'CONTAGEM_2' && (
+                        <TableCell>
+                          {editingItem?.id === item.id && editingItem?.field === 'qty_1' ? (
+                            <Input
+                              type="number"
+                              value={editQty}
+                              onChange={(e) => setEditQty(e.target.value)}
+                              className="w-20"
+                              onBlur={() => handleUpdateQty(item, 'qty_1')}
+                              autoFocus
+                            />
+                          ) : (
+                            <span 
+                              className="cursor-pointer hover:underline text-indigo-600"
+                              onClick={() => count.status === 'CONTAGEM_1' && (setEditingItem({ id: item.id, field: 'qty_1' }), setEditQty(item.qty_1 || ''))}
                             >
-                              <Save className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                setEditingItem(null);
-                                setEditQty('');
-                              }}
+                              {item.qty_1 ?? '-'}
+                            </span>
+                          )}
+                        </TableCell>
+                      )}
+
+                      {/* 2ª Contagem */}
+                      {count.status !== 'CONTAGEM_1' && (
+                        <TableCell>
+                          {editingItem?.id === item.id && editingItem?.field === 'qty_2' ? (
+                            <Input
+                              type="number"
+                              value={editQty}
+                              onChange={(e) => setEditQty(e.target.value)}
+                              className="w-20"
+                              onBlur={() => handleUpdateQty(item, 'qty_2')}
+                              autoFocus
+                            />
+                          ) : (
+                            <span 
+                              className="cursor-pointer hover:underline text-orange-600"
+                              onClick={() => count.status === 'CONTAGEM_2' && (setEditingItem({ id: item.id, field: 'qty_2' }), setEditQty(item.qty_2 || ''))}
                             >
-                              <X className="h-4 w-4" />
-                            </Button>
-                          </>
-                        ) : (
-                          <>
-                            {count.status === 'EM_CONTAGEM' && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => {
-                                  setEditingItem(item);
-                                  setEditQty(String(item.qty_counted || 0));
-                                }}
-                              >
-                                <Edit2 className="h-4 w-4" />
-                              </Button>
-                            )}
-                            {(count.status === 'ABERTO' || count.status === 'EM_CONTAGEM') && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => deleteItemMutation.mutate(item.id)}
-                                disabled={deleteItemMutation.isPending}
-                                className="text-red-600 hover:text-red-700"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            )}
-                          </>
-                        )}
+                              {item.qty_2 ?? '-'}
+                            </span>
+                          )}
+                        </TableCell>
+                      )}
+
+                      {/* Diferença C1 vs C2 */}
+                      {count.status === 'RECONCILIACAO' && (
+                        <TableCell>
+                          {item.qty_1 === item.qty_2 ? (
+                            <Badge className="bg-emerald-100 text-emerald-700">Ok</Badge>
+                          ) : (
+                            <Badge className="bg-red-100 text-red-700">Divergente ({Math.abs((item.qty_1 || 0) - (item.qty_2 || 0))})</Badge>
+                          )}
+                        </TableCell>
+                      )}
+
+                      {/* Quantidade Final */}
+                      {count.status === 'RECONCILIACAO' && (
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                             {editingItem?.id === item.id && editingItem?.field === 'qty_final' ? (
+                               <Input
+                                 type="number"
+                                 value={editQty}
+                                 onChange={(e) => setEditQty(e.target.value)}
+                                 className="w-20"
+                                 onBlur={() => handleUpdateQty(item, 'qty_final')}
+                                 autoFocus
+                               />
+                             ) : (
+                               <span 
+                                 className="font-bold text-lg cursor-pointer hover:underline"
+                                 onClick={() => setEditingItem({ id: item.id, field: 'qty_final' })}
+                               >
+                                 {item.qty_final ?? '?'}
+                               </span>
+                             )}
+                             <Button size="sm" variant="outline" onClick={() => (setEditQty(item.qty_1), handleUpdateQty(item, 'qty_final'))} title="Usar 1ª">C1</Button>
+                             <Button size="sm" variant="outline" onClick={() => (setEditQty(item.qty_2), handleUpdateQty(item, 'qty_final'))} title="Usar 2ª">C2</Button>
+                          </div>
+                        </TableCell>
+                      )}
+
+                      {count.status === 'AJUSTADO' && (
+                        <TableCell className="font-bold">{item.qty_final}</TableCell>
+                      )}
+
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => deleteItemMutation.mutate(item.id)}
+                          className="text-red-500"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -655,12 +608,15 @@ export default function InventoryCountDetail() {
               Serão criados {itemsWithDivergence} movimentos de ajuste:
             </p>
             <ul className="space-y-1 text-sm text-slate-600">
-              {countItems.filter(i => i.status === 'DIVERGENCIA').map((item) => (
-                <li key={item.id} className="flex justify-between">
+              {countItems.filter(i => i.qty_divergence && i.qty_divergence !== 0).map((item) => (
+                <li key={item.id} className="flex justify-between border-b py-1 last:border-0">
                   <span>{item.product_name}</span>
-                  <Badge className={item.qty_divergence > 0 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}>
-                    {item.qty_divergence > 0 ? '+' : ''}{item.qty_divergence}
-                  </Badge>
+                  <div className="flex gap-2">
+                    <span className="text-xs text-slate-400">Sis: {item.qty_system} / Fin: {item.qty_final}</span>
+                    <Badge className={item.qty_divergence > 0 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}>
+                      {item.qty_divergence > 0 ? '+' : ''}{item.qty_divergence}
+                    </Badge>
+                  </div>
                 </li>
               ))}
             </ul>

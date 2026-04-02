@@ -27,8 +27,9 @@ import { ptBR } from 'date-fns/locale';
 
 const STATUS_CONFIG = {
   ABERTO: { color: 'bg-blue-100 text-blue-700', label: 'Aberto' },
-  EM_CONTAGEM: { color: 'bg-amber-100 text-amber-700', label: 'Em Contagem' },
-  CONCLUIDO: { color: 'bg-emerald-100 text-emerald-700', label: 'Concluído' },
+  CONTAGEM_1: { color: 'bg-amber-100 text-amber-700', label: '1ª Contagem' },
+  CONTAGEM_2: { color: 'bg-orange-100 text-orange-700', label: '2ª Contagem' },
+  RECONCILIACAO: { color: 'bg-indigo-100 text-indigo-700', label: 'Reconciliação' },
   AJUSTADO: { color: 'bg-purple-100 text-purple-700', label: 'Ajustado' },
   CANCELADO: { color: 'bg-slate-100 text-slate-700', label: 'Cancelado' },
 };
@@ -143,7 +144,9 @@ function CreateCountDialog({ open, onClose, companyId }) {
           location_id: balance.location_id,
           location_barcode: location[0]?.barcode,
           qty_system: balance.qty_available || 0,
-          qty_counted: 0,
+          qty_1: 0,
+          qty_2: 0,
+          qty_final: 0,
           qty_divergence: 0,
           status: 'PENDENTE'
         });
@@ -383,8 +386,8 @@ export default function InventoryCount() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        {['ABERTO', 'EM_CONTAGEM', 'CONCLUIDO', 'AJUSTADO'].map(status => {
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        {['ABERTO', 'CONTAGEM_1', 'CONTAGEM_2', 'RECONCILIACAO', 'AJUSTADO'].map(status => {
           const count = counts?.filter(c => c.status === status).length || 0;
           const config = STATUS_CONFIG[status];
           return (

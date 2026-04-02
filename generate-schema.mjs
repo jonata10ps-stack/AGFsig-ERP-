@@ -13,6 +13,7 @@ const entityRegex = /base44\.entities\.([a-zA-Z0-9_]+)\./g;
 const formFieldRegex = /(?:form|formData|newItem|editForm)\s*[.?\[]+['"]?([a-zA-Z][a-zA-Z0-9_]*)/g;
 const setFormRegex = /[Ss]et[Ff]orm\s*\(\s*\{([^}]{0,2000})\}/gms;
 const fieldInObjectRegex = /^\s{2,}([a-zA-Z][a-zA-Z0-9_]*):/gm;
+const methodCreateUpdateRegex = /\.(?:create|update|batchCreate)\s*\(\s*(?:[^,]*,\s*)?\{([^}]{0,3000})\}/gs;
 
 const SKIP_FIELDS = new Set([
   // Métodos JS — não são campos de banco
@@ -48,10 +49,30 @@ files.forEach(file => {
   }
 
   // Extract initial form state objects: { field: value, ... }
-  const initStateRe = /(?:useState|initialForm|defaultForm|emptyForm)\s*\(\s*\{([^}]{0,3000})\}/gs;
+  const initStateRe = /(?:useState|initialForm|defaultForm|emptyForm)\s*\(\s*\{([^}]{0,4000})\}/gs;
   while ((m = initStateRe.exec(content)) !== null) {
     const obj = m[1];
-    const keyRe = /^\s{2,}([a-zA-Z][a-zA-Z0-9_]*):/gm;
+    const keyRe = /^\s+([a-zA-Z][a-zA-Z0-9_]*):/gm;
+    let km;
+    while ((km = keyRe.exec(obj)) !== null) {
+      const f = km[1];
+      if (!SKIP_FIELDS.has(f) && f.length > 1) fields.add(f);
+    }
+  }
+
+  // Detect specifically 'created_date' or other manual assignments
+  if (content.includes('created_date:')) {
+    fields.add('created_date');
+  }
+  if (content.includes('updated_date:')) {
+    fields.add('updated_date');
+  }
+
+  // Extract from .create({ field: value }) or .update(id, { field: value })
+  const methodRe = /\.(?:create|update|batchCreate)\s*\(\s*(?:[^,]*,\s*)?\{([^}]{0,4000})\}/gs;
+  while ((m = methodRe.exec(content)) !== null) {
+    const obj = m[1];
+    const keyRe = /^\s+([a-zA-Z][a-zA-Z0-9_]*):/gm;
     let km;
     while ((km = keyRe.exec(obj)) !== null) {
       const f = km[1];

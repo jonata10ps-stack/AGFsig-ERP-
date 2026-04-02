@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { AlertCircle, CheckCircle, ChevronLeft, ChevronRight, Package } from 'lucide-react';
 import { toast } from 'sonner';
 
-export default function ConferenceWorkflow({ items, batchId, onComplete }) {
+export default function ConferenceWorkflow({ items, batchId, materialRequestItems, onComplete }) {
   const queryClient = useQueryClient();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [conferredQty, setConferredQty] = useState('');
@@ -27,9 +27,22 @@ export default function ConferenceWorkflow({ items, batchId, onComplete }) {
       const item = validItems.find(i => i.id === itemId);
       const user = await base44.auth.me();
       
-      if (receivedQty === 0) {
-        // Item totalmente rejeitado - criar não-conformidade (sem ação automática, usuário decide depois)
+      // Buscar quantidade esperada da solicitação original, se houver
+      let expectedQty = item.qty; // Padrão: o que veio no recebimento
+      if (materialRequestItems) {
+        const requestItem = materialRequestItems.find(ri => ri.product_id === item.product_id);
+        if (requestItem) {
+          expectedQty = requestItem.qty_requested;
+        }
+      }
+
+      const variance = receivedQty - expectedQty;
+
+      // Se houver diferença, criar não-conformidade
+      if (variance !== 0) {
         const reportNumber = `NCR-${Date.now()}-${itemId.substring(0, 4)}`;
+        const varianceType = variance > 0 ? 'EXCESSO' : 'FALTANTE';
+
         await base44.entities.NonConformityReport.create({
           company_id: user.company_id,
           report_number: reportNumber,
@@ -38,46 +51,20 @@ export default function ConferenceWorkflow({ items, batchId, onComplete }) {
           product_id: item.product_id,
           product_sku: item.product_sku,
           product_name: item.product_name,
-          quantity_expected: item.qty,
-          quantity_received: 0,
-          variance: -item.qty,
-          variance_type: 'FALTANTE',
-          status: 'ABERTO',
-          action_type: 'NENHUMA'
-        });
-        
-        // Deletar o item do recebimento
-        await base44.entities.ReceivingItem.delete(itemId);
-      } else if (receivedQty < item.qty) {
-        // Partial receive - criar não-conformidade para diferença
-        const variance = receivedQty - item.qty;
-        const reportNumber = `NCR-${Date.now()}-${itemId.substring(0, 4)}`;
-        await base44.entities.NonConformityReport.create({
-          company_id: user.company_id,
-          report_number: reportNumber,
-          receiving_batch_id: batchId,
-          receiving_item_id: itemId,
-          product_id: item.product_id,
-          product_sku: item.product_sku,
-          product_name: item.product_name,
-          quantity_expected: item.qty,
+          quantity_expected: expectedQty,
           quantity_received: receivedQty,
           variance: variance,
-          variance_type: 'FALTANTE',
+          variance_type: varianceType,
           status: 'ABERTO',
           action_type: 'NENHUMA'
         });
-        
-        await base44.entities.ReceivingItem.update(itemId, {
-          qty: receivedQty,
-          status: 'CONFERIDO'
-        });
-      } else {
-        // Full receive
-        await base44.entities.ReceivingItem.update(itemId, {
-          status: 'CONFERIDO'
-        });
       }
+
+      // Atualizar item com quantidade confirmada e status
+      await base44.entities.ReceivingItem.update(itemId, { 
+        status: 'CONFERIDO',
+        qty: receivedQty
+      });
     },
     onSuccess: (_, { itemId, receivedQty }) => {
       setConferenceData(prev => ({

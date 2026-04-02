@@ -383,6 +383,7 @@ export default function ReceivingConference() {
         <ConferenceWorkflow 
           items={items} 
           batchId={batchId}
+          materialRequestItems={materialRequestItems}
           onComplete={() => {
             setWorkflowMode(false);
             confirmBatchMutation.mutate();
