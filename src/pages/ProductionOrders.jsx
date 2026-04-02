@@ -325,7 +325,7 @@ export default function ProductionOrders() {
       // Buscar BOM do produto
       const boms = await base44.entities.BOM.filter({ 
         product_id: data.product_id,
-        active: true
+        is_active: true
       });
       
       if (boms.length > 0) {
@@ -396,6 +396,27 @@ export default function ProductionOrders() {
             stepsToCreate.map(step => base44.entities.ProductionStep.create(step))
           );
         }
+
+        // --- NOVO: Criar controles de entrega de material (BOMDeliveryControl) ---
+        // Isso permite que o estoque veja o que precisa separar para esta OP
+        for (const bomItem of bomItems) {
+          const qtyPlannedNum = Number(bomItem.quantity || 0) * Number(data.qty_planned || 0);
+          
+          await base44.entities.BOMDeliveryControl.create({
+            op_id: op.id,
+            op_number: String(op.numero_op_externo || op.op_number || ''),
+            numero_op_externo: String(op.numero_op_externo || ''),
+            product_id: op.product_id,
+            product_name: String(op.product_name || ''),
+            product_sku: String(op.product_sku || ''),
+            consumed_product_id: bomItem.component_id,
+            consumed_product_sku: String(bomItem.component_sku || ''),
+            consumed_product_name: String(bomItem.component_name || ''),
+            qty_planned: isNaN(qtyPlannedNum) ? "0" : String(qtyPlannedNum),
+            qty_delivered: "0",
+            status: 'ABERTO'
+          });
+        }
       }
       
       return op;
@@ -446,7 +467,7 @@ export default function ProductionOrders() {
           const boms = await base44.entities.BOM.filter({
             company_id: companyId,
             product_id: op.product_id,
-            active: true
+            is_active: true
           });
           
           if (boms?.[0]) {
@@ -457,7 +478,6 @@ export default function ProductionOrders() {
             
             if (bomItems.length > 0) {
               const deliveryControls = await base44.entities.BOMDeliveryControl.filter({
-                company_id: companyId,
                 op_id: id
               });
               

@@ -152,7 +152,7 @@ export default function StockPledgeQuery() {
     queryKey: ['delivery-controls', companyId],
     queryFn: async () => {
       if (!companyId) return [];
-      return base44.entities.BOMDeliveryControl.filter({ company_id: companyId }, '-created_date', 5000);
+      return base44.entities.BOMDeliveryControl.filter({ }, '-created_date', 5000);
     },
     enabled: !!companyId,
   });

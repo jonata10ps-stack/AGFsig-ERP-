@@ -33,7 +33,12 @@ export default function BOMDetail() {
 
   const { data: bom } = useQuery({
     queryKey: ['bom', bomId],
-    queryFn: () => base44.entities.BOM.list().then(boms => boms.find(b => b.id === bomId)),
+    queryFn: async () => {
+      if (!bomId) return null;
+      // Tentar buscar direto pelo ID para ser mais eficiente
+      const result = await base44.entities.BOM.list();
+      return result.find(b => b.id === bomId);
+    },
     enabled: !!bomId
   });
 
@@ -47,7 +52,7 @@ export default function BOMDetail() {
 
   const { data: items = [] } = useQuery({
     queryKey: ['bom-items', activeVersion?.id],
-    queryFn: () => base44.entities.BOMItem.filter({ bom_version_id: activeVersion.id }, 'sequence'),
+    queryFn: () => activeVersion?.id ? base44.entities.BOMItem.filter({ bom_version_id: activeVersion.id }, 'sequence') : Promise.resolve([]),
     enabled: !!activeVersion?.id
   });
 
@@ -85,9 +90,9 @@ export default function BOMDetail() {
     mutationFn: async (data) => {
       const component = data.selectedComponent;
       const itemData = {
-        company_id: bom.company_id,
+        company_id: bom?.company_id,
         bom_id: bomId,
-        bom_version_id: activeVersion.id,
+        bom_version_id: activeVersion?.id,
         component_id: component.id,
         component_sku: component.sku,
         component_name: component.name,
@@ -146,7 +151,7 @@ export default function BOMDetail() {
   });
 
   const toggleActiveMutation = useMutation({
-    mutationFn: () => base44.entities.BOM.update(bomId, { active: !bom.active }),
+    mutationFn: () => base44.entities.BOM.update(bomId, { is_active: !bom.is_active }),
     onSuccess: () => {
       queryClient.invalidateQueries(['bom', bomId]);
     }
@@ -167,11 +172,11 @@ export default function BOMDetail() {
           <p className="text-slate-500">SKU: {bom.product_sku}</p>
         </div>
         <Button 
-          variant={bom.active ? "outline" : "default"}
+          variant={bom.is_active ? "outline" : "default"}
           onClick={() => toggleActiveMutation.mutate()}
           disabled={toggleActiveMutation.isPending}
         >
-          {bom.active ? 'Inativar' : 'Ativar'}
+          {bom.is_active ? 'Inativar' : 'Ativar'}
         </Button>
         <Button onClick={() => createVersionMutation.mutate()}>
           Nova Versão
@@ -202,7 +207,7 @@ export default function BOMDetail() {
             <CardTitle className="text-sm">Status</CardTitle>
           </CardHeader>
           <CardContent>
-            {bom.active ? (
+            {bom.is_active ? (
               <Badge className="bg-green-100 text-green-800">Ativo</Badge>
             ) : (
               <Badge variant="outline">Inativo</Badge>
@@ -240,10 +245,10 @@ export default function BOMDetail() {
                       <div className="font-medium">{item.component_name}</div>
                       <div className="text-sm text-slate-500">
                         SKU: {item.component_sku} • Qtd: {item.quantity} {item.unit}
-                        {item.routes && item.routes.length > 0 && (
+                        {Array.isArray(item.routes) && item.routes.length > 0 && (
                           <> • Roteiros: {item.routes.map((r, i) => `${i + 1}. ${r.route_name}`).join(', ')}</>
                         )}
-                        {!item.routes?.length && item.route_name && <> • Roteiro: {item.route_name}</>}
+                        {(!Array.isArray(item.routes) || item.routes.length === 0) && item.route_name && <> • Roteiro: {item.route_name}</>}
                       </div>
                     </div>
                   </div>
@@ -256,7 +261,7 @@ export default function BOMDetail() {
                           id: item.id,
                           quantity: item.quantity,
                           sequence: item.sequence,
-                          routes: item.routes || []
+                          routes: Array.isArray(item.routes) ? item.routes : []
                         });
                         setShowEditItemDialog(true);
                       }}

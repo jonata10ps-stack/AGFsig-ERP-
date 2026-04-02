@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Plus, Search, FileText, Package, Upload } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import ProductSearchSelect from '@/components/products/ProductSearchSelect';
+import { toast } from 'sonner';
 
 export default function BOMs() {
   const { companyId } = useCompanyId();
@@ -21,7 +22,7 @@ export default function BOMs() {
 
   const { data: boms = [], isLoading } = useQuery({
     queryKey: ['boms', companyId],
-    queryFn: () => companyId ? base44.entities.BOM.filter({ company_id: companyId }, '-updated_date') : Promise.resolve([]),
+    queryFn: () => companyId ? base44.entities.BOM.filter({ company_id: companyId, is_active: true }, '-created_date') : Promise.resolve([]),
     enabled: !!companyId,
   });
 
@@ -34,37 +35,83 @@ export default function BOMs() {
   const createBOMMutation = useMutation({
     mutationFn: async (data) => {
       const product = data.selectedProduct;
+      if (!product) throw new Error('Produto não selecionado');
       
-      // Criar BOM
-       const bom = await base44.entities.BOM.create({
-         company_id: companyId,
-         product_id: product.id,
-         product_sku: product.sku,
-         product_name: product.name,
-         active: true
-       });
+      try {
+        // 1. Buscar todas as BOMs existentes para este SKU (de forma ampla)
+        const allBoms = await base44.entities.BOM.filter({
+          product_sku: product.sku
+        });
 
-       // Criar primeira versão
-       const version = await base44.entities.BOMVersion.create({
-         company_id: companyId,
-         bom_id: bom.id,
-         version_number: 1,
-         is_active: true,
-         effective_date: new Date().toISOString().split('T')[0]
-       });
+        let mainBom = null;
+        let maxVersion = 0;
 
-      // Atualizar BOM com versão inicial
-      await base44.entities.BOM.update(bom.id, {
-        current_version_id: version.id,
-        current_version_number: 1
-      });
+        if (allBoms && allBoms.length > 0) {
+          // Encontramos registros. Vamos identificar a versão mais alta e consolidar.
+          const versions = allBoms.map(b => parseInt(b.current_version_number) || 0);
+          maxVersion = Math.max(0, ...versions);
+          mainBom = allBoms.sort((a, b) => (parseInt(b.current_version_number) || 0) - (parseInt(a.current_version_number) || 0))[0];
 
-      return bom;
+          // Inativar TODAS as outras BOMs para este produto, exceto a que vamos usar
+          for (const b of allBoms) {
+            if (b.id !== mainBom.id) {
+              await base44.entities.BOM.update(b.id, { is_active: false });
+            }
+          }
+        }
+
+        const nextVersionNumber = maxVersion + 1;
+        
+        if (!mainBom) {
+          // Criar BOM nova se não existir absolutamente nada
+          mainBom = await base44.entities.BOM.create({
+            company_id: companyId || '00000000-0000-0000-0000-000000000000',
+            product_id: product.id,
+            product_sku: product.sku,
+            product_name: product.name,
+            is_active: true,
+            current_version_number: 1
+          });
+        }
+
+        // 2. Inativar a versão anterior da BOM principal
+        if (mainBom.current_version_id) {
+          await base44.entities.BOMVersion.update(mainBom.current_version_id, {
+            is_active: false
+          });
+        }
+
+        // 3. Criar a nova versão
+        const version = await base44.entities.BOMVersion.create({
+          company_id: companyId || '00000000-0000-0000-0000-000000000000',
+          bom_id: mainBom.id,
+          version_number: nextVersionNumber,
+          is_active: true,
+          effective_date: new Date().toISOString().split('T')[0]
+        });
+
+        // 4. Atualizar a BOM principal
+        await base44.entities.BOM.update(mainBom.id, {
+          current_version_id: version.id,
+          current_version_number: nextVersionNumber,
+          is_active: true
+        });
+
+        return mainBom;
+      } catch (err) {
+        console.error('Falha crítica na mutação de BOM:', err);
+        throw err;
+      }
     },
     onSuccess: () => {
        queryClient.invalidateQueries({ queryKey: ['boms', companyId] });
        setShowNewDialog(false);
        setNewBOM({ selectedProduct: null });
+       toast.success('BOM criado com sucesso');
+     },
+     onError: (error) => {
+       console.error('Erro ao criar BOM:', error);
+       toast.error('Erro ao salvar BOM: ' + (error.message || 'Verifique se as colunas existem no banco'));
      }
   });
 
@@ -138,7 +185,7 @@ export default function BOMs() {
                           Versão {bom.current_version_number}
                         </Badge>
                       )}
-                      {bom.active ? (
+                      {bom.is_active ? (
                         <Badge className="bg-green-100 text-green-800">Ativo</Badge>
                       ) : (
                         <Badge variant="outline">Inativo</Badge>

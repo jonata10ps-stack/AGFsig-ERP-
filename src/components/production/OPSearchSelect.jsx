@@ -33,8 +33,8 @@ export default function OPSearchSelect({
     queryKey: ['production-orders-select', companyId],
     queryFn: () => base44.entities.ProductionOrder.filter({ 
       ...(companyId ? { company_id: companyId } : {}),
-      status: { $in: ['ABERTA', 'EM_ANDAMENTO', 'PAUSADA'] }
-    }),
+      status: ['ABERTA', 'EM_ANDAMENTO', 'PAUSADA']
+    }, '-created_date'), // Ordenar pelas mais recentes
   });
 
   const selectedOP = ops?.find(op => op.id === value);
@@ -52,7 +52,7 @@ export default function OPSearchSelect({
           >
             {selectedOP ? (
               <span className="truncate">
-                {selectedOP.numero_op_externo} - {selectedOP.product_name}
+                {selectedOP.numero_op_externo || selectedOP.op_number} - {selectedOP.product_name || 'Sem Produto'}
               </span>
             ) : (
               <span className="text-slate-500">{placeholder}</span>
@@ -60,16 +60,16 @@ export default function OPSearchSelect({
             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-[400px] p-0">
+        <PopoverContent className="w-[450px] p-0" align="start">
           <Command>
             <CommandInput placeholder="Buscar por número ou produto..." />
-            <CommandList>
-              <CommandEmpty>Nenhuma OP encontrada.</CommandEmpty>
+            <CommandList className="max-h-[300px]">
+              <CommandEmpty>Nenhuma OP ativa encontrada.</CommandEmpty>
               <CommandGroup>
                 {ops?.map((op) => (
                   <CommandItem
                     key={op.id}
-                    value={`${op.numero_op_externo} ${op.product_name} ${op.op_number}`}
+                    value={`${op.numero_op_externo || ''} ${op.product_name || ''} ${op.op_number || ''}`.trim()}
                     onSelect={() => {
                       onSelect(op.id);
                       setOpen(false);
@@ -82,8 +82,12 @@ export default function OPSearchSelect({
                       )}
                     />
                     <div className="flex flex-col">
-                      <span className="font-medium">{op.numero_op_externo}</span>
-                      <span className="text-sm text-slate-500">{op.product_name}</span>
+                      <span className="font-medium">{op.numero_op_externo || op.op_number}</span>
+                      <span className="text-xs text-slate-500">{op.product_name || 'Produto não identificado'}</span>
+                      <div className="flex gap-2 mt-1">
+                         <span className="text-[10px] bg-slate-100 px-1 rounded">{op.status}</span>
+                         <span className="text-[10px] text-slate-400">{op.op_number}</span>
+                      </div>
                     </div>
                   </CommandItem>
                 ))}

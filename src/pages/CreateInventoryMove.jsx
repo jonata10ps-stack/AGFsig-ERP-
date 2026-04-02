@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -91,6 +92,15 @@ export default function CreateInventoryMove() {
     enabled: !!companyId,
   });
 
+  const { data: opComponents, isLoading: loadingComponents } = useQuery({
+    queryKey: ['op-components', companyId, form.related_id],
+    queryFn: () => (companyId && form.related_id) ? base44.entities.BOMDeliveryControl.filter({ 
+      op_id: form.related_id,
+      status: 'ABERTO' 
+    }) : Promise.resolve([]),
+    enabled: !!companyId && !!form.related_id && form.related_type === 'OP',
+  });
+
   // Validar saldo disponível em tempo real
   useEffect(() => {
     const validateStock = async () => {
@@ -159,25 +169,23 @@ export default function CreateInventoryMove() {
 
       // Se for SAIDA relacionada a OP, atualizar BOMDeliveryControl e OPConsumptionControl
       if (data.type === 'SAIDA' && data.related_type === 'OP' && data.related_id) {
-        // Buscar BOM delivery controls pendentes para essa OP e componente
         const deliveryControls = await base44.entities.BOMDeliveryControl.filter({
-          company_id: companyId,
           op_id: data.related_id,
-          component_id: data.product_id,
+          consumed_product_id: data.product_id,
           status: 'ABERTO'
         });
 
         // Atualizar cada delivery control pendente
         for (const dc of deliveryControls) {
-          const newDelivered = Math.min((dc.qty_delivered || 0) + data.qty, dc.qty_required);
-          const newStatus = newDelivered >= dc.qty_required ? 'ENTREGUE' : 'ABERTO';
+          const newDelivered = Math.min((dc.qty_delivered || 0) + data.qty, dc.qty_planned || 0);
+          const newStatus = (dc.qty_planned && newDelivered >= dc.qty_planned) ? 'ENTREGUE' : 'ABERTO';
 
           await base44.entities.BOMDeliveryControl.update(dc.id, {
             qty_delivered: newDelivered,
             status: newStatus
           });
 
-          if (newDelivered < dc.qty_required) break;
+          if (dc.qty_planned && newDelivered < dc.qty_planned) break;
         }
 
       }
@@ -836,6 +844,62 @@ export default function CreateInventoryMove() {
                 </div>
               )}
             </div>
+
+            {/* Lista de Componentes da OP (Se houver) */}
+            {form.related_type === 'OP' && form.related_id && (
+              <div className="mt-4 p-4 bg-slate-50 border border-slate-200 rounded-lg space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                    <Package className="h-4 w-4 text-indigo-600" />
+                    Componentes Pendentes para esta OP
+                  </h3>
+                  <Badge variant="outline" className="bg-white">
+                    {opComponents?.length || 0} pendentes
+                  </Badge>
+                </div>
+                
+                {loadingComponents ? (
+                  <div className="flex items-center gap-2 text-sm text-slate-500">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    Carregando componentes...
+                  </div>
+                ) : opComponents?.length === 0 ? (
+                  <p className="text-xs text-slate-500 italic">Nenhum componente pendente encontrado para esta OP.</p>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {opComponents.map((comp) => (
+                      <button
+                        key={comp.id}
+                        type="button"
+                        onClick={() => {
+                          const remaining = (comp.qty_planned || 0) - (comp.qty_delivered || 0);
+                          setForm({
+                            ...form,
+                            product_id: comp.consumed_product_id,
+                            qty: remaining,
+                            type: 'SAIDA', // Geralmente é saída/baixa para a produção
+                            reason: `Baixa OP ${opComponents[0]?.op_number || ''}`
+                          });
+                          toast.info(`Selecionado: ${comp.consumed_product_name}`);
+                        }}
+                        className={`text-left p-3 rounded border transition-all text-xs bg-white hover:border-indigo-300 hover:shadow-sm group ${
+                          form.product_id === comp.consumed_product_id ? 'border-indigo-500 ring-1 ring-indigo-500' : 'border-slate-200'
+                        }`}
+                      >
+                        <div className="flex justify-between items-start mb-1">
+                          <span className="font-mono font-bold text-indigo-600">{comp.consumed_product_sku}</span>
+                          <span className="text-[10px] bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded font-medium">
+                            Faltam: {(comp.qty_planned || 0) - (comp.qty_delivered || 0)} {comp.unit || 'UN'}
+                          </span>
+                        </div>
+                        <p className="text-slate-700 line-clamp-1 group-hover:text-indigo-900">{comp.consumed_product_name}</p>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <p className="text-[10px] text-slate-400">Clique em um componente para preencher o formulário automaticamente.</p>
+              </div>
+            )}
 
             {/* Motivo */}
             <div className="space-y-2">

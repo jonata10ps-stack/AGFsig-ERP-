@@ -464,7 +464,7 @@ export default function ProductionOrderDetail() {
       // Check consumptions directly
       const [consumptions, bomDeliveries, materialConsumptions, allMoves] = await Promise.all([
         base44.entities.OPConsumptionControl.filter({ company_id: companyId, op_id: opId }),
-        base44.entities.BOMDeliveryControl.filter({ company_id: companyId, op_id: opId }),
+        base44.entities.BOMDeliveryControl.filter({ op_id: opId }),
         base44.entities.MaterialConsumption.filter({ company_id: companyId, op_id: opId }),
         base44.entities.InventoryMove.filter({ company_id: companyId, related_type: 'OP', related_id: opId }),
       ]);

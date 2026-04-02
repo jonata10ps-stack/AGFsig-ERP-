@@ -100,7 +100,7 @@ export default function OPConsumptionControl() {
     queryFn: async () => {
       if (!companyId) return [];
       try {
-        const result = await base44.entities.BOMDeliveryControl.filter({ company_id: companyId });
+        const result = await base44.entities.BOMDeliveryControl.filter({});
         console.log('✅ BOMDeliveryControl carregados:', result.length);
         console.log('✅ BOM Deliveries com qty_delivered > 0:', result.filter(d => (d.qty_delivered || 0) > 0).length);
         return result;

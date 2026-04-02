@@ -12,6 +12,141 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import QRScanner from '@/components/scanner/QRScanner';
+import { Loader2, ChevronDown, ChevronRight } from 'lucide-react';
+
+function ItemRow({ item, selectedOrder, companyId, onSeparate }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  // Buscar se o produto tem BOM
+  const { data: boms, isLoading: loadingBOM } = useQuery({
+    queryKey: ['product-bom', companyId, item.product_id],
+    queryFn: () => companyId ? base44.entities.BOM.filter({ 
+      product_id: item.product_id, 
+      is_active: true,
+      company_id: companyId 
+    }) : Promise.resolve([]),
+    enabled: !!companyId && !!item.product_id,
+  });
+
+  const activeBOM = boms?.[0];
+
+  // Buscar itens do BOM se ele existir
+  const { data: bomItems, isLoading: loadingBOMItems } = useQuery({
+    queryKey: ['bom-items', activeBOM?.id],
+    queryFn: () => activeBOM ? base44.entities.BOMItem.filter({ bom_id: activeBOM.id }) : Promise.resolve([]),
+    enabled: !!activeBOM,
+  });
+
+  const hasBOM = boms && boms.length > 0;
+  const remaining = item.qty - (item.qty_separated || 0);
+  const isComplete = remaining <= 0;
+
+  return (
+    <div className={`p-4 rounded-lg border mb-3 ${isComplete ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-slate-200'}`}>
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-start gap-2">
+          {hasBOM && (
+            <button 
+              onClick={() => setIsExpanded(!isExpanded)}
+              className="mt-1 p-0.5 hover:bg-slate-100 rounded text-slate-500"
+            >
+              {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+            </button>
+          )}
+          <div>
+            <div className="flex items-center gap-2">
+              <p className="font-mono text-sm text-indigo-600">{item.product_sku}</p>
+              {hasBOM && <Badge variant="outline" className="text-[10px] h-4 bg-indigo-50 text-indigo-700 border-indigo-200">BOM</Badge>}
+            </div>
+            <p className="font-medium">{item.product_name}</p>
+          </div>
+        </div>
+        {isComplete && (
+          <CheckCircle className="h-5 w-5 text-emerald-600" />
+        )}
+      </div>
+
+      {!isExpanded && (
+        <div className="flex items-center justify-between">
+          <div className="text-sm">
+            <span className="text-slate-500">Solicitado: </span>
+            <span className="font-medium">{item.qty}</span>
+            <span className="mx-2 text-slate-300">|</span>
+            <span className="text-slate-500">Separado: </span>
+            <span className="font-medium text-emerald-600">{item.qty_separated || 0}</span>
+          </div>
+          {!isComplete && selectedOrder.status === 'SEPARANDO' && !hasBOM && (
+            <Button
+              size="sm"
+              onClick={() => onSeparate(remaining)}
+            >
+              <Package className="h-4 w-4 mr-1" />
+              Separar ({remaining})
+            </Button>
+          )}
+          {hasBOM && !isComplete && (
+            <button 
+              onClick={() => setIsExpanded(true)}
+              className="text-xs text-indigo-600 hover:underline flex items-center gap-1"
+            >
+              Ver componentes para separar
+            </button>
+          )}
+        </div>
+      )}
+
+      {isExpanded && hasBOM && (
+        <div className="mt-4 pl-6 border-l-2 border-slate-100 space-y-3">
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Explosão de Kit/BOM:</p>
+          {loadingBOMItems ? (
+             <div className="flex items-center gap-2 text-xs text-slate-400">
+               <Loader2 className="h-3 w-3 animate-spin" />
+               Carregando componentes...
+             </div>
+          ) : bomItems?.length === 0 ? (
+            <p className="text-xs text-slate-400 italic">Nenhum componente cadastrado neste BOM.</p>
+          ) : (
+            bomItems.map((comp) => {
+              const neededQty = comp.quantity * item.qty;
+              return (
+                <div key={comp.id} className="flex items-center justify-between p-2 bg-slate-50 rounded border border-dashed border-slate-200">
+                  <div className="text-sm">
+                    <p className="font-mono text-xs text-slate-600">{comp.component_sku}</p>
+                    <p className="font-medium text-xs">{comp.component_name}</p>
+                    <p className="text-[10px] text-slate-500">Necessário: <span className="font-bold">{neededQty}</span> {comp.unit || 'UN'}</p>
+                  </div>
+                  {!isComplete && selectedOrder.status === 'SEPARANDO' && (
+                    <Button
+                      size="xs"
+                      variant="outline"
+                      className="h-7 text-[10px]"
+                      onClick={() => onSeparate(neededQty, comp)}
+                    >
+                      <Package className="h-3 w-3 mr-1" />
+                      Separar {neededQty}
+                    </Button>
+                  )}
+                </div>
+              );
+            })
+          )}
+          
+          <div className="pt-2 flex justify-between items-center">
+             <p className="text-[10px] text-slate-400">Após separar todos os componentes, marque o item principal:</p>
+             <Button
+                size="sm"
+                variant="secondary"
+                className="h-8"
+                onClick={() => onSeparate(remaining)}
+              >
+                Concluir Item Pai
+              </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Separation() {
   const queryClient = useQueryClient();
@@ -42,20 +177,37 @@ export default function Separation() {
   });
 
   const separateItemMutation = useMutation({
-    mutationFn: async ({ item, qty }) => {
-      const newSeparated = (item.qty_separated || 0) + qty;
-      await base44.entities.SalesOrderItem.update(item.id, { qty_separated: newSeparated });
-      
-      // Create separation move
-       await base44.entities.InventoryMove.create({
-         company_id: companyId,
-         type: 'SEPARACAO',
-         product_id: item.product_id,
-         qty: qty,
-         related_type: 'PEDIDO',
-         related_id: item.order_id,
-         reason: `Separação pedido`
-       });
+    mutationFn: async ({ item, qty, component }) => {
+      // Se for separação de um componente do BOM
+      if (component) {
+        // Criar movimentação de estoque para o COMPONENTE
+        await base44.entities.InventoryMove.create({
+          company_id: companyId,
+          type: 'SEPARACAO',
+          product_id: component.component_id,
+          qty: qty,
+          related_type: 'PEDIDO',
+          related_id: item.order_id,
+          reason: `Separação componente ${component.component_sku} para ${item.product_sku}`
+        });
+
+        // Opcional: Aqui poderíamos atualizar um controle específico de separação de componentes
+        // Por agora, vamos apenas marcar uma fração da separação do item pai se for o último componente
+        // Mas a lógica padrão é que a separação do PAI é incrementada quando o usuário confirma.
+      } else {
+        const newSeparated = (item.qty_separated || 0) + qty;
+        await base44.entities.SalesOrderItem.update(item.id, { qty_separated: newSeparated });
+        
+        await base44.entities.InventoryMove.create({
+          company_id: companyId,
+          type: 'SEPARACAO',
+          product_id: item.product_id,
+          qty: qty,
+          related_type: 'PEDIDO',
+          related_id: item.order_id,
+          reason: `Separação pedido`
+        });
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['order-items', selectedOrder?.id] });
@@ -270,45 +422,15 @@ export default function Separation() {
                   </Button>
                 )}
 
-                {items?.map((item) => {
-                  const remaining = item.qty - (item.qty_separated || 0);
-                  const isComplete = remaining <= 0;
-
-                  return (
-                    <div
-                      key={item.id}
-                      className={`p-4 rounded-lg border ${isComplete ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-slate-200'}`}
-                    >
-                      <div className="flex items-center justify-between mb-3">
-                        <div>
-                          <p className="font-mono text-sm text-indigo-600">{item.product_sku}</p>
-                          <p className="font-medium">{item.product_name}</p>
-                        </div>
-                        {isComplete && (
-                          <CheckCircle className="h-5 w-5 text-emerald-600" />
-                        )}
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <div className="text-sm">
-                          <span className="text-slate-500">Solicitado: </span>
-                          <span className="font-medium">{item.qty}</span>
-                          <span className="mx-2 text-slate-300">|</span>
-                          <span className="text-slate-500">Separado: </span>
-                          <span className="font-medium text-emerald-600">{item.qty_separated || 0}</span>
-                        </div>
-                        {!isComplete && selectedOrder.status === 'SEPARANDO' && (
-                          <Button
-                            size="sm"
-                            onClick={() => separateItemMutation.mutate({ item, qty: remaining })}
-                          >
-                            <Package className="h-4 w-4 mr-1" />
-                            Separar ({remaining})
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
+                {items?.map((item) => (
+                  <ItemRow 
+                    key={item.id} 
+                    item={item} 
+                    selectedOrder={selectedOrder} 
+                    companyId={companyId}
+                    onSeparate={(qty, component) => separateItemMutation.mutate({ item, qty, component })}
+                  />
+                ))}
               </div>
             )}
           </CardContent>

@@ -19,7 +19,7 @@ export const supabase = createClient(supabaseUrl, supabaseKey);
 export const supabaseAdmin = null;
 
 // Função para limpar dados: converte strings vazias em null (útil para campos UUID no Postgres)
-const sanitizeData = (data) => {
+const sanitizeData = (data, entityName) => {
   if (!data || typeof data !== 'object') return data;
   
   const sanitized = { ...data };
@@ -28,6 +28,12 @@ const sanitizeData = (data) => {
       sanitized[key] = null;
     }
   });
+
+  // REMOVER company_id de tabelas que sabidamente não o possuem no schema
+  if (entityName === 'BOMDeliveryControl' || entityName === 'BOMItem' || entityName === 'BOMVersion') {
+    delete sanitized.company_id;
+  }
+
   return sanitized;
 };
 
@@ -55,10 +61,11 @@ const createEntityHandler = (entityName) => {
     },
     
     async filter(conditions = {}, sort) {
+      const sanitizedFilters = sanitizeData(conditions, entityName);
       let query = supabase.from(entityName).select('*');
       
       // Apply exact matches or IN matches for arrays
-      for (const [key, value] of Object.entries(conditions)) {
+      for (const [key, value] of Object.entries(sanitizedFilters)) {
         if (value !== undefined && value !== null) {
           if (Array.isArray(value)) {
             query = query.in(key, value);
@@ -85,23 +92,61 @@ const createEntityHandler = (entityName) => {
     },
     
     async create(data) {
-      const sanitized = sanitizeData(data);
-      // base44 might not send id if it expects the backend to generate it 
-      // which is fine since Supabase has uuid_generate_v4() default.
-      const { data: result, error } = await supabase.from(entityName).insert([sanitized]).select().single();
-      if (error) throw error;
-      return result;
+      const sanitized = sanitizeData(data, entityName);
+      // Usar fetch direto para evitar o bug do postgrest-js que adiciona
+      // aspas duplas nos nomes de colunas no parâmetro "columns" da URL,
+      // causando erro 400 no PostgREST.
+      const session = (await supabase.auth.getSession()).data?.session;
+      const token = session?.access_token || supabaseKey;
+      
+      const response = await fetch(`${supabaseUrl}/rest/v1/${entityName}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': supabaseKey,
+          'Authorization': `Bearer ${token}`,
+          'Prefer': 'return=representation'
+        },
+        body: JSON.stringify(sanitized)
+      });
+      
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => ({ message: response.statusText }));
+        console.error(`Error creating ${entityName}:`, errorBody);
+        throw errorBody;
+      }
+      
+      const result = await response.json();
+      return Array.isArray(result) ? result[0] : result;
     },
     
     async bulkCreate(dataArray) {
-      const sanitizedArray = (dataArray || []).map(item => sanitizeData(item));
-      const { data: result, error } = await supabase.from(entityName).insert(sanitizedArray).select();
-      if (error) throw error;
-      return result;
+      const sanitizedArray = (dataArray || []).map(item => sanitizeData(item, entityName));
+      const session = (await supabase.auth.getSession()).data?.session;
+      const token = session?.access_token || supabaseKey;
+      
+      const response = await fetch(`${supabaseUrl}/rest/v1/${entityName}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': supabaseKey,
+          'Authorization': `Bearer ${token}`,
+          'Prefer': 'return=representation'
+        },
+        body: JSON.stringify(sanitizedArray)
+      });
+      
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => ({ message: response.statusText }));
+        console.error(`Error bulk creating ${entityName}:`, errorBody);
+        throw errorBody;
+      }
+      
+      return await response.json();
     },
     
     async update(id, data) {
-      const sanitized = sanitizeData(data);
+      const sanitized = sanitizeData(data, entityName);
       const { data: result, error } = await supabase.from(entityName).update(sanitized).eq('id', id).select().single();
       if (error) {
         console.error(`Error updating ${entityName} with id ${id}:`, error);
@@ -137,6 +182,18 @@ const entitiesProxy = new Proxy({}, {
 // The exported base44 object that mimics the base44 SDK
 export const base44 = {
   entities: entitiesProxy,
+  functions: {
+    invoke: async (functionName, body = {}) => {
+      const { data, error } = await supabase.functions.invoke(functionName, {
+        body: body
+      });
+      if (error) {
+        console.error(`Error invoking function ${functionName}:`, error);
+        throw error;
+      }
+      return { data };
+    }
+  },
   auth: {
     me: async () => {
       const { data: { session }, error } = await supabase.auth.getSession();

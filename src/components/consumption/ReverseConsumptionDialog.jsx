@@ -89,7 +89,7 @@ export default function ReverseConsumptionDialog({
          if (prefix === 'bom' && consumptionItem.from_bom_delivery) {
            console.log('📦 Revertendo BOM Delivery ID:', realId);
            // Buscar o registro correto pelo realId (não pelo find genérico)
-           const bomRecord = await base44.entities.BOMDeliveryControl.filter({ company_id: companyId }).then(all => all.find(b => b.id === realId));
+           const bomRecord = await base44.entities.BOMDeliveryControl.filter({ }).then(all => all.find(b => b.id === realId));
            const targetBOM = bomRecord || bomDelivery;
            if (targetBOM) {
              const newDelivered = Math.max(0, (targetBOM.qty_delivered || 0) - qty);

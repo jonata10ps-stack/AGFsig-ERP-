@@ -43,8 +43,7 @@ export default function BOMDeliveryPicking() {
   const { data: deliveryControls = [], isLoading: loadingControls, refetch: refetchControls } = useQuery({
     queryKey: ['bom-delivery-controls', opId],
     queryFn: () => base44.entities.BOMDeliveryControl.filter({ 
-      company_id: companyId,
-      op_id: opId
+      status: 'ABERTO' 
     }),
     enabled: !!opId && !!companyId,
   });

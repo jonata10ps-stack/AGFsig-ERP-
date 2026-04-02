@@ -71,6 +71,7 @@ ALTER TABLE public."AuditLog"
 
 -- Tabela: BOM
 ALTER TABLE public."BOM"
+  ADD COLUMN IF NOT EXISTS "company_id" text,
   ADD COLUMN IF NOT EXISTS "bom_id" text,
   ADD COLUMN IF NOT EXISTS "bom_version_id" text,
   ADD COLUMN IF NOT EXISTS "cancellation_reason" text,
@@ -275,6 +276,7 @@ ALTER TABLE public."BOMItem"
 
 -- Tabela: BOMVersion
 ALTER TABLE public."BOMVersion"
+  ADD COLUMN IF NOT EXISTS "company_id" text,
   ADD COLUMN IF NOT EXISTS "bom_id" text,
   ADD COLUMN IF NOT EXISTS "bom_version_id" text,
   ADD COLUMN IF NOT EXISTS "component_id" text,
