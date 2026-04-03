@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { useCompanyId } from '@/components/useCompanyId';
-import { useNavigate } from 'react-router-dom';
-import { Link } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,10 +12,15 @@ import { Progress } from '@/components/ui/progress';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ArrowLeft, CheckCircle2, Package, MapPin, BarChart3, Loader2, QrCode, X, Zap } from 'lucide-react';
+import { 
+  ArrowLeft, CheckCircle2, Package, MapPin, 
+  BarChart3, Loader2, QrCode, X, Zap, AlertTriangle 
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { processProductionOrderControls } from '@/utils/productionControlUtils';
+import { executeInventoryTransaction } from '@/utils/inventoryTransactionUtils';
 import QRScanner from '@/components/scanner/QRScanner';
 
 export default function BOMDeliveryPicking() {
@@ -33,6 +37,7 @@ export default function BOMDeliveryPicking() {
   const [scannerOpen, setScannerOpen] = useState(false);
   const [locationScannerOpen, setLocationScannerOpen] = useState(false);
 
+  // Queries
   const { data: op, isLoading: loadingOP } = useQuery({
     queryKey: ['production-order', opId, companyId],
     queryFn: () => base44.entities.ProductionOrder.filter({ company_id: companyId, id: opId }),
@@ -42,28 +47,28 @@ export default function BOMDeliveryPicking() {
 
   const { data: deliveryControls = [], isLoading: loadingControls, refetch: refetchControls } = useQuery({
     queryKey: ['bom-delivery-controls', opId],
-    queryFn: async () => {
-      // Buscar todos os controles desta OP (ABERTO e ENTREGUE)
-      const controls = await base44.entities.BOMDeliveryControl.filter({ 
-        op_id: opId 
-      });
-      return controls || [];
-    },
-    enabled: !!opId && !!companyId,
+    queryFn: () => opId ? base44.entities.BOMDeliveryControl.filter({ op_id: opId }) : Promise.resolve([]),
+    enabled: !!opId,
+  });
+
+  const { data: opConsumptions = [] } = useQuery({
+    queryKey: ['op-consumption-controls-for-picking', opId],
+    queryFn: () => opId ? base44.entities.OPConsumptionControl.filter({ op_id: opId }) : Promise.resolve([]),
+    enabled: !!opId,
+  });
+
+  const { data: materialConsumptions = [] } = useQuery({
+    queryKey: ['material-consumptions-for-picking', opId],
+    queryFn: () => opId ? base44.entities.MaterialConsumption.filter({ op_id: opId }) : Promise.resolve([]),
+    enabled: !!opId,
   });
 
   const { data: bom } = useQuery({
     queryKey: ['bom', op?.product_id, companyId],
     queryFn: async () => {
-      const boms = await base44.entities.BOM.filter({ 
-        company_id: companyId,
-        product_id: op.product_id
-      });
-      // Filtrar manualmente por is_active (pode ser string "true" ou boolean true)
-      const activeBoms = (boms || []).filter(b =>
-        b.is_active === true || b.is_active === 'true' || b.is_active === 'TRUE'
-      );
-      return activeBoms?.[0] || null;
+      if (!op?.product_id) return null;
+      const boms = await base44.entities.BOM.filter({ company_id: companyId, product_id: op.product_id });
+      return boms.find(b => b.is_active === true || b.is_active === 'true' || b.is_active === 'TRUE') || null;
     },
     enabled: !!op?.product_id && !!companyId,
   });
@@ -74,688 +79,355 @@ export default function BOMDeliveryPicking() {
     enabled: !!bom?.current_version_id,
   });
 
+  const { data: products = [] } = useQuery({
+    queryKey: ['products-all-picking', companyId],
+    queryFn: () => companyId ? base44.entities.Product.filter({ company_id: companyId }) : Promise.resolve([]),
+    enabled: !!companyId,
+  });
+
+  const { data: locations = [] } = useQuery({
+    queryKey: ['locations-picking', companyId],
+    queryFn: () => companyId ? base44.entities.Location.filter({ company_id: companyId }) : Promise.resolve([]),
+    enabled: !!companyId,
+  });
+
   const { data: productionSteps = [] } = useQuery({
-    queryKey: ['production-steps', op?.route_id, bom?.current_version_id, companyId],
+    queryKey: ['production-steps-picking', op?.route_id, bom?.current_version_id, companyId],
     queryFn: async () => {
       if (!companyId || !bom?.current_version_id) return [];
-      
       try {
         const routeIds = new Set();
-        
-        // Buscar route_id do OP
-        if (op?.route_id) {
-          routeIds.add(op.route_id);
-        }
-        
-        // Buscar route_ids dos BOMItems
-        const bomItems = await base44.entities.BOMItem.filter({
-          bom_version_id: bom.current_version_id
-        });
-        
+        if (op?.route_id) routeIds.add(op.route_id);
         bomItems.forEach(item => {
-          if (item.route_id) {
-            routeIds.add(item.route_id);
-          }
+          if (item.route_id) routeIds.add(item.route_id);
           if (item.routes && Array.isArray(item.routes)) {
-            item.routes.forEach(r => {
-              if (r.route_id) routeIds.add(r.route_id);
-            });
+            item.routes.forEach(r => { if (r.route_id) routeIds.add(r.route_id); });
           }
         });
-        
         if (routeIds.size === 0) return [];
-        
         const allSteps = [];
-        for (const routeId of routeIds) {
-          const steps = await base44.entities.ProductionRouteStep.filter({
-            company_id: companyId,
-            route_id: routeId
-          });
+        for (const rId of routeIds) {
+          const steps = await base44.entities.ProductionRouteStep.filter({ company_id: companyId, route_id: rId });
           allSteps.push(...steps);
         }
-        
-        return Array.from(new Map(allSteps.map(s => [s.id, s])).values())
-          .sort((a, b) => a.sequence - b.sequence);
-      } catch (error) {
-        console.error('Erro ao buscar etapas:', error);
-        return [];
-      }
+        return Array.from(new Map(allSteps.map(s => [s.id, s])).values()).sort((a, b) => a.sequence - b.sequence);
+      } catch (e) { return []; }
     },
     enabled: !!bom?.current_version_id && !!companyId,
   });
-
   const initializeControlMutation = useMutation({
-     mutationFn: async ({ bomVersionId, opData }) => {
-       const bomItems = await base44.entities.BOMItem.filter({
-         bom_version_id: bomVersionId
-       });
-
-       console.log('🔍 BOMItems encontrados para inicialização:', bomItems.length);
-
-       if (bomItems.length === 0) {
-         console.warn('⚠️ Nenhum BOMItem encontrado para bom_version_id:', bomVersionId);
-         return;
-       }
-
-       // Salvar Nome/SKU/ID corretos para evitar que fiquem vazios (consumed_product_*)
-       const controlsToCreate = bomItems.map(item => {
-         const qtyPlannedNum = Number(item.quantity || 0) * Number(opData.qty_planned || 0);
-         return {
-           op_id: opData.id,
-           numero_op_externo: String(opData.numero_op_externo || ''),
-           product_id: opData.product_id,
-           product_name: String(opData.product_name || ''),
-           consumed_product_id: item.component_id || '',
-           consumed_product_name: item.component_name || '',
-           consumed_product_sku: item.component_sku || '',
-           qty_planned: isNaN(qtyPlannedNum) ? "0" : String(qtyPlannedNum),
-           qty: "0",
-           status: 'ABERTO'
-         };
-       });
-
-       console.log('🚀 Criando BOMDeliveryControl:', controlsToCreate.length, 'registros (um a um)...');
-       for (const ctrl of controlsToCreate) {
-         try {
-           const result = await base44.entities.BOMDeliveryControl.create(ctrl);
-           console.log('✅ BOMDeliveryControl criado:', result?.id, ctrl.consumed_product_id);
-         } catch (err) {
-           console.error('❌ Erro ao criar BOMDeliveryControl:', err, 'para', ctrl.consumed_product_id);
-         }
-       }
-       console.log('✅ Processo de criação concluído');
-     },
-    onSuccess: () => {
+    mutationFn: async ({ bomVersionId, opData }) => {
+      console.log('🚀 Inicializando controles de entrega para OP:', opData.op_number);
+      const items = await base44.entities.BOMItem.filter({ bom_version_id: bomVersionId });
+      
+      const promises = items.map(item => {
+        const qtyPlannedNum = Number(item.quantity || 0) * Number(opData.qty_planned || 0);
+        return base44.entities.BOMDeliveryControl.create({
+          company_id: companyId,
+          op_id: opData.id,
+          numero_op_externo: opData.numero_op_externo,
+          product_id: opData.product_id,
+          component_id: item.component_id,
+          qty_planned: isNaN(qtyPlannedNum) ? "0" : String(qtyPlannedNum),
+          qty: "0",
+          status: 'ABERTO'
+        });
+      });
+      
+      await Promise.all(promises);
       initializingRef.current = false;
       refetchControls();
-      toast.success('Componentes do BOM carregados com sucesso!');
-    },
-    onError: (error) => {
-      initializingRef.current = false;
-      console.error('❌ Erro ao criar BOMDeliveryControl:', error);
-      toast.error('Erro ao carregar componentes do BOM');
     }
   });
 
+  // Auto-inicializar se não houver controles
   useEffect(() => {
-    if (op && bom && !loadingControls && deliveryControls.length === 0 && companyId && opId && bom.current_version_id && !initializingRef.current) {
-      console.log('🔄 Auto-inicializando BOMDeliveryControl para OP', opId, 'com BOM versão', bom.current_version_id);
+    if (!loadingControls && !loadingOP && deliveryControls.length === 0 && bom?.current_version_id && op && !initializingRef.current) {
       initializingRef.current = true;
-      initializeControlMutation.mutate({
-        bomVersionId: bom.current_version_id,
-        opData: op
-      });
+      initializeControlMutation.mutate({ bomVersionId: bom.current_version_id, opData: op });
     }
-  }, [op, bom, companyId, opId, loadingControls, deliveryControls.length]);
+  }, [deliveryControls, loadingControls, bom, op]);
+
+  // Unify and aggregate all delivery/consumption data
+  const unifiedItems = useMemo(() => {
+    const itemsMap = {};
+
+    // 1. Iniciar com todos os itens da BOM (planejamento teórico)
+    bomItems.forEach(bi => {
+      const prodId = bi.component_id;
+      if (!prodId) return;
+      
+      // Cálculo teórico caso não exista registro no banco ainda
+      const theoreticalQty = Number(bi.quantity || 0) * Number(op?.qty_planned || 0);
+
+      itemsMap[prodId] = {
+        id: `bom-${bi.id}`,
+        consumed_product_id: prodId,
+        consumed_product_name: bi.component_name || 'N/A',
+        consumed_product_sku: bi.component_sku || 'N/A',
+        qty_planned: theoreticalQty,
+        qty_delivered_bom: 0,
+        qty_total_actual: 0,
+        status: 'ABERTO',
+      };
+    });
+
+    // 2. Sobrepor com dados reais de Delivery Control
+    deliveryControls.forEach(dc => {
+      const prodId = dc.component_id || dc.consumed_product_id;
+      if (!prodId) return;
+
+      if (itemsMap[prodId]) {
+        itemsMap[prodId].id = dc.id;
+        itemsMap[prodId].qty_delivered_bom = Number(dc.qty) || 0;
+        itemsMap[prodId].status = dc.status || 'ABERTO';
+        
+        // PRIORIDADE: Usar a quantidade planejada que está gravada no banco de dados para esta OP
+        const dbQtyPlanned = Number(dc.qty_planned || dc.qty_required) || 0;
+        if (dbQtyPlanned > 0) {
+          itemsMap[prodId].qty_planned = dbQtyPlanned;
+        }
+
+        // PRIORIDADE: Buscar nome/sku dinamicamente do cadastro de produtos se não houver na BOM
+        const product = products.find(p => p.id === prodId);
+        if (product) {
+          if (!itemsMap[prodId].consumed_product_name || itemsMap[prodId].consumed_product_name === 'N/A') {
+            itemsMap[prodId].consumed_product_name = product.name;
+          }
+          if (!itemsMap[prodId].consumed_product_sku || itemsMap[prodId].consumed_product_sku === 'N/A') {
+            itemsMap[prodId].consumed_product_sku = product.sku;
+          }
+        }
+      } else {
+        // Item que estranhamente está no controle mas não na BOMItem atual (talvez versão trocou)
+        const product = products.find(p => p.id === prodId);
+        itemsMap[prodId] = {
+          id: dc.id,
+          consumed_product_id: prodId,
+          consumed_product_name: dc.product_name || product?.name || 'N/A',
+          consumed_product_sku: dc.product_sku || product?.sku || 'N/A',
+          qty_planned: Number(dc.qty_planned || dc.qty_required) || 0,
+          qty_delivered_bom: Number(dc.qty) || 0,
+          qty_total_actual: 0,
+          status: dc.status || 'ABERTO',
+        };
+      }
+    });
+
+    // 3. Adicionar consumos extras de OPConsumptionControl
+    opConsumptions.forEach(oc => {
+      const prodId = oc.consumed_product_id;
+      if (!prodId) return;
+
+      if (!itemsMap[prodId]) {
+        const product = products.find(p => p.id === prodId);
+        itemsMap[prodId] = {
+          id: `extra-${prodId}`,
+          consumed_product_id: prodId,
+          consumed_product_name: oc.consumed_product_name || product?.name || 'Item Extra',
+          consumed_product_sku: oc.consumed_product_sku || product?.sku || 'N/A',
+          qty_planned: 0,
+          qty_delivered_bom: 0,
+          qty_total_actual: 0,
+          is_extra: true,
+          status: 'ENTREGUE'
+        };
+      }
+      itemsMap[prodId].qty_total_actual = Math.max(itemsMap[prodId].qty_total_actual, Number(oc.qty) || 0);
+    });
+
+    // 4. Adicionar Material Consumptions 
+    materialConsumptions.forEach(mc => {
+      const prodId = mc.product_id;
+      if (!prodId || !itemsMap[prodId]) return;
+      itemsMap[prodId].qty_total_actual = Math.max(itemsMap[prodId].qty_total_actual, Number(mc.qty_consumed) || 0);
+    });
+
+    // Final merge: Garantir que qty_total_actual reflita o máximo entre picking e consumo
+    Object.values(itemsMap).forEach(item => {
+      item.qty_total_actual = Math.max(item.qty_total_actual, item.qty_delivered_bom);
+      if (item.qty_planned > 0 && item.qty_total_actual >= item.qty_planned) {
+        item.status = 'ENTREGUE';
+      }
+    });
+
+    return Object.values(itemsMap);
+  }, [deliveryControls, opConsumptions, materialConsumptions, bomItems, products, op?.qty_planned]);
+
+  const stats = useMemo(() => {
+    const totalRequired = unifiedItems.reduce((sum, item) => sum + (Number(item.qty_planned) || 0), 0);
+    const totalDelivered = unifiedItems.reduce((sum, item) => sum + (Number(item.qty_total_actual) || 0), 0);
+    const progress = totalRequired > 0 ? Math.min(100, Math.round((totalDelivered / totalRequired) * 100)) : (unifiedItems.length > 0 ? 100 : 0);
+    return { totalRequired, totalDelivered, progress };
+  }, [unifiedItems]);
 
   const handleQrScan = (sku) => {
     const searchSku = sku.trim().toUpperCase();
     
-    // Como BOMDeliveryControl não tem SKU, precisamos cruzar com bomItems
-    const targetBomItem = bomItems.find(bi => bi.component_sku?.trim().toUpperCase() === searchSku);
-    
-    if (!targetBomItem) {
-      toast.error(`SKU "${sku}" não encontrado na BOM deste produto.`);
-      return;
-    }
-
-    // Suportar registros novos (consumed_product_id) e antigos (component_id)
-    const component = deliveryControls.find(item => 
-      (item.consumed_product_id === targetBomItem.component_id) || 
-      (item.component_id === targetBomItem.component_id)
-    );
-    
-    if (component && component.status === 'ABERTO') {
+    // Check in unified list
+    const found = unifiedItems.find(item => item.consumed_product_sku?.trim().toUpperCase() === searchSku);
+    if (found) {
       setScannedComponent({
-        ...component,
-        component_name: targetBomItem.component_name || component.consumed_product_name,
-        component_sku: targetBomItem.component_sku || component.consumed_product_sku
+        ...found,
+        qty_pending: Math.max(0, found.qty_planned - found.qty_total_actual)
       });
       setDeliveryLocation('');
       setDeliveryQty('');
       setScannerOpen(false);
-      toast.success(`Componente ${targetBomItem.component_name} encontrado!`);
-    } else if (component?.status === 'ENTREGUE') {
-      toast.info('Este componente já foi completamente entregue');
+      toast.success(`Componente ${found.consumed_product_name} encontrado!`);
     } else {
-      toast.error(`Dados de entrega não inicializados para o componente ${targetBomItem.component_name}`);
+      // Check in general products
+      const product = products.find(p => p.sku?.trim().toUpperCase() === searchSku);
+      if (product) {
+        setScannedComponent({
+          id: `extra-${product.id}`,
+          consumed_product_id: product.id,
+          consumed_product_name: product.name,
+          consumed_product_sku: product.sku,
+          qty_planned: 0,
+          qty_total_actual: 0,
+          qty_pending: 0,
+          is_extra: true
+        });
+        setDeliveryLocation('');
+        setDeliveryQty('');
+        setScannerOpen(false);
+        toast.info(`Item EXTRA encontrado: ${product.name}`);
+      } else {
+        toast.error(`SKU "${sku}" não encontrado no sistema.`);
+      }
     }
-  };
-
-  const handleLocationScan = (location) => {
-    setDeliveryLocation(location);
-    setLocationScannerOpen(false);
   };
 
   const deliverMutation = useMutation({
     mutationFn: async () => {
-      console.log('=== INÍCIO ENTREGA ===');
-      console.log('Componente:', scannedComponent);
-      console.log('Localização digitada:', deliveryLocation);
-      console.log('Quantidade:', deliveryQty);
-
-      if (!scannedComponent || !deliveryLocation || !deliveryQty) {
-        throw new Error('Preencha todos os campos');
-      }
-
+      if (!scannedComponent || !deliveryLocation || !deliveryQty) throw new Error('Preencha tudo');
       const qty = parseFloat(deliveryQty);
-      if (qty <= 0 || qty > scannedComponent.qty_pending) {
-        throw new Error('Quantidade inválida');
-      }
+      if (qty <= 0) throw new Error('Qtd inválida');
 
-      console.log('Validando controle...');
-      const currentControl = await base44.entities.BOMDeliveryControl.filter({ id: scannedComponent.id });
-      console.log('Controle atual:', currentControl);
-      if (!currentControl?.[0] || currentControl[0].status !== 'ABERTO') {
-        throw new Error('Este componente não está mais pendente');
-      }
-
-      console.log('Buscando localização...');
-      const locations = await base44.entities.Location.filter({ company_id: companyId });
       const searchLoc = deliveryLocation.trim().toUpperCase();
-      
-      const location = locations.find(l => 
-        l.barcode?.trim().toUpperCase() === searchLoc
-      );
+      const location = locations.find(l => l.barcode?.trim().toUpperCase() === searchLoc);
+      if (!location) throw new Error('Local não encontrado');
 
-      console.log('Localização encontrada:', location);
+      const prodId = scannedComponent.consumed_product_id;
+      const stockBalances = await base44.entities.StockBalance.filter({ company_id: companyId, product_id: prodId, location_id: location.id });
+      const balance = stockBalances.find(b => b.qty_available >= qty);
+      if (!balance) throw new Error('Estoque insuficiente neste local');
 
-      if (!location) {
-        const allBarcodes = locations.slice(0, 20).map(l => l.barcode).filter(Boolean).join(', ');
-        throw new Error(`Localização "${deliveryLocation}" não encontrada. Localizações disponíveis: ${allBarcodes || 'nenhuma'}`);
-      }
-
-      const allBalances = await base44.entities.StockBalance.filter({ company_id: companyId });
-      
-      // ID do produto pode estar em campos diferentes dependendo da versão do registro
-      const productId = scannedComponent.consumed_product_id || scannedComponent.component_id;
-
-      const stockBalance = allBalances.find(b =>
-        b.product_id === productId &&
-        b.location_id === location.id &&
-        b.qty_available > 0
-      );
-
-      if (!stockBalance) {
-        const productBalances = allBalances.filter(b => b.product_id === productId && b.qty_available > 0);
-        const availableLocations = productBalances
-          .map(b => {
-            const loc = locations.find(l => l.id === b.location_id);
-            return `${loc?.barcode || b.location_id} (${b.qty_available}un)`;
-          })
-          .join(', ');
-        throw new Error(`Sem saldo na localização "${location.barcode}". Disponível em: ${availableLocations || 'nenhuma'}`);
-      }
-
-      if (stockBalance.qty_available < qty) {
-        throw new Error(`Saldo insuficiente. Disponível: ${stockBalance.qty_available}`);
-      }
-
-      // 1. Criar movimento de inventário (SAÍDA no Kardex)
-      const inventoryMove = await base44.entities.InventoryMove.create({
-        company_id: companyId,
+      // 1. Centralizado: Inventory Move + Stock Update (Garante saldo não negativo)
+      const invMove = await executeInventoryTransaction({
         type: 'PRODUCAO_CONSUMO',
-        product_id: productId,
+        product_id: prodId,
         qty: qty,
         from_warehouse_id: location.warehouse_id,
         from_location_id: location.id,
         related_type: 'OP',
         related_id: opId,
-        reason: `Entrega de ${scannedComponent.component_name} para OP ${op.op_number}`
-      });
+        reason: `Picking p/ OP ${op.op_number}`
+      }, companyId);
 
-      // 2. Atualizar saldo de estoque (baixar da localização)
-      await base44.entities.StockBalance.update(stockBalance.id, {
-        qty_available: stockBalance.qty_available - qty
-      });
-
-      // 3. Atualizar controle de entrega
-      const currentQty = Number(scannedComponent.qty || 0);
-      const newQty = currentQty + qty;
-      const qtyRequired = Number(scannedComponent.qty_planned || 0);
-      const newStatus = newQty >= qtyRequired ? 'ENTREGUE' : 'ABERTO';
-
-      await base44.entities.BOMDeliveryControl.update(scannedComponent.id, {
-        qty: newQty,
-        status: newStatus
-      });
-
-      // 4. Atualizar consumo em OPConsumptionControl
-      console.log('=== CRIANDO/ATUALIZANDO OPCONSUMPTIONCONTROL ===');
-      const existingControl = await base44.entities.OPConsumptionControl.filter({
-        company_id: companyId,
-        op_id: opId,
-        consumed_product_id: productId
-      });
-      console.log('Controles existentes:', existingControl);
-
-      if (existingControl && existingControl.length > 0) {
-        const control = existingControl[0];
-        const newTotal = (Number(control.qty) || 0) + qty;
-        await base44.entities.OPConsumptionControl.update(control.id, {
-          qty: newTotal,
-          inventory_move_id: inventoryMove.id,
-        });
-      } else {
-        await base44.entities.OPConsumptionControl.create({
-          company_id: companyId,
-          op_id: opId,
-          op_number: op.op_number,
-          numero_op_externo: op.numero_op_externo,
-          product_id: op.product_id,
-          product_name: op.product_name,
-          consumed_product_id: productId,
-          consumed_product_sku: scannedComponent.component_sku,
-          consumed_product_name: scannedComponent.component_name,
-          qty: qty,
-          inventory_move_id: inventoryMove.id,
-          op_status: op.status,
-          control_status: 'ABERTO',
-          notes: `Entregue do local ${deliveryLocation}`
-        });
-      }
-      console.log('=== FIM OPCONSUMPTIONCONTROL ===');
+      // 3. Centralizado: Atualizar Controles de OP (BOM e Consumo)
+      // Substitui todo o bloco anterior de atualização manual
+      await processProductionOrderControls({
+        related_type: 'OP',
+        related_id: opId,
+        product_id: prodId,
+        qty: qty,
+        type: 'PRODUCAO_CONSUMO'
+      }, companyId, invMove.id);
     },
     onSuccess: () => {
-      console.log('✓ Entrega concluída com sucesso');
+      toast.success('Entrega realizada!');
       queryClient.invalidateQueries({ queryKey: ['bom-delivery-controls'] });
-      queryClient.invalidateQueries({ queryKey: ['inventory-moves'] });
-      queryClient.invalidateQueries({ queryKey: ['stock-balances'] });
-      queryClient.invalidateQueries({ queryKey: ['op-consumption-controls'] });
-      queryClient.invalidateQueries({ queryKey: ['inventory-moves-to-op'] });
-      queryClient.invalidateQueries({ queryKey: ['material-consumptions'] });
-      
-      toast.success(`✓ ${scannedComponent.component_name} entregue - verifique o Controle de Consumo`);
-      
+      queryClient.invalidateQueries({ queryKey: ['op-consumption-controls-for-picking'] });
+      queryClient.invalidateQueries({ queryKey: ['material-consumptions-for-picking'] });
       setScannedComponent(null);
       setDeliveryLocation('');
       setDeliveryQty('');
-      setScannerOpen(true);
     },
-    onError: (error) => {
-      const message = error?.message || 'Erro ao entregar componente';
-      toast.error(message);
-    }
+    onError: (e) => toast.error(e.message)
   });
 
-  if (loadingOP || loadingControls || initializeControlMutation.isPending) {
-    return (
-      <div className="space-y-6">
-        <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-64 w-full" />
-        <Skeleton className="h-48 w-full" />
-      </div>
-    );
-  }
-
-  if (!op) {
-    return (
-      <div className="text-center py-12">
-        <p className="text-slate-500">Ordem de Produção não encontrada</p>
-        <Link to={createPageUrl('ProductionOrders')}>
-          <Button variant="outline" className="mt-4">
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Voltar
-          </Button>
-        </Link>
-      </div>
-    );
-  }
-
-  // Deduplicar por component_id para evitar exibição de duplicatas
-  const uniqueDeliveryControls = Object.values(
-    deliveryControls.reduce((acc, item) => {
-      const key = item.consumed_product_id || item.component_id || item.id;
-      if (!acc[key]) {
-        acc[key] = item;
-      }
-      return acc;
-    }, {})
-  );
-
-  const totalRequired = uniqueDeliveryControls.reduce((sum, item) => sum + (Number(item.qty_planned) || 0), 0);
-  const totalDelivered = uniqueDeliveryControls.reduce((sum, item) => sum + (Number(item.qty) || 0), 0);
-  const progress = totalRequired > 0 ? Math.round((totalDelivered / totalRequired) * 100) : 0;
-  const allDelivered = uniqueDeliveryControls.length > 0 && uniqueDeliveryControls.every(item => item.status === 'ENTREGUE');
+  if (loadingOP || loadingControls) return <div className="p-8 space-y-4"><Skeleton className="h-8 w-48"/><Skeleton className="h-64 w-full"/></div>;
+  if (!op) return <div className="p-8 text-center"><p>OP não encontrada</p><Link to={createPageUrl('ProductionOrders')}><Button className="mt-4">Voltar</Button></Link></div>;
 
   return (
     <div className="space-y-6">
-      {/* Header with QR Scanner */}
-      <Card className="bg-gradient-to-r from-indigo-600 to-indigo-700 border-0 text-white">
-        <CardContent className="p-6">
-          <div className="flex items-start justify-between mb-4">
-            <div>
-              <h1 className="text-2xl font-bold">Separação de BOM</h1>
-              <p className="text-indigo-100">OP {op.op_number} - {op.product_name}</p>
-            </div>
-            <button 
-              onClick={() => navigate(-1)}
-              className="p-2 rounded-lg hover:bg-indigo-500/50"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </button>
-          </div>
-
-          <Button
-            onClick={() => setScannerOpen(!scannerOpen)}
-            className="w-full bg-white text-indigo-600 hover:bg-indigo-50"
-          >
-            <QrCode className="h-4 w-4 mr-2" />
-            {scannerOpen ? 'Fechar Scanner' : 'Abrir Scanner de QR Code'}
-          </Button>
+      <Card className="bg-indigo-600 border-0 text-white">
+        <CardContent className="p-6 flex justify-between items-center">
+          <div><h1 className="text-2xl font-bold">Separação de BOM</h1><p className="text-indigo-100">OP {op.op_number} - {op.product_name}</p></div>
+          <Button onClick={() => setScannerOpen(!scannerOpen)} className="bg-white text-indigo-600"><QrCode className="h-4 w-4 mr-2"/>Scanner</Button>
         </CardContent>
       </Card>
 
-      {/* QR Scanner Modal */}
-        {scannerOpen && (
-          <Card className="border-2 border-indigo-300">
-            <CardContent className="p-0">
-              <QRScanner 
-                onScan={handleQrScan}
-                placeholder="Posicione o código QR/código de barras do componente"
-              />
-            </CardContent>
-          </Card>
-        )}
+      {scannerOpen && <Card><CardContent className="p-0"><QRScanner onScan={handleQrScan}/></CardContent></Card>}
 
-        {/* Debug Info - BOM e Roteiros */}
-        <Card className="border-amber-200 bg-amber-50">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <Zap className="h-4 w-4" />
-              Status de Etapas de Produção
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-slate-600">BOM encontrado:</span>
-              <span className="font-medium">{bom ? '✓ Sim' : '✗ Não'}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-600">Versão BOM:</span>
-              <span className="font-medium">{bom?.current_version_id || '-'}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-600">Etapas encontradas:</span>
-              <span className="font-medium">{productionSteps.length}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-600">Route ID da OP:</span>
-              <span className="font-medium">{op?.route_id || '-'}</span>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Production Steps */}
-        {productionSteps.length > 0 && (
-          <Card>
-            <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50">
-              <CardTitle className="flex items-center gap-2">
-                <Zap className="h-5 w-5 text-blue-600" />
-                Etapas de Produção
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-6">
-              <div className="space-y-3">
-                {productionSteps.map((step) => (
-                  <div
-                    key={step.id}
-                    className="flex items-start gap-4 p-4 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
-                  >
-                    <div className="flex items-center justify-center h-8 w-8 rounded-full bg-indigo-100 text-indigo-700 font-semibold text-sm flex-shrink-0">
-                      {step.sequence}
-                    </div>
-                    <div className="flex-1">
-                      <h4 className="font-medium text-slate-900">{step.name}</h4>
-                      {step.description && (
-                        <p className="text-sm text-slate-600 mt-1">{step.description}</p>
-                      )}
-                      <div className="flex gap-4 mt-2">
-                        {step.resource_type && (
-                          <span className="text-xs text-slate-500">
-                            <Badge variant="outline" className="capitalize">{step.resource_type.toLowerCase()}</Badge>
-                          </span>
-                        )}
-                        {step.estimated_time && (
-                          <span className="text-xs text-slate-500">
-                            ⏱ {step.estimated_time} min
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-       {/* Scanned Component Panel */}
       {scannedComponent && (
         <Card className="border-2 border-amber-200 bg-amber-50">
-          <CardContent className="p-6">
-            <div className="flex items-start justify-between mb-4">
-              <div>
-                <h3 className="text-lg font-bold text-slate-900">{scannedComponent.component_name}</h3>
-                <p className="text-sm text-slate-600">SKU: {scannedComponent.component_sku}</p>
-              </div>
-              <button
-                onClick={() => {
-                    setScannedComponent(null);
-                    setDeliveryLocation('');
-                    setDeliveryQty('');
-                  }}
-                className="p-2 rounded-lg hover:bg-amber-100"
-              >
-                <X className="h-5 w-5 text-slate-600" />
-              </button>
+          <CardContent className="p-6 space-y-4">
+            <div className="flex justify-between">
+              <div><h3 className="font-bold">{scannedComponent.consumed_product_name}</h3><p className="text-sm">SKU: {scannedComponent.consumed_product_sku}</p></div>
+              <Button variant="ghost" onClick={() => setScannedComponent(null)}><X/></Button>
             </div>
-
-            <div className="grid grid-cols-3 gap-3 mb-6 p-4 bg-white rounded-lg">
-              <div className="text-center">
-                <p className="text-xs text-slate-500">Necessário</p>
-                <p className="text-2xl font-bold text-slate-900">{scannedComponent.qty_required}</p>
-              </div>
-              <div className="text-center">
-                <p className="text-xs text-slate-500">Entregue</p>
-                <p className="text-2xl font-bold text-emerald-600">{scannedComponent.qty || 0}</p>
-              </div>
-              <div className="text-center">
-                <p className="text-xs text-slate-500">Faltam</p>
-                <p className="text-2xl font-bold text-amber-600">{scannedComponent.qty_pending}</p>
-              </div>
+            <div className="grid grid-cols-3 gap-4 p-4 bg-white rounded-lg">
+              <div className="text-center"><p className="text-xs">Planejado</p><p className="font-bold">{scannedComponent.qty_planned}</p></div>
+              <div className="text-center"><p className="text-xs">Entregue</p><p className="font-bold text-emerald-600">{scannedComponent.qty_total_actual}</p></div>
+              <div className="text-center"><p className="text-xs">Pendente</p><p className="font-bold text-amber-600">{scannedComponent.qty_pending}</p></div>
             </div>
-
-            <div className="space-y-4">
-               <div>
-                 <Label className="text-slate-700 font-medium">Localização do Componente *</Label>
-                 <div className="flex gap-2 mt-2">
-                   <Input
-                     placeholder="Ex: A1, B5, Corredor 2..."
-                     value={deliveryLocation}
-                     onChange={(e) => setDeliveryLocation(e.target.value)}
-                   />
-                   <Button
-                     onClick={() => setLocationScannerOpen(!locationScannerOpen)}
-                     variant="outline"
-                     className="px-3"
-                   >
-                     <QrCode className="h-4 w-4" />
-                   </Button>
-                 </div>
-                 {locationScannerOpen && (
-                   <div className="mt-3 p-4 bg-slate-50 rounded-lg border">
-                     <QRScanner 
-                       onScan={handleLocationScan}
-                       placeholder="Leia o QR code da localização"
-                     />
-                   </div>
-                 )}
-               </div>
-
-              <div>
-                <Label className="text-slate-700 font-medium">Quantidade a Entregar *</Label>
-                <Input
-                  type="number"
-                  min="0.01"
-                  step="0.01"
-                  max={scannedComponent.qty_pending}
-                  placeholder={`Máximo: ${scannedComponent.qty_pending}`}
-                  value={deliveryQty}
-                  onChange={(e) => setDeliveryQty(e.target.value)}
-                  className="mt-2"
-                />
+            {Number(deliveryQty) > scannedComponent.qty_pending && scannedComponent.qty_planned > 0 && (
+              <div className="flex items-center gap-2 p-2 bg-amber-100 text-amber-800 rounded text-xs">
+                <AlertTriangle className="h-4 w-4"/> Atenção: Você está entregando uma quantidade maior que a planejada na BOM.
               </div>
-
-              <Button 
-                onClick={() => deliverMutation.mutate()}
-                disabled={!deliveryLocation || !deliveryQty || deliverMutation.isPending}
-                className="w-full bg-emerald-600 hover:bg-emerald-700"
-              >
-                {deliverMutation.isPending ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Entregando...
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 className="h-4 w-4 mr-2" />
-                    Confirmar Entrega
-                  </>
-                )}
-              </Button>
+            )}
+            <div className="space-y-2">
+              <Label>Localização *</Label>
+              <div className="flex gap-2">
+                <Input value={deliveryLocation} onChange={e => setDeliveryLocation(e.target.value)} placeholder="Scanner ou Digite..."/>
+                <Button variant="outline" onClick={() => setLocationScannerOpen(!locationScannerOpen)}><QrCode className="h-4 w-4"/></Button>
+              </div>
+              <Label>Qtd a Entregar *</Label>
+              <Input type="number" value={deliveryQty} onChange={e => setDeliveryQty(e.target.value)} placeholder="0.00"/>
+              <Button onClick={() => deliverMutation.mutate()} className="w-full bg-emerald-600">{deliverMutation.isPending ? 'Processando...' : 'Confirmar Entrega'}</Button>
             </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Progress */}
-      <Card className="bg-gradient-to-r from-blue-50 to-indigo-50">
-        <CardContent className="pt-6">
-          <div className="space-y-4">
-            <div className="flex justify-between items-center">
-              <span className="font-medium text-slate-900">Progresso de Entrega</span>
-              <Badge className="bg-indigo-600 text-white">{progress}%</Badge>
-            </div>
-            <Progress value={progress} className="h-3" />
-            <div className="grid grid-cols-3 gap-4">
-              <div className="text-center">
-                <p className="text-sm text-slate-500">Necessário</p>
-                <p className="text-xl font-bold text-slate-900">{totalRequired}</p>
-              </div>
-              <div className="text-center">
-                <p className="text-sm text-slate-500">Entregue</p>
-                <p className="text-xl font-bold text-emerald-600">{totalDelivered}</p>
-              </div>
-              <div className="text-center">
-                <p className="text-sm text-slate-500">Pendente</p>
-                <p className="text-xl font-bold text-amber-600">{totalRequired - totalDelivered}</p>
-              </div>
-            </div>
+      <Card className="bg-indigo-50">
+        <CardContent className="pt-6 space-y-4">
+          <div className="flex justify-between items-center"><span className="font-bold">Progresso de Entrega</span><Badge>{stats.progress}%</Badge></div>
+          <Progress value={stats.progress} className="h-3"/>
+          <div className="grid grid-cols-3 gap-4 text-center">
+            <div><p className="text-xs">Necessário</p><p className="text-xl font-bold">{stats.totalRequired}</p></div>
+            <div><p className="text-xs">Entregue</p><p className="text-xl font-bold text-emerald-600">{stats.totalDelivered}</p></div>
+            <div><p className="text-xs">Pendente</p><p className="text-xl font-bold text-amber-600">{Math.max(0, stats.totalRequired - stats.totalDelivered)}</p></div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Components List */}
       <div className="grid gap-4">
-        {deliveryControls.length === 0 ? (
-          <Card>
-            <CardContent className="text-center py-12">
-              <Package className="h-12 w-12 mx-auto text-slate-300 mb-4" />
-              <p className="text-slate-500">Nenhum componente para entregar</p>
+        {unifiedItems.map(item => (
+          <Card key={item.id} className={item.status === 'ENTREGUE' ? 'bg-emerald-50 border-emerald-200' : ''}>
+            <CardContent className="p-4 space-y-3">
+              <div className="flex justify-between items-start">
+                <div>
+                  <div className="flex items-center gap-2"><h4 className="font-bold">{item.consumed_product_name}</h4>{item.is_extra && <Badge variant="outline">EXTRA</Badge>}</div>
+                  <p className="text-xs">SKU: {item.consumed_product_sku}</p>
+                </div>
+                <Badge variant="outline">{item.qty_planned || '-'} un</Badge>
+              </div>
+              <Progress value={item.qty_planned > 0 ? Math.min(100, (item.qty_total_actual / item.qty_planned) * 100) : 100} className="h-2"/>
+              <div className="flex justify-between items-center bg-white p-2 rounded text-xs font-bold text-indigo-700 border">
+                <span>{item.qty_total_actual} de {item.qty_planned || '?'} entregues</span>
+                <span>{item.qty_planned > 0 ? Math.round((item.qty_total_actual / item.qty_planned) * 100) : 100}%</span>
+              </div>
+              {item.status === 'ABERTO' && (
+                <Button onClick={() => setScannedComponent({...item, qty_pending: Math.max(0, item.qty_planned - item.qty_total_actual)})} className="w-full bg-indigo-600 h-8 text-xs">Entregar</Button>
+              )}
             </CardContent>
           </Card>
-        ) : (
-          uniqueDeliveryControls.map((item) => {
-            // Buscar dados extras do BOMItem (suporta IDs novos e antigos)
-            const compId = item.consumed_product_id || item.component_id;
-            const bomItem = bomItems.find(bi => bi.component_id === compId);
-            
-            const qtyReq = Number(item.qty_planned) || 0;
-            const qtyDel = Number(item.qty) || 0; // Usando 'qty' do banco
-            const qtyPend = qtyReq - qtyDel;
-            const itemProgress = qtyReq > 0 
-              ? Math.round((qtyDel / qtyReq) * 100) 
-              : 0;
-            
-            // Prioridade: Dados salvos no registro -> Dados do BOMItem -> Fallback
-            const itemName = item.consumed_product_name || bomItem?.component_name || item.product_name || 'Componente';
-            const itemSku = item.consumed_product_sku || bomItem?.component_sku || '-';
-
-            return (
-              <Card 
-                key={item.id}
-                className={item.status === 'ENTREGUE' ? 'bg-emerald-50 border-emerald-200' : ''}
-              >
-                <CardContent className="pt-6">
-                  <div className="space-y-4">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <h3 className="font-medium text-slate-900">{itemName}</h3>
-                          {item.status === 'ENTREGUE' && (
-                            <Badge className="bg-emerald-100 text-emerald-700">Entregue</Badge>
-                          )}
-                        </div>
-                        <p className="text-sm text-slate-500">SKU: {itemSku}</p>
-                      </div>
-                      <Badge variant="outline" className="text-lg">
-                        {qtyReq} {bomItem?.unit || 'un'}
-                      </Badge>
-                    </div>
-
-                    <Progress value={itemProgress} className="h-2" />
-
-                    <div className="flex justify-between text-sm">
-                      <span className="text-slate-500">
-                        Entregues: {qtyDel} / {qtyReq}
-                      </span>
-                      <span className="font-medium">{itemProgress}%</span>
-                    </div>
-
-                    {item.status === 'ABERTO' && (
-                       <Button
-                         onClick={() => {
-                           setScannedComponent({
-                             ...item,
-                             component_name: itemName,
-                             component_sku: itemSku,
-                             qty_required: qtyReq,
-                             qty_pending: qtyPend
-                           });
-                           setDeliveryLocation('');
-                           setDeliveryQty('');
-                         }}
-                         className="w-full bg-indigo-600 hover:bg-indigo-700"
-                       >
-                         <Package className="h-4 w-4 mr-2" />
-                         Entregar Componente
-                       </Button>
-                     )}
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })
-        )}
+        ))}
       </div>
-
-      {/* Summary */}
-      {allDelivered && deliveryControls.length > 0 && (
-        <Card className="bg-emerald-50 border-emerald-200">
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <CheckCircle2 className="h-6 w-6 text-emerald-600 flex-shrink-0" />
-              <div>
-                <p className="font-semibold text-emerald-900">Todos os componentes foram entregues!</p>
-                <p className="text-sm text-emerald-700">A OP está pronta para produção</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-
     </div>
   );
 }

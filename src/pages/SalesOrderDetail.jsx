@@ -353,6 +353,9 @@ export default function SalesOrderDetail() {
 
   const cancelOrderMutation = useMutation({
     mutationFn: async (decisions) => {
+      if (order?.status === 'EXPEDIDO' || order?.status === 'FATURADO') {
+        throw new Error('Não é possível cancelar um pedido já expedido ou faturado. Cancele o faturamento ou expedição primeiro.');
+      }
       // Encontrar quote vinculado a este pedido
       const quotes = await base44.entities.Quote.list();
       const linkedQuote = quotes?.find(q => q.converted_order_id === orderId);

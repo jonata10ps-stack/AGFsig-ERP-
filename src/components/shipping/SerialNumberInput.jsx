@@ -1,19 +1,42 @@
-import React, { useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import React, { useState, useEffect } from 'react';
+import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { X, Check } from 'lucide-react';
+import { X, Check, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function SerialNumberInput({ item, order, onClose, onSuccess }) {
   const queryClient = useQueryClient();
+
+  const { data: existingSerials = [], isLoading } = useQuery({
+    queryKey: ['serial-numbers', order.id, item.product_id],
+    queryFn: () => base44.entities.SerialNumber.filter({ 
+      order_id: order.id,
+      product_id: item.product_id
+    })
+  });
+
   const [serialNumbers, setSerialNumbers] = useState(
-    Array(item.qty).fill('').map(() => ({ serial: '', captured: false }))
+    Array(item.qty).fill('').map(() => ({ serial: '', captured: false, isSavedInDB: false }))
   );
 
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!isLoading && existingSerials.length > 0) {
+      setSerialNumbers(prev => {
+        const newSerials = [...prev];
+        existingSerials.forEach((s, i) => {
+          if (i < newSerials.length) {
+            newSerials[i] = { serial: s.serial_number, captured: true, isSavedInDB: true };
+          }
+        });
+        return newSerials;
+      });
+    }
+  }, [existingSerials, isLoading]);
 
   const handleSerialChange = (index, value) => {
     const newSerials = [...serialNumbers];
@@ -33,7 +56,7 @@ export default function SerialNumberInput({ item, order, onClose, onSuccess }) {
 
   const handleRemoveSerial = (index) => {
     const newSerials = [...serialNumbers];
-    newSerials[index] = { serial: '', captured: false };
+    newSerials[index] = { serial: '', captured: false, isSavedInDB: false };
     setSerialNumbers(newSerials);
   };
 
@@ -46,8 +69,10 @@ export default function SerialNumberInput({ item, order, onClose, onSuccess }) {
 
     setSaving(true);
     try {
-      // Criar registro de SerialNumber para cada série
+      // Criar registro de SerialNumber para cada série (apenas as novas)
       for (const serial of serialNumbers) {
+        if (serial.isSavedInDB) continue;
+        
         await base44.entities.SerialNumber.create({
           company_id: order.company_id,
           serial_number: serial.serial,
@@ -64,12 +89,8 @@ export default function SerialNumberInput({ item, order, onClose, onSuccess }) {
         });
       }
 
-      // Salvar os seriais no campo do item do pedido
-      if (item.id) {
-        await base44.entities.SalesOrderItem.update(item.id, {
-          serial_numbers: serialNumbers.map(s => s.serial).join(', '),
-        });
-      }
+      // Os seriais (tabela SerialNumber) já garantem o lastro histórico, não há necessidade
+      // de salvar uma cópia redundante (string) na tabela SalesOrderItem.
 
       queryClient.invalidateQueries({ queryKey: ['serial-numbers'] });
       queryClient.invalidateQueries({ queryKey: ['order-items-shipping'] });

@@ -15,39 +15,40 @@ import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
 import QRScanner from '../components/scanner/QRScanner';
+import { executeInventoryTransaction } from '@/utils/inventoryTransactionUtils';
 
-// Função para calcular score de uma localização
+// FunÃ§Ã£o para calcular score de uma localizaÃ§Ã£o
 function calculateLocationScore(location, product, stockBalances) {
   let score = 100;
 
-  // Localização já tem este produto? (FIFO + consolidação)
+  // LocalizaÃ§Ã£o jÃ¡ tem este produto? (FIFO + consolidaÃ§Ã£o)
   const hasProduct = stockBalances?.find(
     sb => sb.location_id === location.id && sb.product_id === product.id
   );
   if (hasProduct) {
-    score += 50; // Priorizar consolidação
+    score += 50; // Priorizar consolidaÃ§Ã£o
   }
 
-  // Verificar ocupação da localização
+  // Verificar ocupaÃ§Ã£o da localizaÃ§Ã£o
   const locationOccupancy = stockBalances?.filter(
     sb => sb.location_id === location.id
   ).reduce((sum, sb) => sum + (sb.qty_available || 0), 0) || 0;
 
   const occupancyRate = location.capacity ? locationOccupancy / location.capacity : 0;
 
-  // Penalizar localizações muito cheias (< 20% espaço livre)
+  // Penalizar localizaÃ§Ãµes muito cheias (< 20% espaÃ§o livre)
   if (occupancyRate > 0.8) {
     score -= 30;
   } else if (occupancyRate > 0.5) {
     score -= 10;
   }
 
-  // Bonificar localizações vazias se não há produto consolidado
+  // Bonificar localizaÃ§Ãµes vazias se nÃ£o hÃ¡ produto consolidado
   if (!hasProduct && occupancyRate === 0) {
     score += 20;
   }
 
-  // Priorizar níveis médios (mais ergonômicos)
+  // Priorizar nÃ­veis mÃ©dios (mais ergonÃ´micos)
   const nivel = location.nivel?.toUpperCase();
   if (nivel === 'M' || nivel === 'MEDIO' || nivel === '2') {
     score += 15;
@@ -55,7 +56,7 @@ function calculateLocationScore(location, product, stockBalances) {
     score += 5;
   }
 
-  // Priorizar ruas/módulos iniciais (mais próximos)
+  // Priorizar ruas/mÃ³dulos iniciais (mais prÃ³ximos)
   const rua = parseInt(location.rua) || 999;
   const modulo = parseInt(location.modulo) || 999;
   
@@ -65,25 +66,25 @@ function calculateLocationScore(location, product, stockBalances) {
   return score;
 }
 
-// Sugerir melhores localizações
+// Sugerir melhores localizaÃ§Ãµes
 function suggestBestLocations(product, locations, stockBalances, warehouseId, limit = 3) {
   if (!locations || !product) return [];
 
-  // Filtrar localizações: preferir do mesmo armazém, mas aceitar sem warehouse_id
+  // Filtrar localizaÃ§Ãµes: preferir do mesmo armazÃ©m, mas aceitar sem warehouse_id
   let validLocations = locations.filter(l => l.active !== false);
   
-  // Se temos localizações do armazém específico, usar só essas
+  // Se temos localizaÃ§Ãµes do armazÃ©m especÃ­fico, usar sÃ³ essas
   const warehouseLocations = validLocations.filter(l => l.warehouse_id === warehouseId);
   if (warehouseLocations.length > 0) {
     validLocations = warehouseLocations;
   }
 
-  // Se não há localizações, retornar todas as ativas
+  // Se nÃ£o hÃ¡ localizaÃ§Ãµes, retornar todas as ativas
   if (validLocations.length === 0) {
     validLocations = locations.filter(l => l.active !== false);
   }
 
-  // Calcular score para cada localização
+  // Calcular score para cada localizaÃ§Ã£o
   const scored = validLocations.map(location => ({
     location,
     score: calculateLocationScore(location, product, stockBalances || []),
@@ -117,15 +118,40 @@ export default function StorageAllocation() {
     queryKey: ['pending-allocation', companyId],
     queryFn: async () => {
       if (!companyId) return [];
-      const receivingItems = await base44.entities.ReceivingItem.filter({ company_id: companyId, status: 'CONFERIDO' });
       
-      // Excluir itens com quantidade 0
+      const [receivingItems, stockBalances, expeditionWarehouses] = await Promise.all([
+        base44.entities.ReceivingItem.filter({ company_id: companyId, status: 'CONFERIDO' }),
+        base44.entities.StockBalance.filter({ company_id: companyId }),
+        base44.entities.Warehouse.filter({ company_id: companyId, type: 'EXPEDICAO' })
+      ]);
+      
+      // 1. Itens vindos do recebimento de compras
       const validReceivingItems = receivingItems.filter(item => item.qty > 0);
       
-      const stockBalances = await base44.entities.StockBalance.filter({ company_id: companyId });
-      const pendingStockBalances = stockBalances.filter(sb => !sb.warehouse_id && !sb.location_id && sb.qty_available > 0).map(sb => ({ ...sb, isFromStockBalance: true }));
+      // 2 e 3. Saldos em estoque (Limbo ou Doca) - CONSOLIDADO
+      const stockGroups = stockBalances.reduce((acc, sb) => {
+        const isLimbo = !sb.warehouse_id && !sb.location_id;
+        const isDock = expWhIds.has(sb.warehouse_id);
+        const qty = parseFloat(sb.qty_available) || 0;
+        
+        if ((isLimbo || isDock) && qty > 0) {
+          const key = `${sb.product_id}-${sb.warehouse_id || 'limbo'}-${sb.location_id || 'none'}`;
+          if (!acc[key]) {
+            acc[key] = { 
+              ...sb, 
+              qty: 0,
+              isFromStockBalance: isLimbo,
+              isFromExpeditionDock: isDock
+            };
+          }
+          acc[key].qty += qty;
+        }
+        return acc;
+      }, {});
+
+      const consolidatedStock = Object.values(stockGroups);
       
-      return [...validReceivingItems, ...pendingStockBalances];
+      return [...validReceivingItems, ...consolidatedStock];
     },
     enabled: !!companyId,
   });
@@ -154,7 +180,7 @@ export default function StorageAllocation() {
     enabled: !!companyId,
   });
 
-  // Quando selecionar um item, gerar sugestões
+  // Quando selecionar um item, gerar sugestÃµes
   useEffect(() => {
     if (selectedItem && products && locations) {
       const product = products.find(p => p.id === selectedItem.product_id);
@@ -177,7 +203,7 @@ export default function StorageAllocation() {
    mutationFn: async ({ item, locationId, qty }) => {
      const batch = batches?.find(b => b.id === item.batch_id);
      
-     // Se o item não tem warehouse_id, buscar armazém padrão
+     // Se o item nÃ£o tem warehouse_id, buscar armazÃ©m padrÃ£o
      let warehouseId = item.warehouse_id;
      if (!warehouseId) {
        const warehouses = await base44.entities.Warehouse.filter({
@@ -186,7 +212,7 @@ export default function StorageAllocation() {
        });
        const defaultWarehouse = warehouses.find(w => w.type === 'ACABADO') || warehouses[0];
        if (!defaultWarehouse) {
-         throw new Error('Nenhum armazém ativo encontrado');
+         throw new Error('Nenhum armazÃ©m ativo encontrado');
        }
        warehouseId = defaultWarehouse.id;
        
@@ -206,104 +232,50 @@ export default function StorageAllocation() {
        type: 'ENTRADA'
      });
 
-     const isNewEntry = existingMove.length === 0;
+     const isNewEntry = !item.isFromStockBalance && !item.isFromExpeditionDock && existingMove.length === 0;
 
-     // Buscar saldo existente do item (se estiver sendo movido de uma localização para outra)
-     // Nota: Se item.location_id é null/undefined, não deve filtrar por ele para encontrar a origem correta
-     let currentBalance = [];
-     if (item.isFromStockBalance || item.location_id) {
-        currentBalance = await base44.entities.StockBalance.filter({
-          company_id: companyId,
-          product_id: item.product_id,
-          warehouse_id: warehouseId,
-          location_id: item.location_id || null // Forçar null se for pendente
-        });
-     }
-
-     // Transferência: RETIRAR da localização original
-     if (currentBalance.length > 0) {
-       const balance = currentBalance[0];
-       const remainingQtyAfterAlloc = Math.round((balance.qty_available - qty) * 1000) / 1000;
-
-       if (remainingQtyAfterAlloc > 0) {
-         await base44.entities.StockBalance.update(balance.id, {
-           qty_available: remainingQtyAfterAlloc
-         });
-       } else {
-         await base44.entities.StockBalance.delete(balance.id);
-       }
-     }
-
-     // ADICIONAR na nova localização
-     const targetBalance = await base44.entities.StockBalance.filter({
-       company_id: companyId,
-       product_id: item.product_id,
-       warehouse_id: warehouseId,
-       location_id: locationId
-     });
-
-     if (targetBalance.length > 0) {
-       const balance = targetBalance[0];
-       const newQty = Math.round(((balance.qty_available || 0) + qty) * 1000) / 1000;
-       const newAvgCost = ((balance.qty_available || 0) * (balance.avg_cost || 0) + qty * (currentBalance[0]?.avg_cost || item.unit_cost)) / newQty;
-       await base44.entities.StockBalance.update(balance.id, {
-         qty_available: newQty,
-         avg_cost: newAvgCost
-       });
-     } else {
-       await base44.entities.StockBalance.create({
-         company_id: companyId,
-         product_id: item.product_id,
-         warehouse_id: warehouseId,
-         location_id: locationId,
-         qty_available: Math.round(qty * 1000) / 1000,
-         qty_reserved: 0,
-         qty_separated: 0,
-         avg_cost: currentBalance[0]?.avg_cost || item.unit_cost
-       });
-     }
-
-     // Movimento no Kardex
-     await base44.entities.InventoryMove.create({
-       company_id: companyId,
+     // Executar transação centralizada
+     await executeInventoryTransaction({
        type: isNewEntry ? 'ENTRADA' : 'TRANSFERENCIA',
        product_id: item.product_id,
        qty: qty,
-       from_warehouse_id: currentBalance[0]?.warehouse_id || null,
-       from_location_id: currentBalance[0]?.location_id || null,
+       from_warehouse_id: item.warehouse_id || null, 
+       from_location_id: item.location_id || null,
        to_warehouse_id: warehouseId,
        to_location_id: locationId,
-       related_type: 'COMPRA',
-       related_id: item.id, // Usar id do item para evitar duplicar movimentos do mesmo item
+       unit_cost: item.unit_cost || item.avg_cost || 0,
+       related_type: isNewEntry ? 'COMPRA' : 'PEDIDO',
+       related_id: item.id,
        reason: isNewEntry 
-         ? `Recebimento - Lote ${batch?.batch_number || 'N/A'}` 
-         : `Alocação - Lote ${batch?.batch_number || 'N/A'} (Origem: ${currentBalance[0]?.location_id ? 'Local' : 'Pendente'})`,
-       created_date: new Date().toISOString()
-     });
+          ? `Recebimento - Lote ${batch?.batch_number || 'N/A'}`
+          : `Alocação de Saldo Pendente (Origem: ${item.warehouse_name || 'Doca'})`
+     }, companyId);
 
       // Calcular quantidade restante no item (arredondar para evitar imprecisão float)
        const remainingQty = Math.round((item.qty - qty) * 1000) / 1000;
 
-       if (remainingQty > 0.0001) {
-         await base44.entities.ReceivingItem.update(item.id, {
-           qty: remainingQty
-         });
-       } else {
-        await base44.entities.ReceivingItem.update(item.id, { 
-          status: 'ARMAZENADO',
-          location_id: locationId
-        });
-      }
+       if (!item.isFromStockBalance && !item.isFromExpeditionDock) {
+           if (remainingQty > 0.0001) {
+             await base44.entities.ReceivingItem.update(item.id, {
+               qty: remainingQty
+             });
+           } else {
+            await base44.entities.ReceivingItem.update(item.id, { 
+              status: 'ARMAZENADO',
+              location_id: locationId
+            });
+          }
 
-      // Verificar se todos os itens do batch foram armazenados
-      const batchItems = await base44.entities.ReceivingItem.filter({ batch_id: item.batch_id });
-      const allStored = batchItems.every(i => i.id === item.id ? remainingQty === 0 : i.status === 'ARMAZENADO');
-      
-      if (allStored && batch) {
-        await base44.entities.ReceivingBatch.update(batch.id, {
-          status: 'ARMAZENADO'
-        });
-      }
+          // Verificar se todos os itens do batch foram armazenados
+          const batchItems = await base44.entities.ReceivingItem.filter({ batch_id: item.batch_id });
+          const allStored = batchItems.every(i => i.id === item.id ? remainingQty === 0 : i.status === 'ARMAZENADO');
+          
+          if (allStored && batch) {
+            await base44.entities.ReceivingBatch.update(batch.id, {
+              status: 'ARMAZENADO'
+            });
+          }
+       }
 
       // Auditoria
        const user = await base44.auth.me();
@@ -369,28 +341,28 @@ export default function StorageAllocation() {
     );
     
     if (!location) {
-      toast.error('Localização não encontrada');
+      toast.error('LocalizaÃ§Ã£o nÃ£o encontrada');
       return;
     }
 
     if (location.warehouse_id !== selectedItem.warehouse_id) {
-      toast.error('Localização pertence a outro armazém');
+      toast.error('LocalizaÃ§Ã£o pertence a outro armazÃ©m');
       return;
     }
 
     setSelectedLocation(location);
     setManualLocationCode('');
-    toast.success(`Localização selecionada: ${location.barcode}`);
+    toast.success(`LocalizaÃ§Ã£o selecionada: ${location.barcode}`);
   };
 
   const handleAllocate = () => {
     if (!selectedItem || !selectedLocation) {
-      toast.error('Selecione item e localização');
+      toast.error('Selecione item e localizaÃ§Ã£o');
       return;
     }
 
     if (qtyToAllocate <= 0 || qtyToAllocate > selectedItem.qty) {
-      toast.error('Quantidade inválida');
+      toast.error('Quantidade invÃ¡lida');
       return;
     }
 
@@ -416,8 +388,8 @@ export default function StorageAllocation() {
             </Button>
           </Link>
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">Alocação Inteligente</h1>
-            <p className="text-slate-500">Sistema de sugestão automática de localizações</p>
+            <h1 className="text-2xl font-bold text-slate-900">AlocaÃ§Ã£o Inteligente</h1>
+            <p className="text-slate-500">Sistema de sugestÃ£o automÃ¡tica de localizaÃ§Ãµes</p>
           </div>
         </div>
         <Badge className={totalPendingQty > 0 ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"}>
@@ -430,7 +402,7 @@ export default function StorageAllocation() {
           <CardContent className="p-4 flex items-center gap-3">
             <CheckCircle className="h-6 w-6 text-emerald-600" />
             <div>
-              <p className="font-medium text-emerald-900">Nenhum item pendente de alocação</p>
+              <p className="font-medium text-emerald-900">Nenhum item pendente de alocaÃ§Ã£o</p>
               <p className="text-sm text-emerald-700">Todos os itens conferidos foram alocados.</p>
             </div>
           </CardContent>
@@ -456,10 +428,10 @@ export default function StorageAllocation() {
                   handleSelectItem(item);
                   toast.success(`Produto: ${item.product_name}`);
                 } else {
-                  toast.error('Produto não encontrado nos itens pendentes');
+                  toast.error('Produto nÃ£o encontrado nos itens pendentes');
                 }
               }}
-              placeholder="Escaneie o código do produto"
+              placeholder="Escaneie o cÃ³digo do produto"
               active={!selectedItem}
             />
 
@@ -488,13 +460,23 @@ export default function StorageAllocation() {
                     >
                       <div className="flex items-start justify-between">
                         <div className="flex-1 min-w-0">
-                          <p className="font-mono text-sm text-indigo-600 font-bold">{item.product_sku}</p>
-                          <p className="font-medium text-sm truncate">{item.product_name}</p>
-                          <div className="flex items-center gap-2 mt-1">
-                            <Badge variant="outline" className="text-xs">
-                              {batch?.batch_number}
-                            </Badge>
-                            <span className="text-xs text-slate-500">{item.warehouse_name}</span>
+                          <p className="font-mono text-sm text-indigo-600 font-bold">
+                            {item.product_sku || (products?.find(p => p.id === item.product_id)?.sku)}
+                          </p>
+                          <p className="font-medium text-sm truncate">
+                            {item.product_name || (products?.find(p => p.id === item.product_id)?.name)}
+                          </p>
+                          <div className="flex flex-wrap items-center gap-2 mt-1">
+                            {item.isFromExpeditionDock ? (
+                              <Badge variant="secondary" className="bg-amber-100 text-amber-700 text-[10px]">DOCA EXPEDIÇÃO</Badge>
+                            ) : item.isFromStockBalance ? (
+                              <Badge variant="secondary" className="bg-slate-100 text-slate-700 text-[10px]">SEM ENDEREÇO</Badge>
+                            ) : (
+                              <Badge variant="secondary" className="bg-blue-100 text-blue-700 text-[10px]">RECEBIMENTO</Badge>
+                            )}
+                            {batch?.batch_number && (
+                              <Badge variant="outline" className="text-[10px]">{batch.batch_number}</Badge>
+                            )}
                           </div>
                         </div>
                         <div className="text-right ml-2">
@@ -516,7 +498,7 @@ export default function StorageAllocation() {
               <div className="h-6 w-6 rounded-full bg-emerald-600 text-white flex items-center justify-center text-sm font-bold">
                 2
               </div>
-              Bipar Localização
+              Bipar LocalizaÃ§Ã£o
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -531,17 +513,17 @@ export default function StorageAllocation() {
                   onScan={(code) => {
                     const location = locations?.find(l => l.barcode === code);
                     if (!location) {
-                      toast.error('Localização não encontrada');
+                      toast.error('LocalizaÃ§Ã£o nÃ£o encontrada');
                       return;
                     }
                     if (location.warehouse_id !== selectedItem.warehouse_id) {
-                      toast.error('Localização pertence a outro armazém');
+                      toast.error('LocalizaÃ§Ã£o pertence a outro armazÃ©m');
                       return;
                     }
                     handleSelectLocation(location);
-                    toast.success(`Localização: ${location.barcode}`);
+                    toast.success(`LocalizaÃ§Ã£o: ${location.barcode}`);
                   }}
-                  placeholder="Escaneie o código da localização"
+                  placeholder="Escaneie o cÃ³digo da localizaÃ§Ã£o"
                   active={!!selectedItem && !selectedLocation}
                 />
 
@@ -559,7 +541,7 @@ export default function StorageAllocation() {
                  ) : suggestedLocations.length === 0 ? (
                    <div className="text-center py-4 text-slate-500">
                      <AlertCircle className="h-6 w-6 mx-auto text-slate-300 mb-2" />
-                     <p className="text-xs">Nenhuma localização disponível</p>
+                     <p className="text-xs">Nenhuma localizaÃ§Ã£o disponÃ­vel</p>
                    </div>
                  ) : (
                   <div className="space-y-2 max-h-60 overflow-y-auto">
@@ -596,7 +578,7 @@ export default function StorageAllocation() {
                           <div className="flex gap-2">
                             {hasProduct && (
                               <Badge className="bg-blue-100 text-blue-700 text-xs">
-                                Produto já aqui
+                                Produto jÃ¡ aqui
                               </Badge>
                             )}
                             {occupancy > 0 && (
@@ -622,7 +604,7 @@ export default function StorageAllocation() {
               <div className="h-6 w-6 rounded-full bg-purple-600 text-white flex items-center justify-center text-sm font-bold">
                 3
               </div>
-              Confirmar Alocação
+              Confirmar AlocaÃ§Ã£o
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -641,7 +623,7 @@ export default function StorageAllocation() {
                   </div>
 
                   <div className="p-3 bg-slate-50 rounded-lg">
-                    <p className="text-xs text-slate-500 mb-1">Localização</p>
+                    <p className="text-xs text-slate-500 mb-1">LocalizaÃ§Ã£o</p>
                     <p className="font-mono text-sm font-bold text-emerald-600">{selectedLocation.barcode}</p>
                     <p className="text-sm">
                       {[selectedLocation.rua, selectedLocation.modulo, selectedLocation.nivel]
@@ -682,13 +664,13 @@ export default function StorageAllocation() {
                       </Button>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-xs text-slate-500">Disponível: {selectedItem.qty}</span>
+                      <span className="text-xs text-slate-500">DisponÃ­vel: {selectedItem.qty}</span>
                       <Button
                         size="sm"
                         variant="ghost"
                         onClick={() => setQtyToAllocate(selectedItem.qty)}
                       >
-                        Máximo
+                        MÃ¡ximo
                       </Button>
                     </div>
                   </div>
@@ -697,7 +679,7 @@ export default function StorageAllocation() {
                     <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
                       <p className="text-sm text-amber-800 flex items-center gap-2">
                         <AlertCircle className="h-4 w-4" />
-                        Alocação parcial - Restam {(selectedItem.qty - qtyToAllocate).toFixed(2)} unidades
+                        AlocaÃ§Ã£o parcial - Restam {(selectedItem.qty - qtyToAllocate).toFixed(2)} unidades
                       </p>
                     </div>
                   )}
@@ -717,7 +699,7 @@ export default function StorageAllocation() {
                   ) : (
                     <>
                       <CheckCircle className="h-5 w-5 mr-2" />
-                      Confirmar Alocação
+                      Confirmar AlocaÃ§Ã£o
                     </>
                   )}
                 </Button>

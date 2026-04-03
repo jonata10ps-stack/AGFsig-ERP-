@@ -475,7 +475,7 @@ export default function ProductionOrderDetail() {
         return;
       }
 
-      const deliveredBOM = bomDeliveries?.filter(bd => (bd.qty_delivered || 0) > 0) || [];
+      const deliveredBOM = bomDeliveries?.filter(bd => (Number(bd.qty) || 0) > 0) || [];
       if (deliveredBOM.length > 0) {
         toast.error(`Não é possível cancelar: ${deliveredBOM.length} item(ns) do BOM já entregues.`);
         setCancelLoading(false);
@@ -578,7 +578,7 @@ export default function ProductionOrderDetail() {
             // Suportar IDs novos e antigos para cruzamento
             const delivered = deliveryControls
               .filter(dc => (dc.consumed_product_id === bomItem.component_id) || (dc.component_id === bomItem.component_id))
-              .reduce((sum, dc) => sum + (Number(dc.qty || dc.qty_delivered) || 0), 0);
+              .reduce((sum, dc) => sum + (Number(dc.qty) || 0), 0);
             
             if (delivered < qtyNeeded) {
               warnings.push(`Componente ${bomItem.component_sku || 'da BOM'} - entregues ${delivered} de ${qtyNeeded} un`);

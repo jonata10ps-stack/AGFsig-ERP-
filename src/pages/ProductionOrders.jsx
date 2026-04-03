@@ -433,13 +433,9 @@ export default function ProductionOrders() {
               op_number: String(op.numero_op_externo || op.op_number || ''),
               numero_op_externo: String(op.numero_op_externo || ''),
               product_id: op.product_id,
-              product_name: String(op.product_name || ''),
-              product_sku: String(op.product_sku || ''),
-              consumed_product_id: bomItem.component_id,
-              consumed_product_sku: String(bomItem.component_sku || ''),
-              consumed_product_name: String(bomItem.component_name || ''),
+              component_id: bomItem.component_id,
               qty_planned: isNaN(qtyPlannedNum) ? "0" : String(qtyPlannedNum),
-              qty_delivered: "0",
+              qty: "0",
               status: 'ABERTO'
             });
             console.log('✅ BOMDeliveryControl criado:', ctrl?.id, bomItem.component_name);

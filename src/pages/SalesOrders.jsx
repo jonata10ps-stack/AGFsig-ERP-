@@ -53,7 +53,6 @@ function OrderForm({ order, clients, sellers, products, paymentConditions, onSav
     seller_name: '',
     payment_condition_id: '',
     payment_condition_name: '',
-    payment_terms: '',
     delivery_date: '',
     notes: '',
     status: 'RASCUNHO'
@@ -133,8 +132,9 @@ function OrderForm({ order, clients, sellers, products, paymentConditions, onSav
       toast.error('Adicione pelo menos um item ao pedido');
       return;
     }
+    const { payment_terms, ...dataToSave } = form; // Garante a remoção da prop caso ela venha de dados antigos!
     const total_amount = items.reduce((sum, item) => sum + item.total_price, 0);
-    onSave({ ...form, total_amount }, items);
+    onSave({ ...dataToSave, total_amount }, items);
   };
 
   return (
@@ -504,6 +504,11 @@ export default function SalesOrders() {
   });
 
   const handleCancelOrder = async (order) => {
+    if (order.status === 'EXPEDIDO' || order.status === 'FATURADO') {
+      toast.error('Não é possível cancelar um pedido já expedido ou faturado. Cancele o Faturamento/Expedição primeiro.');
+      return;
+    }
+
     const requests = await base44.entities.ProductionRequest.filter({ company_id: companyId, order_id: order.id });
     let hasOPs = false;
     
@@ -697,7 +702,7 @@ export default function SalesOrders() {
       </Card>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>{editing ? 'Editar Pedido' : 'Novo Pedido'}</DialogTitle>
           </DialogHeader>
@@ -715,7 +720,7 @@ export default function SalesOrders() {
       </Dialog>
 
       <Dialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
-        <DialogContent>
+        <DialogContent aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>Confirmar Exclusão</DialogTitle>
           </DialogHeader>
@@ -730,7 +735,7 @@ export default function SalesOrders() {
       </Dialog>
 
       <Dialog open={!!cancelWithOPsConfirm} onOpenChange={() => setCancelWithOPsConfirm(null)}>
-        <DialogContent>
+        <DialogContent aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>Cancelar Pedido com OPs Criadas</DialogTitle>
           </DialogHeader>

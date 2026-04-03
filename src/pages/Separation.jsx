@@ -12,136 +12,86 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import QRScanner from '@/components/scanner/QRScanner';
-import { Loader2, ChevronDown, ChevronRight } from 'lucide-react';
+import { Loader2, ChevronDown, ChevronRight, Barcode } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { executeInventoryTransaction } from '@/utils/inventoryTransactionUtils';
+import { PackageOpen, MapPin, Truck } from 'lucide-react';
 
-function ItemRow({ item, selectedOrder, companyId, onSeparate }) {
-  const [isExpanded, setIsExpanded] = useState(false);
-
-  // Buscar se o produto tem BOM
-  const { data: allBoms, isLoading: loadingBOM } = useQuery({
-    queryKey: ['product-bom', companyId, item.product_id],
-    queryFn: () => companyId ? base44.entities.BOM.filter({ 
-      product_id: item.product_id, 
-      company_id: companyId 
-    }) : Promise.resolve([]),
-    enabled: !!companyId && !!item.product_id,
-  });
-
-  const boms = (allBoms || []).filter(b => b.is_active === true || b.is_active === 'true');
-  const activeBOM = boms?.[0];
-
-  // Buscar itens do BOM se ele existir
-  const { data: bomItems, isLoading: loadingBOMItems } = useQuery({
-    queryKey: ['bom-items', activeBOM?.id],
-    queryFn: () => activeBOM ? base44.entities.BOMItem.filter({ bom_id: activeBOM.id }) : Promise.resolve([]),
-    enabled: !!activeBOM,
-  });
-
-  const hasBOM = boms && boms.length > 0;
+function ItemRow({ item, selectedOrder, companyId, onSeparate, separationMoves, onUndo }) {
   const remaining = item.qty - (item.qty_separated || 0);
   const isComplete = remaining <= 0;
+  
+  // Filtrar moves deste item
+  const itemMoves = (separationMoves || []).filter(m => m.product_id === item.product_id && m.type === 'SEPARACAO');
 
   return (
-    <div className={`p-4 rounded-lg border mb-3 ${isComplete ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-slate-200'}`}>
+    <div className={`p-4 rounded-lg border mb-3 ${isComplete ? 'bg-emerald-50 border-emerald-200 shadow-sm' : 'bg-white border-slate-200'}`}>
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-start gap-2">
-          {hasBOM && (
-            <button 
-              onClick={() => setIsExpanded(!isExpanded)}
-              className="mt-1 p-0.5 hover:bg-slate-100 rounded text-slate-500"
-            >
-              {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-            </button>
-          )}
           <div>
             <div className="flex items-center gap-2">
-              <p className="font-mono text-sm text-indigo-600">{item.product_sku}</p>
-              {hasBOM && <Badge variant="outline" className="text-[10px] h-4 bg-indigo-50 text-indigo-700 border-indigo-200">BOM</Badge>}
+              <p className="font-mono text-sm text-indigo-600 font-bold">{item.product_sku}</p>
             </div>
-            <p className="font-medium">{item.product_name}</p>
+            <p className="font-medium text-slate-800">{item.product_name}</p>
           </div>
         </div>
         {isComplete && (
-          <CheckCircle className="h-5 w-5 text-emerald-600" />
+          <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-200 border-none">
+            <CheckCircle className="h-3 w-3 mr-1" /> Completo
+          </Badge>
         )}
       </div>
 
-      {!isExpanded && (
-        <div className="flex items-center justify-between">
-          <div className="text-sm">
-            <span className="text-slate-500">Solicitado: </span>
-            <span className="font-medium">{item.qty}</span>
-            <span className="mx-2 text-slate-300">|</span>
-            <span className="text-slate-500">Separado: </span>
-            <span className="font-medium text-emerald-600">{item.qty_separated || 0}</span>
+      <div className="flex items-center justify-between py-2 border-y border-slate-50 mb-3">
+        <div className="text-sm flex gap-4">
+          <div>
+            <span className="text-slate-400 text-[10px] uppercase font-bold block">Pedido</span>
+            <span className="font-mono font-bold">{item.qty}</span>
           </div>
-          {!isComplete && selectedOrder.status === 'SEPARANDO' && !hasBOM && (
-            <Button
-              size="sm"
-              onClick={() => onSeparate(remaining)}
-            >
-              <Package className="h-4 w-4 mr-1" />
-              Separar ({remaining})
-            </Button>
-          )}
-          {hasBOM && !isComplete && (
-            <button 
-              onClick={() => setIsExpanded(true)}
-              className="text-xs text-indigo-600 hover:underline flex items-center gap-1"
-            >
-              Ver componentes para separar
-            </button>
-          )}
+          <div>
+            <span className="text-emerald-500 text-[10px] uppercase font-bold block">Separado</span>
+            <span className="font-mono font-bold text-emerald-600">{item.qty_separated || 0}</span>
+          </div>
         </div>
-      )}
+        
+        {!isComplete && (selectedOrder.status === 'SEPARANDO' || selectedOrder.status === 'CONFIRMADO') && (
+          <Button
+            size="sm"
+            onClick={() => onSeparate(remaining, null)}
+            className="shadow-sm bg-indigo-600 hover:bg-indigo-700"
+          >
+            <Package className="h-4 w-4 mr-1" />
+            Separar
+          </Button>
+        )}
+      </div>
 
-      {isExpanded && hasBOM && (
-        <div className="mt-4 pl-6 border-l-2 border-slate-100 space-y-3">
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Explosão de Kit/BOM:</p>
-          {loadingBOMItems ? (
-             <div className="flex items-center gap-2 text-xs text-slate-400">
-               <Loader2 className="h-3 w-3 animate-spin" />
-               Carregando componentes...
-             </div>
-          ) : bomItems?.length === 0 ? (
-            <p className="text-xs text-slate-400 italic">Nenhum componente cadastrado neste BOM.</p>
-          ) : (
-            bomItems.map((comp) => {
-              const neededQty = comp.quantity * item.qty;
-              return (
-                <div key={comp.id} className="flex items-center justify-between p-2 bg-slate-50 rounded border border-dashed border-slate-200">
-                  <div className="text-sm">
-                    <p className="font-mono text-xs text-slate-600">{comp.component_sku}</p>
-                    <p className="font-medium text-xs">{comp.component_name}</p>
-                    <p className="text-[10px] text-slate-500">Necessário: <span className="font-bold">{neededQty}</span> {comp.unit || 'UN'}</p>
-                  </div>
-                  {!isComplete && selectedOrder.status === 'SEPARANDO' && (
-                    <Button
-                      size="xs"
-                      variant="outline"
-                      className="h-7 text-[10px]"
-                      onClick={() => onSeparate(neededQty, comp)}
-                    >
-                      <Package className="h-3 w-3 mr-1" />
-                      Separar {neededQty}
-                    </Button>
-                  )}
-                </div>
-              );
-            })
-          )}
-          
-          <div className="pt-2 flex justify-between items-center">
-             <p className="text-[10px] text-slate-400">Após separar todos os componentes, marque o item principal:</p>
-             <Button
-                size="sm"
-                variant="secondary"
-                className="h-8"
-                onClick={() => onSeparate(remaining)}
-              >
-                Concluir Item Pai
-              </Button>
-          </div>
+      {itemMoves.length > 0 && (
+        <div className="space-y-2 mt-2">
+           <p className="text-[10px] uppercase font-bold text-slate-400">Histórico de Retirada:</p>
+           {itemMoves.map(move => (
+              <div key={move.id} className="flex items-center justify-between bg-slate-50 p-2 rounded border border-slate-100 text-xs">
+                 <div className="flex items-center gap-2">
+                    <div className="flex flex-col">
+                       <span className="text-indigo-600 font-bold flex items-center gap-1">
+                          <PackageOpen className="h-3 w-3" /> {move.qty} un.
+                       </span>
+                       <span className="text-[9px] text-slate-500 flex items-center gap-1">
+                          {move.from_location_id} <ArrowRight className="h-2 w-2" /> {move.to_location_id}
+                       </span>
+                    </div>
+                 </div>
+                 <Button
+                   variant="ghost"
+                   size="icon"
+                   className="h-7 w-7 text-rose-500 hover:bg-rose-50"
+                   onClick={() => onUndo(move)}
+                   title="Desfazer esta retirada"
+                 >
+                    <RotateCcw className="h-3 w-3" />
+                 </Button>
+              </div>
+           ))}
         </div>
       )}
     </div>
@@ -153,10 +103,17 @@ export default function Separation() {
   const { companyId } = useCompanyId();
   const [search, setSearch] = useState('');
   const [selectedOrder, setSelectedOrder] = useState(null);
+  
+  // Modal Picker Configuration
+  const [pickConfig, setPickConfig] = useState({ open: false, item: null, qty: 0, component: null, locs: [], whs: [], prods: [] });
+  const [scanProd, setScanProd] = useState('');
+  const [scanLoc, setScanLoc] = useState('');
+  const [scanDestLoc, setScanDestLoc] = useState('');
+  const [pickQty, setPickQty] = useState(0);
 
   const { data: orders, isLoading } = useQuery({
     queryKey: ['orders-for-separation', companyId],
-    queryFn: () => companyId ? base44.entities.SalesOrder.filter({ company_id: companyId, status: ['CONFIRMADO', 'RESERVADO', 'SEPARANDO'] }) : Promise.resolve([]),
+    queryFn: () => companyId ? base44.entities.SalesOrder.filter({ company_id: companyId, status: ['CONFIRMADO', 'RESERVADO', 'SEPARANDO', 'SEPARADO'] }) : Promise.resolve([]),
     enabled: !!companyId,
   });
 
@@ -177,43 +134,160 @@ export default function Separation() {
   });
 
   const separateItemMutation = useMutation({
-    mutationFn: async ({ item, qty, component }) => {
-      // Se for separação de um componente do BOM
-      if (component) {
-        // Criar movimentação de estoque para o COMPONENTE
-        await base44.entities.InventoryMove.create({
-          company_id: companyId,
-          type: 'SEPARACAO',
-          product_id: component.component_id,
-          qty: qty,
-          related_type: 'PEDIDO',
-          related_id: item.order_id,
-          reason: `Separação componente ${component.component_sku} para ${item.product_sku}`
-        });
+    mutationFn: async ({ item, qty, from_warehouse_id, from_location_id, to_warehouse_id, to_location_id }) => {
+      const newSeparated = (item.qty_separated || 0) + qty;
+      
+      await executeInventoryTransaction({
+        type: 'SEPARACAO',
+        product_id: item.product_id,
+        qty: qty,
+        from_warehouse_id,
+        from_location_id,
+        to_warehouse_id,
+        to_location_id,
+        related_type: 'PEDIDO',
+        related_id: item.order_id,
+        reason: `Picking: ${from_location_id} -> ${to_location_id} p/ pedido ${item.order_id}`
+      }, companyId);
 
-        // Opcional: Aqui poderíamos atualizar um controle específico de separação de componentes
-        // Por agora, vamos apenas marcar uma fração da separação do item pai se for o último componente
-        // Mas a lógica padrão é que a separação do PAI é incrementada quando o usuário confirma.
-      } else {
-        const newSeparated = (item.qty_separated || 0) + qty;
-        await base44.entities.SalesOrderItem.update(item.id, { qty_separated: newSeparated });
-        
-        await base44.entities.InventoryMove.create({
-          company_id: companyId,
-          type: 'SEPARACAO',
-          product_id: item.product_id,
-          qty: qty,
-          related_type: 'PEDIDO',
-          related_id: item.order_id,
-          reason: `Separação pedido`
-        });
+      await base44.entities.SalesOrderItem.update(item.id, { 
+        qty_separated: newSeparated 
+      });
+
+      // Checar se o pedido todo foi separado
+      const allItems = await base44.entities.SalesOrderItem.filter({ order_id: item.order_id });
+      const overallComplete = allItems.every(i => {
+         if (i.id === item.id) return (newSeparated >= i.qty);
+         return (i.qty_separated || 0) >= i.qty;
+      });
+
+      if (overallComplete) {
+         await base44.entities.SalesOrder.update(item.order_id, { status: 'SEPARADO' });
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['order-items', selectedOrder?.id] });
-      toast.success('Item separado');
+      queryClient.invalidateQueries({ queryKey: ['orders-for-separation', companyId] });
+      queryClient.invalidateQueries({ queryKey: ['separations-moves'] });
+      toast.success('Transferência para expedição concluída');
+      setPickConfig(prev => ({ ...prev, open: false }));
+      setScanProd('');
+      setScanLoc('');
+      setScanDestLoc('');
     },
+    onError: (error) => {
+      toast.error('Erro na movimentação: ' + error.message);
+    }
   });
+
+  const undoSeparationMutation = useMutation({
+    mutationFn: async (move) => {
+       // 1. Reverter no inventário (no destino)
+       await executeInventoryTransaction({
+         type: 'DESFAZER_SEPARACAO',
+         product_id: move.product_id,
+         qty: move.qty,
+         from_warehouse_id: move.to_warehouse_id,
+         from_location_id: move.to_location_id,
+         related_type: 'PEDIDO',
+         related_id: move.related_id,
+         reason: `Estorno de Picking: ${move.to_location_id}`
+       }, companyId);
+
+       // 2. Atualizar item do pedido
+       const item = items.find(i => i.product_id === move.product_id);
+       if (item) {
+          const newTotal = (item.qty_separated || 0) - (move.qty || 0);
+          await base44.entities.SalesOrderItem.update(item.id, { qty_separated: Math.max(0, newTotal) });
+       }
+
+       // 3. Voltar status do pedido para SEPARANDO se ele for SEPARADO
+       if (selectedOrder.status === 'SEPARADO') {
+          await base44.entities.SalesOrder.update(selectedOrder.id, { status: 'SEPARANDO' });
+       }
+    },
+    onSuccess: () => {
+       queryClient.invalidateQueries({ queryKey: ['order-items', selectedOrder?.id] });
+       queryClient.invalidateQueries({ queryKey: ['orders-for-separation', companyId] });
+       queryClient.invalidateQueries({ queryKey: ['separations-moves'] });
+       toast.success('Retirada estornada para o local de expedição');
+    }
+  });
+
+  const { data: separationMoves } = useQuery({
+     queryKey: ['separations-moves', selectedOrder?.id],
+     queryFn: () => base44.entities.InventoryMove.filter({ related_id: selectedOrder.id, type: 'SEPARACAO' }),
+     enabled: !!selectedOrder
+  });
+
+  const handleSeparateRequest = async (item, requiredQty, component) => {
+     // Pre-flight check de saldo global do banco de dados
+     const prodId = component ? component.component_id : item.product_id;
+     
+     const [bals, locs, whs, prods] = await Promise.all([
+       base44.entities.StockBalance.filter({ company_id: companyId, product_id: prodId }),
+       base44.entities.Location.filter({ company_id: companyId }),
+       base44.entities.Warehouse.filter({ company_id: companyId }),
+       base44.entities.Product.filter({ id: prodId })
+     ]);
+     
+     const available = bals.filter(b => parseFloat(b.qty_available) > 0);
+     if (available.length === 0) {
+        toast.error(`Aviso Crítico: O item ${prods[0]?.sku || ''} está sem saldo físico na empresa e não pode ser separado.`);
+        return;
+     }
+
+     const availQtyTotal = available.reduce((acc, b) => acc + (parseFloat(b.qty_available) || 0), 0);
+     const defaultQty = Math.min(requiredQty, availQtyTotal);
+     setPickQty(defaultQty);
+     setPickConfig({ open: true, item, qty: requiredQty, component, available, locs, whs, prods });
+  };
+
+  const handleConfirmLocation = () => {
+     if (!scanLoc) {
+         toast.error("Você precisa bipar ou digitar algum endereço/código de armazém.");
+         return;
+     }
+     
+     const match = pickConfig.available.find(b => {
+        const l = pickConfig.locs.find(lx => lx.id === b.location_id);
+        const w = pickConfig.whs.find(wx => wx.id === b.warehouse_id);
+        return (l?.barcode?.toLowerCase() === scanLoc.toLowerCase() || 
+                l?.id === scanLoc || 
+                w?.code?.toLowerCase() === scanLoc.toLowerCase());
+     });
+
+     if (!match) {
+        toast.error("O local escaneado não confere ou não possui saldo livre desse produto!");
+        return;
+     }
+     
+     if (scanProd) {
+        const pro = pickConfig.prods[0];
+        if (pro.sku?.toLowerCase() !== scanProd.toLowerCase() && pro.barcode?.toLowerCase() !== scanProd.toLowerCase()) {
+           toast.error("O código do produto lido não bate com o item logístico exigido da OP.");
+           return;
+        }
+     }
+     
+     const manualQty = parseFloat(pickQty) || 0;
+     if (manualQty <= 0) {
+         toast.error("A quantidade precisa ser maior que zero.");
+         return;
+     }
+     
+     if (manualQty > parseFloat(match.qty_available)) {
+         toast.error(`A prateleira ${scanLoc} possui apenas ${match.qty_available} un. disponível.`);
+         return;
+     }
+
+     separateItemMutation.mutate({ 
+        item: pickConfig.item, 
+        qty: manualQty, 
+        warehouse_id: match.warehouse_id, 
+        location_id: match.location_id 
+     });
+  };
 
   const completeSeparationMutation = useMutation({
     mutationFn: async (order) => {
@@ -428,7 +502,9 @@ export default function Separation() {
                     item={item} 
                     selectedOrder={selectedOrder} 
                     companyId={companyId}
-                    onSeparate={(qty, component) => separateItemMutation.mutate({ item, qty, component })}
+                    onSeparate={(qty, component) => handleSeparateRequest(item, qty, component)}
+                    separationMoves={separationMoves}
+                    onUndo={(move) => undoSeparationMutation.mutate(move)}
                   />
                 ))}
               </div>
@@ -436,6 +512,142 @@ export default function Separation() {
           </CardContent>
         </Card>
       </div>
+
+      <Dialog open={pickConfig.open} onOpenChange={(v) => !v && setPickConfig(prev => ({ ...prev, open: false }))}>
+        <DialogContent aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle>Mapeamento de Prateleira (Bipe/Scan)</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="flex flex-col gap-1 bg-indigo-50/50 p-4 rounded-xl border border-indigo-100 shadow-sm relative overflow-hidden">
+               <div className="absolute top-0 right-0 p-1 bg-indigo-100/30 rounded-bl-lg">
+                  <Package className="h-3 w-3 text-indigo-400" />
+               </div>
+               <div className="flex items-center justify-between">
+                 <span className="text-[10px] uppercase font-bold text-indigo-600 tracking-wider">Confirmação de Item</span>
+                 <Badge variant="outline" className="bg-white text-indigo-700 border-indigo-200 shadow-sm px-3">
+                   {pickConfig.qty} un.
+                 </Badge>
+               </div>
+               <p className="font-mono text-sm font-black text-slate-800 mt-1">
+                 {pickConfig.prods?.[0]?.sku}
+               </p>
+               <p className="text-xs text-slate-500 font-medium truncate">
+                 {pickConfig.prods?.[0]?.name}
+               </p>
+            </div>
+            
+            <div className="space-y-3">
+               <div>
+                  <label className="text-[10px] uppercase font-bold text-slate-500 mb-1 block">1. Escanear Produto (Opcional)</label>
+                  <QRScanner
+                    onScan={(code) => {
+                      const pro = pickConfig.prods?.[0];
+                      if (pro && pro.sku?.toLowerCase() !== code.toLowerCase() && pro.barcode?.toLowerCase() !== code.toLowerCase()) {
+                         toast.error("Produto lido NÃO confere com o item do pedido!");
+                         return;
+                      }
+                      setScanProd(code.trim());
+                      toast.success("Produto validado!");
+                    }}
+                    placeholder="Bipe o código do produto"
+                  />
+                  <div className="relative mt-2">
+                    <Barcode className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                    <Input 
+                      value={scanProd} onChange={e => setScanProd(e.target.value)} 
+                      placeholder="Ou digite o SKU/Barras..." className="pl-10 h-9 text-sm" 
+                    />
+                  </div>
+               </div>
+            </div>
+
+            <div className="space-y-3">
+               <div>
+                  <label className="text-[10px] uppercase font-bold text-indigo-600 mb-1 block">2. Escanear Prateleira (Obrigatório)</label>
+                  <QRScanner
+                    onScan={(code) => {
+                      setScanLoc(code.trim());
+                      toast.success("Endereço lido!");
+                    }}
+                    placeholder="Bipe o QR Code da prateleira"
+                    active={!scanLoc}
+                  />
+                  <div className="relative mt-2">
+                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-indigo-400" />
+                    <Input 
+                      autoFocus
+                      value={scanLoc} onChange={e => setScanLoc(e.target.value)} 
+                      placeholder="Ou digite o código da prateleira..." className="pl-10 h-9 text-sm border-indigo-200" 
+                    />
+                  </div>
+               </div>
+            </div>
+
+            <div className="space-y-3 pt-1">
+               <div>
+                  <label className="text-[10px] uppercase font-bold text-emerald-600 mb-1 block">3. Quantidade a Retirar deste Local</label>
+                  <div className="relative">
+                    <Package className="absolute left-3 top-2.5 h-4 w-4 text-emerald-400" />
+                    <Input 
+                      type="number"
+                      value={pickQty} 
+                      onChange={e => setPickQty(e.target.value)} 
+                      placeholder="Informe a quantidade..." 
+                      className="pl-10 h-9 text-sm border-emerald-200" 
+                    />
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-1">Sugerido: {pickConfig.qty} un.</p>
+               </div>
+            </div>
+
+            <div className="space-y-3 pt-1">
+               <div>
+                  <label className="text-[10px] uppercase font-bold text-slate-900 mb-1 block">4. Endereço de DESTINO (Doca/Expedição)</label>
+                  <QRScanner
+                    onScan={(code) => {
+                      setScanDestLoc(code.trim());
+                      toast.success("Destino lido!");
+                    }}
+                    placeholder="Bipe o QR Code do destino"
+                    active={scanLoc && !scanDestLoc}
+                  />
+                  <div className="relative mt-2">
+                    <Truck className="absolute left-3 top-2.5 h-4 w-4 text-slate-600" />
+                    <Input 
+                      value={scanDestLoc} onChange={e => setScanDestLoc(e.target.value)} 
+                      placeholder="Ou digite o código de destino..." className="pl-10 h-9 text-sm border-slate-300" 
+                    />
+                  </div>
+               </div>
+            </div>
+
+            <div className="pt-2 border-t text-xs">
+               <p className="text-slate-500 font-semibold mb-2 italic text-center">Dica: Retire da prateleira e registre onde na expedição o lote foi colocado.</p>
+            </div>
+            
+            <div className="pt-2 border-t text-xs">
+              <p className="text-slate-500 font-semibold mb-2">Sugestões (Saldos Livres Ativos):</p>
+              {pickConfig.available?.map(b => {
+                 const l = pickConfig.locs?.find(lx => lx.id === b.location_id);
+                 const w = pickConfig.whs?.find(wx => wx.id === b.warehouse_id);
+                 return (
+                   <div key={b.id} className="flex justify-between py-1 px-2 mb-1 bg-slate-100 rounded">
+                     <span>{w?.code} {l ? `- ${l.rua}/${l.modulo}/${l.nivel} (${l.barcode})` : ''}</span>
+                     <strong className="text-emerald-700">{b.qty_available} un.</strong>
+                   </div>
+                 )
+              })}
+            </div>
+          </div>
+          <DialogFooter>
+             <Button variant="outline" onClick={() => setPickConfig(prev => ({ ...prev, open: false }))}>Cancelar</Button>
+             <Button onClick={handleConfirmLocation} disabled={separateItemMutation.isPending || !scanLoc.trim() || !scanDestLoc.trim()}>
+                 {separateItemMutation.isPending ? 'Transferindo...' : 'Confirmar e Mover para Expedição'}
+             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

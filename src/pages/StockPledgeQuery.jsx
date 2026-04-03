@@ -46,7 +46,7 @@ export default function StockPledgeQuery() {
       if (!companyId) return [];
       return base44.entities.ProductionOrder.filter({
         company_id: companyId,
-        status: { $in: ['ABERTA', 'EM_ANDAMENTO', 'PAUSADA'] }
+        status: ['ABERTA', 'EM_ANDAMENTO', 'PAUSADA']
       });
     },
     enabled: !!companyId
@@ -133,14 +133,14 @@ export default function StockPledgeQuery() {
     queryKey: ['stock-balances-all', companyId],
     queryFn: async () => {
       if (!companyId) return [];
-      const all = await base44.entities.StockBalance.filter({ company_id: companyId }, '-updated_date', 5000);
+      const all = await base44.entities.StockBalance.filter({ company_id: companyId });
       const map = {};
       all.forEach(sb => {
         if (!map[sb.product_id]) {
           map[sb.product_id] = { product_id: sb.product_id, qty_available: 0, qty_reserved: 0 };
         }
-        map[sb.product_id].qty_available += sb.qty_available || 0;
-        map[sb.product_id].qty_reserved += sb.qty_reserved || 0;
+        map[sb.product_id].qty_available += Number(sb.qty_available || 0);
+        map[sb.product_id].qty_reserved += Number(sb.qty_reserved || 0);
       });
       return Object.values(map);
     },
@@ -187,7 +187,7 @@ export default function StockPledgeQuery() {
     allReservations
       .filter(r => r.status === 'RESERVADA' || r.status === 'SEPARADA')
       .forEach(r => {
-        reservationQtyMap[r.product_id] = (reservationQtyMap[r.product_id] || 0) + (r.qty || 0);
+        reservationQtyMap[r.product_id] = (reservationQtyMap[r.product_id] || 0) + Number(r.qty || 0);
       });
 
     const componentMap = {};
@@ -196,19 +196,13 @@ export default function StockPledgeQuery() {
       const key = item.component_id;
 
       // EMPENHO = total do BOM (fixo, independente de entrega)
-      const totalRequired = (item.quantity || 0) * (item.qty_planned || 1);
+      const totalRequired = Number(item.quantity || 0) * Number(item.qty_planned || 1);
 
-      // ENTREGUE = BOMDeliveryControl.qty_delivered para essa OP+componente
-      const deliveredByBOM = deliveryControls
+      // ENTREGUE = BOMDeliveryControl.qty para essa OP+componente
+      // (O BOMDeliveryControl agora é alimentado automaticamente por todos os InventoryMoves vinculados)
+      const deliveredQty = deliveryControls
         .filter(dc => dc.op_id === item.op_id && dc.component_id === item.component_id)
-        .reduce((sum, dc) => sum + (dc.qty_delivered || 0), 0);
-
-      // ENTREGUE += InventoryMoves SAIDA/PRODUCAO_CONSUMO vinculados à OP para esse produto
-      const deliveredByMove = opInventoryMoves
-        .filter(m => m.related_id === item.op_id && m.product_id === item.component_id)
-        .reduce((sum, m) => sum + (m.qty || 0), 0);
-
-      const deliveredQty = deliveredByBOM + deliveredByMove;
+        .reduce((sum, dc) => sum + (Number(dc.qty) || 0), 0);
 
       if (!componentMap[key]) {
         componentMap[key] = {
@@ -235,15 +229,15 @@ export default function StockPledgeQuery() {
       .filter(comp => validProductIds.has(comp.component_id))
       .map(comp => {
         const stock = stockBalances.find(sb => sb.product_id === comp.component_id);
-        const stockQty = stock?.qty_available || 0;
+        const stockQty = Number(stock?.qty_available || 0);
 
         // Reservado: soma das Reservations ativas (RESERVADA + SEPARADA)
         const reservedQty = reservationQtyMap[comp.component_id] || 0;
 
         const available = stockQty - reservedQty;
 
-        // Necessidade = Empenho - Disponível + Entregue
-        const necessity = comp.pledged_qty - available + comp.delivered_qty;
+        // Necessidade = (Empenho - Entregue) - Disponível
+        const necessity = comp.pledged_qty - comp.delivered_qty - available;
 
         return {
           ...comp,
@@ -259,8 +253,8 @@ export default function StockPledgeQuery() {
   // Filter by search
   const filtered = useMemo(() => {
     return pledgeData.filter(item =>
-      item.component_sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.component_name.toLowerCase().includes(searchTerm.toLowerCase())
+      (item.component_sku || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (item.component_name || '').toLowerCase().includes(searchTerm.toLowerCase())
     );
   }, [pledgeData, searchTerm]);
 

@@ -1,4 +1,6 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
+import { processProductionOrderControls } from '@/utils/productionControlUtils';
+import { executeInventoryTransaction } from '@/utils/inventoryTransactionUtils';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { useCompanyId } from '@/components/useCompanyId';
@@ -101,10 +103,10 @@ export default function CreateInventoryMove() {
     enabled: !!companyId && !!form.related_id && form.related_type === 'OP',
   });
 
-  // Validar saldo disponível em tempo real
+  // Validar saldo disponÃ­vel em tempo real
   useEffect(() => {
     const validateStock = async () => {
-      console.log('=== VALIDAÇÃO DE ESTOQUE ===');
+      console.log('=== VALIDAÃ‡ÃƒO DE ESTOQUE ===');
       console.log('companyId:', companyId);
       console.log('product_id:', form.product_id);
       console.log('from_warehouse_id:', form.from_warehouse_id);
@@ -113,7 +115,7 @@ export default function CreateInventoryMove() {
       console.log('type:', form.type);
       
       if (!companyId || !form.product_id || !form.from_warehouse_id || form.qty <= 0) {
-        console.log('Validação ignorada - dados incompletos');
+        console.log('ValidaÃ§Ã£o ignorada - dados incompletos');
         setAvailableStock(null);
         setStockError(null);
         return;
@@ -127,7 +129,7 @@ export default function CreateInventoryMove() {
             warehouse_id: form.from_warehouse_id
           };
           
-          // Se tiver location_id específico, filtrar por ele
+          // Se tiver location_id especÃ­fico, filtrar por ele
           if (form.from_location_id) {
             filterQuery.location_id = form.from_location_id;
           }
@@ -138,11 +140,11 @@ export default function CreateInventoryMove() {
           console.log('Detalhes dos saldos:', JSON.stringify(balances, null, 2));
 
           const totalAvailable = balances.reduce((sum, b) => sum + (b.qty_available || 0), 0);
-          console.log('Total disponível calculado:', totalAvailable);
+          console.log('Total disponÃ­vel calculado:', totalAvailable);
           setAvailableStock(totalAvailable);
 
           if (totalAvailable < form.qty) {
-            setStockError(`Estoque insuficiente! Disponível: ${totalAvailable}`);
+            setStockError(`Estoque insuficiente! DisponÃ­vel: ${totalAvailable}`);
           } else {
             setStockError(null);
           }
@@ -164,168 +166,25 @@ export default function CreateInventoryMove() {
          return acc;
        }, {});
 
-       // Criar movimento
-       const move = await base44.entities.InventoryMove.create({ ...data, company_id: companyId });
-
-      // Se for SAIDA relacionada a OP, atualizar BOMDeliveryControl e OPConsumptionControl
-      if (data.type === 'SAIDA' && data.related_type === 'OP' && data.related_id) {
-        const deliveryControls = await base44.entities.BOMDeliveryControl.filter({
-          op_id: data.related_id,
-          consumed_product_id: data.product_id,
-          status: 'ABERTO'
-        });
-
-        // Atualizar cada delivery control pendente
-        for (const dc of deliveryControls) {
-          const newDelivered = Math.min((dc.qty_delivered || 0) + data.qty, dc.qty_planned || 0);
-          const newStatus = (dc.qty_planned && newDelivered >= dc.qty_planned) ? 'ENTREGUE' : 'ABERTO';
-
-          await base44.entities.BOMDeliveryControl.update(dc.id, {
-            qty_delivered: newDelivered,
-            status: newStatus
-          });
-
-          if (dc.qty_planned && newDelivered < dc.qty_planned) break;
-        }
-
-      }
-
-      // Atualizar saldo de estoque
-      if (data.type === 'ENTRADA') {
-        const balances = await base44.entities.StockBalance.filter({
-          company_id: companyId,
+        // Executar transação centralizada (Garante saldo não negativo e consistência)
+        const move = await executeInventoryTransaction({
+          type: data.type,
           product_id: data.product_id,
-          warehouse_id: data.to_warehouse_id,
-          location_id: data.to_location_id || null
-        });
+          qty: data.qty,
+          from_warehouse_id: data.from_warehouse_id,
+          from_location_id: data.from_location_id,
+          to_warehouse_id: data.to_warehouse_id,
+          to_location_id: data.to_location_id,
+          unit_cost: data.unit_cost,
+          related_type: data.related_type,
+          related_id: data.related_id,
+          reason: data.reason,
+          notes: data.notes
+        }, companyId);
 
-        if (balances.length > 1) {
-          throw new Error(`ERRO: Existem ${balances.length} registros duplicados de StockBalance! Contate o administrador.`);
-        }
-
-        if (balances.length > 0) {
-          const balance = balances[0];
-          const newQty = (balance.qty_available || 0) + data.qty;
-          const newAvgCost = data.unit_cost > 0
-            ? ((balance.qty_available || 0) * (balance.avg_cost || 0) + data.qty * data.unit_cost) / newQty
-            : balance.avg_cost;
-          
-          await base44.entities.StockBalance.update(balance.id, {
-            qty_available: newQty,
-            avg_cost: newAvgCost
-          });
-        } else {
-          await base44.entities.StockBalance.create({
-            company_id: companyId,
-            product_id: data.product_id,
-            warehouse_id: data.to_warehouse_id,
-            location_id: data.to_location_id,
-            qty_available: data.qty,
-            qty_reserved: 0,
-            qty_separated: 0,
-            avg_cost: data.unit_cost || 0
-          });
-        }
-        } else if (data.type === 'SAIDA') {
-        const balances = await base44.entities.StockBalance.filter({
-          company_id: companyId,
-          product_id: data.product_id,
-          warehouse_id: data.from_warehouse_id,
-          location_id: data.from_location_id || null
-        });
-
-        if (balances.length > 1) {
-          throw new Error(`ERRO: Existem ${balances.length} registros duplicados de StockBalance! Contate o administrador.`);
-        }
-
-        if (balances.length > 0) {
-          const balance = balances[0];
-          await base44.entities.StockBalance.update(balance.id, {
-            qty_available: (balance.qty_available || 0) - data.qty
-          });
-        }
-      } else if (data.type === 'TRANSFERENCIA') {
-        // Buscar saldo de origem - primeiro tentar com localização específica
-        let fromBalances = await base44.entities.StockBalance.filter({
-          company_id: companyId,
-          product_id: data.product_id,
-          warehouse_id: data.from_warehouse_id,
-          location_id: data.from_location_id
-        });
-
-        // Se não encontrar com localização, buscar sem localização (location_id = null)
-        if (fromBalances.length === 0) {
-          fromBalances = await base44.entities.StockBalance.filter({
-            company_id: companyId,
-            product_id: data.product_id,
-            warehouse_id: data.from_warehouse_id,
-            location_id: null
-          });
-        }
-
-        if (fromBalances.length === 0) {
-          throw new Error('Saldo de origem não encontrado na localização especificada');
-        }
-
-        if (fromBalances.length > 1) {
-          throw new Error(`ERRO: Existem ${fromBalances.length} registros duplicados de StockBalance na origem! Contate o administrador.`);
-        }
-
-        const fromBalance = fromBalances[0];
-        const avgCost = fromBalance.avg_cost || 0;
-
-        // Debitar origem
-        await base44.entities.StockBalance.update(fromBalance.id, {
-          qty_available: (fromBalance.qty_available || 0) - data.qty
-        });
-
-        // Creditar destino
-        const toBalances = await base44.entities.StockBalance.filter({
-          company_id: companyId,
-          product_id: data.product_id,
-          warehouse_id: data.to_warehouse_id,
-          location_id: data.to_location_id || null
-        });
-
-        if (toBalances.length > 1) {
-          throw new Error(`ERRO: Existem ${toBalances.length} registros duplicados de StockBalance no destino! Contate o administrador.`);
-        }
-
-        if (toBalances.length > 0) {
-           await base44.entities.StockBalance.update(toBalances[0].id, {
-             qty_available: (toBalances[0].qty_available || 0) + data.qty
-           });
-         } else {
-           await base44.entities.StockBalance.create({
-             company_id: companyId,
-             product_id: data.product_id,
-             warehouse_id: data.to_warehouse_id,
-             location_id: data.to_location_id,
-             qty_available: data.qty,
-             qty_reserved: 0,
-             qty_separated: 0,
-             avg_cost: avgCost
-           });
-         }
-        } else if (data.type === 'BAIXA') {
-         // BAIXA apenas debita o saldo
-         const balances = await base44.entities.StockBalance.filter({
-           company_id: companyId,
-           product_id: data.product_id,
-           warehouse_id: data.from_warehouse_id,
-           location_id: data.from_location_id || null
-         });
-
-         if (balances.length > 1) {
-           throw new Error(`ERRO: Existem ${balances.length} registros duplicados de StockBalance! Contate o administrador.`);
-         }
-
-         if (balances.length > 0) {
-           const balance = balances[0];
-           await base44.entities.StockBalance.update(balance.id, {
-             qty_available: (balance.qty_available || 0) - data.qty
-           });
-         }
+        // Centralizado: Atualizar Controles de OP (BOM e Consumo) - Se relacionado a OP
+        if (data.related_type === 'OP' && data.related_id) {
+          await processProductionOrderControls(data, companyId, move.id);
         }
 
       // Criar log de auditoria
@@ -364,72 +223,72 @@ export default function CreateInventoryMove() {
       }
     },
     onError: (error) => {
-      toast.error('Erro ao criar movimentação: ' + error.message);
+      toast.error('Erro ao criar Movimentação: ' + error.message);
     }
   });
 
   const handleSubmit = (e) => {
     e.preventDefault();
 
-    // Evitar múltiplos submits
+    // Evitar mÃºltiplos submits
     if (createMoveMutation.isPending) {
       return;
     }
 
     if (!form.product_id || form.qty <= 0) {
-      toast.error('Produto e quantidade são obrigatórios');
+      toast.error('Produto e quantidade sÃ£o obrigatÃ³rios');
       return;
     }
 
     if (form.type === 'ENTRADA' && !form.to_warehouse_id) {
-      toast.error('Armazém de destino é obrigatório para entrada');
+      toast.error('ArmazÃ©m de destino Ã© obrigatÃ³rio para entrada');
       return;
     }
 
     if (form.type === 'SAIDA' && !form.from_warehouse_id) {
-      toast.error('Armazém de origem é obrigatório para saída');
+      toast.error('ArmazÃ©m de origem Ã© obrigatÃ³rio para saÃ­da');
       return;
     }
 
     if (form.type === 'BAIXA' && !form.from_warehouse_id) {
-      toast.error('Armazém de origem é obrigatório para baixa');
+      toast.error('ArmazÃ©m de origem Ã© obrigatÃ³rio para baixa');
       return;
     }
 
     if (form.type === 'BAIXA' && !form.baixa_motivo) {
-      toast.error('Motivo da baixa é obrigatório');
+      toast.error('Motivo da baixa Ã© obrigatÃ³rio');
       return;
     }
 
     if (form.type === 'BAIXA' && !form.cost_center_id) {
-      toast.error('Centro de custos é obrigatório para baixa');
+      toast.error('Centro de custos Ã© obrigatÃ³rio para baixa');
       return;
     }
 
     if (form.type === 'TRANSFERENCIA' && (!form.from_warehouse_id || !form.to_warehouse_id)) {
-      toast.error('Armazéns de origem e destino são obrigatórios para transferência');
+      toast.error('ArmazÃ©ns de origem e destino sÃ£o obrigatÃ³rios para transferÃªncia');
       return;
     }
 
     if (form.type === 'TRANSFERENCIA' && !form.from_location_id) {
-      toast.error('Localização de origem é obrigatória para transferência');
+      toast.error('LocalizaÃ§Ã£o de origem Ã© obrigatÃ³ria para transferÃªncia');
       return;
     }
 
     if (form.type === 'TRANSFERENCIA' && !form.to_location_id) {
-      toast.error('Localização de destino é obrigatória para transferência');
+      toast.error('LocalizaÃ§Ã£o de destino Ã© obrigatÃ³ria para transferÃªncia');
       return;
     }
 
     if (stockError) {
-      toast.error('Estoque insuficiente para esta operação');
+      toast.error('Estoque insuficiente para esta operaÃ§Ã£o');
       return;
     }
 
-    // Validação final: garantir que não resultará em saldo negativo
+    // ValidaÃ§Ã£o final: garantir que nÃ£o resultarÃ¡ em saldo negativo
     if ((form.type === 'SAIDA' || form.type === 'TRANSFERENCIA' || form.type === 'BAIXA') && availableStock !== null) {
       if (availableStock - form.qty < 0) {
-        toast.error('Operação não permitida: resultaria em saldo negativo');
+        toast.error('OperaÃ§Ã£o nÃ£o permitida: resultaria em saldo negativo');
         return;
       }
     }
@@ -468,8 +327,8 @@ export default function CreateInventoryMove() {
 
   const MOVE_TYPES = {
     ENTRADA: 'Entrada',
-    SAIDA: 'Saída',
-    TRANSFERENCIA: 'Transferência',
+    SAIDA: 'SaÃ­da',
+    TRANSFERENCIA: 'TransferÃªncia',
     BAIXA: 'Baixa de Estoque'
   };
 
@@ -479,9 +338,9 @@ export default function CreateInventoryMove() {
     'Perda',
     'Quebra',
     'Uso Interno',
-    'Doação',
+    'DoaÃ§Ã£o',
     'Descarte',
-    'Amostra Grátis',
+    'Amostra GrÃ¡tis',
     'Outro'
   ];
 
@@ -495,7 +354,7 @@ export default function CreateInventoryMove() {
         </Link>
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Nova Movimentação de Estoque</h1>
-          <p className="text-slate-500">Registre entradas, saídas e transferências</p>
+          <p className="text-slate-500">Registre entradas, saÃ­das e transferÃªncias</p>
         </div>
       </div>
 
@@ -528,7 +387,7 @@ export default function CreateInventoryMove() {
                     label="Produto *"
                     value={form.product_id}
                     onSelect={(v) => setForm({ ...form, product_id: v })}
-                    placeholder="Buscar por código ou descrição..."
+                    placeholder="Buscar por cÃ³digo ou descriÃ§Ã£o..."
                     required
                   />
                 </div>
@@ -552,15 +411,25 @@ export default function CreateInventoryMove() {
                             toast.success(`Produto ${product.sku} selecionado`);
                             setScanProductOpen(false);
                           } else {
-                            toast.error('Produto não encontrado');
+                            toast.error('Produto nÃ£o encontrado');
                           }
                         }}
-                        placeholder="Escaneie o código do produto"
+                        placeholder="Escaneie o cÃ³digo do produto"
                       />
                     </DialogContent>
                   </Dialog>
                 </div>
               </div>
+
+              {/* Alerta de Item Extra */}
+              {form.related_type === 'OP' && form.product_id && opComponents && !opComponents.some(c => c.consumed_product_id === form.product_id) && (
+                <Alert className="bg-amber-50 border-amber-200 text-amber-800 py-2">
+                  <AlertCircle className="h-4 w-4 mt-0.5" />
+                  <AlertDescription className="text-xs">
+                    <strong>Item Extra:</strong> Este produto nÃ£o consta na BOM original desta OP. Ele serÃ¡ registrado como um consumo adicional (Extra).
+                  </AlertDescription>
+                </Alert>
+              )}
             </div>
 
             {/* Quantidade */}
@@ -574,12 +443,12 @@ export default function CreateInventoryMove() {
               />
               {availableStock !== null && (form.type === 'SAIDA' || form.type === 'TRANSFERENCIA' || form.type === 'BAIXA') && (
                 <p className={`text-sm ${stockError ? 'text-red-600' : 'text-emerald-600'}`}>
-                  Disponível: {availableStock}
+                  DisponÃ­vel: {availableStock}
                 </p>
               )}
             </div>
 
-            {/* Campos específicos para BAIXA */}
+            {/* Campos especÃ­ficos para BAIXA */}
             {form.type === 'BAIXA' && (
               <>
                 <div className="space-y-2">
@@ -635,7 +504,7 @@ export default function CreateInventoryMove() {
               <>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>Armazém de Origem *</Label>
+                    <Label>ArmazÃ©m de Origem *</Label>
                     <Select value={form.from_warehouse_id} onValueChange={(v) => setForm({ ...form, from_warehouse_id: v, from_location_id: '' })}>
                       <SelectTrigger>
                         <SelectValue placeholder="Selecione..." />
@@ -648,12 +517,12 @@ export default function CreateInventoryMove() {
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label>Localização de Origem</Label>
+                    <Label>LocalizaÃ§Ã£o de Origem</Label>
                     <div className="flex gap-2">
                       <div className="flex-1">
                         <Select value={form.from_location_id} onValueChange={(v) => setForm({ ...form, from_location_id: v })}>
                           <SelectTrigger>
-                            <SelectValue placeholder="Selecione a localização" />
+                            <SelectValue placeholder="Selecione a localizaÃ§Ã£o" />
                           </SelectTrigger>
                           <SelectContent>
                             {fromLocations?.map(l => (
@@ -670,7 +539,7 @@ export default function CreateInventoryMove() {
                         </DialogTrigger>
                         <DialogContent>
                           <DialogHeader>
-                            <DialogTitle>Escanear Localização de Origem</DialogTitle>
+                            <DialogTitle>Escanear LocalizaÃ§Ã£o de Origem</DialogTitle>
                           </DialogHeader>
                           <QRScanner
                             active={scanFromLocationOpen}
@@ -678,13 +547,13 @@ export default function CreateInventoryMove() {
                               const location = locations?.find(l => l.barcode === code || l.barcode === code.trim());
                               if (location) {
                                 setForm({ ...form, from_location_id: location.id, from_warehouse_id: location.warehouse_id });
-                                toast.success(`Localização ${location.barcode} selecionada`);
+                                toast.success(`LocalizaÃ§Ã£o ${location.barcode} selecionada`);
                                 setScanFromLocationOpen(false);
                               } else {
-                                toast.error('Localização não encontrada');
+                                toast.error('LocalizaÃ§Ã£o nÃ£o encontrada');
                               }
                             }}
-                            placeholder="Escaneie o QR da localização de origem"
+                            placeholder="Escaneie o QR da localizaÃ§Ã£o de origem"
                           />
                         </DialogContent>
                       </Dialog>
@@ -699,7 +568,7 @@ export default function CreateInventoryMove() {
               <>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>Armazém de Destino *</Label>
+                    <Label>ArmazÃ©m de Destino *</Label>
                     <Select value={form.to_warehouse_id} onValueChange={(v) => setForm({ ...form, to_warehouse_id: v, to_location_id: '' })}>
                       <SelectTrigger>
                         <SelectValue placeholder="Selecione..." />
@@ -712,12 +581,12 @@ export default function CreateInventoryMove() {
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label>Localização de Destino</Label>
+                    <Label>LocalizaÃ§Ã£o de Destino</Label>
                     <div className="flex gap-2">
                       <div className="flex-1">
                         <Select value={form.to_location_id} onValueChange={(v) => setForm({ ...form, to_location_id: v })}>
                           <SelectTrigger>
-                            <SelectValue placeholder="Selecione a localização" />
+                            <SelectValue placeholder="Selecione a localizaÃ§Ã£o" />
                           </SelectTrigger>
                           <SelectContent>
                             {toLocations?.map(l => (
@@ -734,7 +603,7 @@ export default function CreateInventoryMove() {
                         </DialogTrigger>
                         <DialogContent>
                           <DialogHeader>
-                            <DialogTitle>Escanear Localização de Destino</DialogTitle>
+                            <DialogTitle>Escanear LocalizaÃ§Ã£o de Destino</DialogTitle>
                           </DialogHeader>
                           <QRScanner
                             active={scanToLocationOpen}
@@ -742,13 +611,13 @@ export default function CreateInventoryMove() {
                               const location = locations?.find(l => l.barcode === code || l.barcode === code.trim());
                               if (location) {
                                 setForm({ ...form, to_location_id: location.id, to_warehouse_id: location.warehouse_id });
-                                toast.success(`Localização ${location.barcode} selecionada`);
+                                toast.success(`LocalizaÃ§Ã£o ${location.barcode} selecionada`);
                                 setScanToLocationOpen(false);
                               } else {
-                                toast.error('Localização não encontrada');
+                                toast.error('LocalizaÃ§Ã£o nÃ£o encontrada');
                               }
                             }}
-                            placeholder="Escaneie o QR da localização de destino"
+                            placeholder="Escaneie o QR da localizaÃ§Ã£o de destino"
                           />
                         </DialogContent>
                       </Dialog>
@@ -758,10 +627,10 @@ export default function CreateInventoryMove() {
               </>
             )}
 
-            {/* Custo Unitário (apenas ENTRADA) */}
+            {/* Custo UnitÃ¡rio (apenas ENTRADA) */}
             {form.type === 'ENTRADA' && (
               <div className="space-y-2">
-                <Label>Custo Unitário (R$)</Label>
+                <Label>Custo UnitÃ¡rio (R$)</Label>
                 <Input
                   type="number"
                   step="0.01"
@@ -782,7 +651,7 @@ export default function CreateInventoryMove() {
                   <SelectContent>
                     <SelectItem value={null}>Nenhum</SelectItem>
                     <SelectItem value="PEDIDO">Pedido de Venda</SelectItem>
-                    <SelectItem value="OP">Ordem de Produção</SelectItem>
+                    <SelectItem value="OP">Ordem de ProduÃ§Ã£o</SelectItem>
                     <SelectItem value="COMPRA">Compra</SelectItem>
                   </SelectContent>
                 </Select>
@@ -833,7 +702,7 @@ export default function CreateInventoryMove() {
                               toast.success(`OP ${op.numero_op_externo} selecionada`);
                               setScanOPOpen(false);
                             } else {
-                              toast.error('OP não encontrada');
+                              toast.error('OP nÃ£o encontrada');
                             }
                           }}
                           placeholder="Escaneie o QR da OP"
@@ -848,14 +717,19 @@ export default function CreateInventoryMove() {
             {/* Lista de Componentes da OP (Se houver) */}
             {form.related_type === 'OP' && form.related_id && (
               <div className="mt-4 p-4 bg-slate-50 border border-slate-200 rounded-lg space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
-                    <Package className="h-4 w-4 text-indigo-600" />
-                    Componentes Pendentes para esta OP
-                  </h3>
-                  <Badge variant="outline" className="bg-white">
-                    {opComponents?.length || 0} pendentes
-                  </Badge>
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                      <Package className="h-4 w-4 text-indigo-600" />
+                      Componentes Planejados (BOM)
+                    </h3>
+                    <Badge variant="outline" className="bg-white">
+                      {opComponents?.length || 0} pendentes
+                    </Badge>
+                  </div>
+                  <p className="text-[10px] text-slate-500 bg-indigo-50 p-1.5 rounded border border-indigo-100">
+                    <strong>Dica:</strong> Se precisar entregar um item que nÃ£o estÃ¡ nesta lista, basta buscÃ¡-lo normalmente no campo <strong>"Produto"</strong> no topo da pÃ¡gina. Ele serÃ¡ registrado como um "item extra" para esta OP.
+                  </p>
                 </div>
                 
                 {loadingComponents ? (
@@ -877,7 +751,7 @@ export default function CreateInventoryMove() {
                             ...form,
                             product_id: comp.consumed_product_id,
                             qty: remaining,
-                            type: 'SAIDA', // Geralmente é saída/baixa para a produção
+                            type: 'SAIDA', // Geralmente Ã© saÃ­da/baixa para a produÃ§Ã£o
                             reason: `Baixa OP ${opComponents[0]?.op_number || ''}`
                           });
                           toast.info(`Selecionado: ${comp.consumed_product_name}`);
@@ -897,18 +771,18 @@ export default function CreateInventoryMove() {
                     ))}
                   </div>
                 )}
-                <p className="text-[10px] text-slate-400">Clique em um componente para preencher o formulário automaticamente.</p>
+                <p className="text-[10px] text-slate-400">Clique em um componente para preencher o formulÃ¡rio automaticamente.</p>
               </div>
             )}
 
             {/* Motivo */}
             <div className="space-y-2">
-              <Label>Motivo / Observações</Label>
+              <Label>Motivo / ObservaÃ§Ãµes</Label>
               <Textarea
                 value={form.reason}
                 onChange={(e) => setForm({ ...form, reason: e.target.value })}
                 rows={3}
-                placeholder="Descreva o motivo desta movimentação..."
+                placeholder="Descreva o motivo desta Movimentação..."
               />
             </div>
 
@@ -920,7 +794,7 @@ export default function CreateInventoryMove() {
               </Alert>
             )}
 
-            {/* Botões */}
+            {/* BotÃµes */}
             <div className="flex justify-end gap-3 pt-4">
               <Link to={createPageUrl('InventoryMoves')}>
                 <Button type="button" variant="outline">Cancelar</Button>
@@ -958,7 +832,7 @@ export default function CreateInventoryMove() {
           </DialogHeader>
           <div className="space-y-4">
             <p className="text-sm text-slate-600">
-              A baixa de estoque foi registrada. Deseja gerar o PDF da requisição de baixa?
+              A baixa de estoque foi registrada. Deseja gerar o PDF da requisiÃ§Ã£o de baixa?
             </p>
             <div className="flex gap-3">
               <Button
@@ -966,7 +840,7 @@ export default function CreateInventoryMove() {
                 onClick={handleCloseBaixaDialog}
                 className="flex-1"
               >
-                Não, Continuar
+                NÃ£o, Continuar
               </Button>
               <Button
                 onClick={() => {

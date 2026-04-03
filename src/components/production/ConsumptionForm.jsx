@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Plus, X, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import ProductSearchSelect from '@/components/products/ProductSearchSelect';
+import { executeInventoryTransaction } from '@/utils/inventoryTransactionUtils';
 
 export default function ConsumptionForm({ opId, opNumber, onSuccess }) {
   const queryClient = useQueryClient();
@@ -48,15 +49,17 @@ export default function ConsumptionForm({ opId, opNumber, onSuccess }) {
           control_status: 'ABERTO'
         });
 
-        // 2. Criar movimento de inventário (CONSUMO_OP)
-        await base44.entities.InventoryMove.create({
-          type: 'CONSUMO_OP',
+        // 2. Centralizado: Criar Movimento e Atualizar Saldo (Garante consistência e saldo não negativo)
+        await executeInventoryTransaction({
+          type: 'PRODUCAO_CONSUMO',
           product_id: item.product_id,
           qty: item.quantity,
+          from_warehouse_id: null, // Buscará no armazém padrão se não informado, ou o usuário deveria informar?
+          from_location_id: null,
           related_type: 'OP',
           related_id: opId,
           reason: `Consumo OP ${opNumber} - ${opData.product_name}`
-        });
+        }, opData.company_id || '');
       }
     },
     onSuccess: () => {

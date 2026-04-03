@@ -4,9 +4,10 @@ import { base44 } from '@/api/base44Client';
 import { useCompanyId } from '@/components/useCompanyId';
 import { 
   Search, Package, CheckCircle, Truck, ArrowRight, RotateCcw, Printer, 
-  Package2, Calendar, User, FileText, X
+  Package2, Calendar, User, FileText, X, Camera, Trash2, Upload, MapPin
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { executeInventoryTransaction } from '@/utils/inventoryTransactionUtils';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -32,8 +33,45 @@ export default function Shipping() {
     nf_number: '',
     carrier: '',
     weight: '',
-    volume: ''
+    volume: '',
+    driver_name: '',
+    driver_cpf: '',
+    shipping_notes: '',
+    signed_nf_photo: '',
+    load_photos: []
   });
+
+  const handleImageCapture = (e, field) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('A imagem deve ter no máximo 5MB. Ajuste a resolução da câmera.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64String = reader.result;
+      if (field === 'signed_nf_photo') {
+        setShippingData(prev => ({ ...prev, signed_nf_photo: base64String }));
+      } else if (field === 'load_photos') {
+        setShippingData(prev => ({ 
+          ...prev, 
+          load_photos: [...(prev.load_photos || []), base64String] 
+        }));
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removeLoadPhoto = (index) => {
+    setShippingData(prev => {
+      const newPhotos = [...(prev.load_photos || [])];
+      newPhotos.splice(index, 1);
+      return { ...prev, load_photos: newPhotos };
+    });
+  };
 
   const { data: orders, isLoading } = useQuery({
     queryKey: ['orders-for-shipping', companyId],
@@ -46,9 +84,29 @@ export default function Shipping() {
   });
 
   const { data: items, isLoading: loadingItems } = useQuery({
-    queryKey: ['order-items-shipping', selectedOrder?.id],
-    queryFn: () => base44.entities.SalesOrderItem.filter({ order_id: selectedOrder.id }),
-    enabled: !!selectedOrder,
+    queryKey: ['order-items-shipping', selectedOrder?.id, companyId],
+    queryFn: async () => {
+      if (!selectedOrder || !companyId) return [];
+      
+      const [orderItems, separationMoves, locations] = await Promise.all([
+        base44.entities.SalesOrderItem.filter({ order_id: selectedOrder.id }),
+        base44.entities.InventoryMove.filter({ related_id: selectedOrder.id, type: 'SEPARACAO' }),
+        base44.entities.Location.filter({ company_id: companyId })
+      ]);
+
+      // Mapear localizações de separação para exibição na UI
+      return orderItems.map(item => {
+        const moves = separationMoves.filter(m => m.product_id === item.product_id);
+        const locIds = [...new Set(moves.map(m => m.from_location_id).filter(Boolean))];
+        const locNames = locIds.map(id => locations.find(l => l.id === id)?.barcode).filter(Boolean).sort();
+        
+        return {
+          ...item,
+          separation_location: locNames.join(', ') || null
+        };
+      });
+    },
+    enabled: !!selectedOrder && !!companyId,
   });
 
   const shipOrderMutation = useMutation({
@@ -56,67 +114,57 @@ export default function Shipping() {
       // 1. Buscar itens do pedido
       const orderItems = await base44.entities.SalesOrderItem.filter({ order_id: order.id });
 
-      // 2. Cancelar reservas do pedido e limpar saldos reservados
-      const reservations = await base44.entities.Reservation.filter({ order_id: order.id });
+      // 2. Buscar movimentações de SEPARACAO (Picking)
+      const separationMoves = await base44.entities.InventoryMove.filter({ related_id: order.id, type: 'SEPARACAO' });
+
+      // 3. Buscar e concluir reservas (se existirem)
+      const reservations = await base44.entities.Reservation.filter({ related_id: order.id });
       for (const res of reservations) {
-        if (res.status === 'CANCELADA') continue;
-
-        // Cancelar a reserva
-        await base44.entities.Reservation.update(res.id, { status: 'CANCELADA' });
-
-        // Reduzir qty_reserved no StockBalance correspondente
-        if (res.product_id) {
-          const balFilter = { company_id: order.company_id, product_id: res.product_id };
-          if (res.location_id) balFilter.location_id = res.location_id;
-          const balances = await base44.entities.StockBalance.filter(balFilter);
-          if (balances.length > 0) {
-            const bal = balances[0];
-            await base44.entities.StockBalance.update(bal.id, {
-              qty_reserved: Math.max(0, (bal.qty_reserved || 0) - (res.qty || 0)),
-              qty_separated: Math.max(0, (bal.qty_separated || 0) - (res.qty || 0)),
-            });
-          }
-        }
+        if (res.status === 'CANCELADA' || res.status === 'CONCLUIDA') continue;
+        // Atualizar status da reserva para CONCLUIDA (pois foi expedida)
+        await base44.entities.Reservation.update(res.id, { status: 'CONCLUIDA' });
       }
 
-      // 3. Para cada item, baixar estoque e limpar qtds
+      // 4. Efetuar a baixa real do estoque disponível (SAIDA) usando histórico de separação
       for (const item of orderItems) {
-        const qty = item.qty || 0;
-        if (!item.product_id || qty <= 0) continue;
+        const itemQty = parseFloat(item.qty) || 0;
+        if (!item.product_id || itemQty <= 0) continue;
 
-        // Zerar qty_reserved e qty_separated no item
+        // Limpar status de item do pedido no banco
         await base44.entities.SalesOrderItem.update(item.id, {
-          qty_reserved: 0,
-          qty_separated: 0,
+          qty_separated: itemQty // Marcar como totalmente separado para consistência se necessário
         });
 
-        // Criar movimento de saída no kardex
-        await base44.entities.InventoryMove.create({
-          company_id: order.company_id,
-          type: 'SAIDA',
-          product_id: item.product_id,
-          qty: qty,
-          related_type: 'PEDIDO',
-          related_id: order.id,
-          reason: `Expedição do pedido ${order.order_number || order.id}`,
-        });
+        // Filtrar as movimentações de SEPARACAO Deste item
+        const itemSeparations = separationMoves.filter(m => m.product_id === item.product_id);
+        
+        let remainingToShip = itemQty;
 
-        // Atualizar saldo de estoque (reduzir qty_available)
-        const balances = await base44.entities.StockBalance.filter({
-          company_id: order.company_id,
-          product_id: item.product_id,
-        });
+        // 4. Efetuar a baixa real do estoque disponível (SAIDA) usando histórico de separação
+        for (const sep of itemSeparations) {
+           if (remainingToShip <= 0) break;
+           const qtyToDeduct = Math.min(parseFloat(sep.qty), remainingToShip);
+           
+           if (qtyToDeduct > 0) {
+             // Utiliza função central com bloqueio atômico de saldo negativo!
+             await executeInventoryTransaction({
+               type: 'SAIDA',
+               product_id: item.product_id,
+               qty: qtyToDeduct,
+               from_warehouse_id: sep.to_warehouse_id,
+               from_location_id: sep.to_location_id,
+               related_type: 'PEDIDO',
+               related_id: order.id,
+               reason: `Expedição rastreada (Picking) do pedido ${order.order_number || order.id}`,
+             }, order.company_id);
+             
+             remainingToShip -= qtyToDeduct;
+           }
+        }
 
-        let remaining = qty;
-        for (const bal of balances) {
-          if (remaining <= 0) break;
-          const deduct = Math.min(bal.qty_available || 0, remaining);
-          if (deduct > 0) {
-            await base44.entities.StockBalance.update(bal.id, {
-              qty_available: (bal.qty_available || 0) - deduct,
-            });
-            remaining -= deduct;
-          }
+        // Se após varrer o Picking faltar algo (pedido sem picking ou incompleto)
+        if (remainingToShip > 0) {
+           throw new Error(`O item ${item.product_name || item.product_sku} não possui separação (picking) suficiente. Realize a Separação/Bipagem antes de expedir para garantir o endereçamento correto.`);
         }
       }
 
@@ -126,13 +174,33 @@ export default function Shipping() {
         nf_number: shippingData.nf_number || order.nf_number,
         carrier: shippingData.carrier || order.carrier,
         weight: shippingData.weight || order.weight,
-        volume: shippingData.volume || order.volume
+        volume: shippingData.volume || order.volume,
+        driver_name: shippingData.driver_name || order.driver_name,
+        driver_cpf: shippingData.driver_cpf || order.driver_cpf,
+        shipping_notes: shippingData.shipping_notes || order.shipping_notes,
+        signed_nf_photo: shippingData.signed_nf_photo || order.signed_nf_photo,
+        load_photos: shippingData.load_photos?.length > 0 ? shippingData.load_photos : order.load_photos
       });
     },
     onSuccess: () => {
        queryClient.invalidateQueries({ queryKey: ['orders-for-shipping', companyId] });
        setEditingOrder(null);
-       setShippingData({ nf_number: '', carrier: '', weight: '', volume: '' });
+       setSelectedOrder(prev => {
+         if (!prev) return null;
+         return {
+           ...prev,
+           status: 'EXPEDIDO',
+           nf_number: shippingData.nf_number || prev.nf_number,
+           carrier: shippingData.carrier || prev.carrier,
+           weight: shippingData.weight || prev.weight,
+           volume: shippingData.volume || prev.volume,
+           driver_name: shippingData.driver_name || prev.driver_name,
+           driver_cpf: shippingData.driver_cpf || prev.driver_cpf,
+           shipping_notes: shippingData.shipping_notes || prev.shipping_notes,
+           signed_nf_photo: shippingData.signed_nf_photo || prev.signed_nf_photo,
+           load_photos: shippingData.load_photos?.length > 0 ? shippingData.load_photos : prev.load_photos
+         };
+       });
        toast.success('Pedido expedido e estoque baixado com sucesso');
      },
   });
@@ -143,20 +211,80 @@ export default function Shipping() {
         nf_number: shippingData.nf_number || order.nf_number,
         carrier: shippingData.carrier || order.carrier,
         weight: shippingData.weight || order.weight,
-        volume: shippingData.volume || order.volume
+        volume: shippingData.volume || order.volume,
+        driver_name: shippingData.driver_name || order.driver_name,
+        driver_cpf: shippingData.driver_cpf || order.driver_cpf,
+        shipping_notes: shippingData.shipping_notes || order.shipping_notes,
+        signed_nf_photo: shippingData.signed_nf_photo || order.signed_nf_photo,
+        load_photos: shippingData.load_photos?.length > 0 ? shippingData.load_photos : order.load_photos
       });
     },
     onSuccess: () => {
        queryClient.invalidateQueries({ queryKey: ['orders-for-shipping', companyId] });
        setEditingOrder(null);
-       setShippingData({ nf_number: '', carrier: '', weight: '', volume: '' });
+       setSelectedOrder(prev => {
+         if (!prev) return null;
+         return {
+           ...prev,
+           nf_number: shippingData.nf_number || prev.nf_number,
+           carrier: shippingData.carrier || prev.carrier,
+           weight: shippingData.weight || prev.weight,
+           volume: shippingData.volume || prev.volume,
+           driver_name: shippingData.driver_name || prev.driver_name,
+           driver_cpf: shippingData.driver_cpf || prev.driver_cpf,
+           shipping_notes: shippingData.shipping_notes || prev.shipping_notes,
+           signed_nf_photo: shippingData.signed_nf_photo || prev.signed_nf_photo,
+           load_photos: shippingData.load_photos?.length > 0 ? shippingData.load_photos : prev.load_photos
+         };
+       });
        toast.success('Dados de expedição atualizados');
      },
   });
 
   const cancelShippingMutation = useMutation({
     mutationFn: async (order) => {
-      await base44.entities.SalesOrder.update(order.id, { status: 'SEPARADO' });
+      // 1. Buscar os itens do pedido
+      const orderItems = await base44.entities.SalesOrderItem.filter({ order_id: order.id });
+      
+      // 2. Buscar as "SAÍDAS" da expedição original para estornar as quantidades correspondentes
+      const saidas = await base44.entities.InventoryMove.filter({ related_id: order.id, type: 'SAIDA' });
+      
+      // 3. Garantir a existência da Doca de Expedição Genérica
+      let expWarehouse = (await base44.entities.Warehouse.filter({ company_id: order.company_id, type: 'EXPEDICAO' }))[0];
+      if (!expWarehouse) {
+        expWarehouse = await base44.entities.Warehouse.create({
+           company_id: order.company_id,
+           code: 'EXP',
+           name: 'Doca de Expedição',
+           type: 'EXPEDICAO',
+           active: true
+        });
+      }
+      
+      // 4. Estornar as saídas jogando os itens para essa Doca como estoque Disponível a ser trabalhado (Pendentes de Alocação)
+      for (const move of saidas) {
+        if (!move.product_id || parseFloat(move.qty) <= 0) continue;
+        
+        await executeInventoryTransaction({
+           type: 'ESTORNO',
+           product_id: move.product_id,
+           qty: move.qty,
+           to_warehouse_id: expWarehouse.id, // Cai na doca temporária exigindo realocação!
+           to_location_id: null,
+           related_type: 'PEDIDO',
+           related_id: order.id,
+           reason: `Retorno de cancelamento de expedição do pedido ${order.order_number || order.id}`
+        }, order.company_id);
+      }
+      
+      // 5. Restabelecer Itens e Pedido para a Situação em que precisam ser Separados Novamente
+      for (const item of orderItems) {
+        await base44.entities.SalesOrderItem.update(item.id, {
+           qty_separated: 0
+        });
+      }
+
+      await base44.entities.SalesOrder.update(order.id, { status: 'CONFIRMADO' });
     },
     onSuccess: () => {
        queryClient.invalidateQueries({ queryKey: ['orders-for-shipping', companyId] });
@@ -174,7 +302,12 @@ export default function Shipping() {
       nf_number: order.nf_number || '',
       carrier: order.carrier || '',
       weight: order.weight || '',
-      volume: order.volume || ''
+      volume: order.volume || '',
+      driver_name: order.driver_name || '',
+      driver_cpf: order.driver_cpf || '',
+      shipping_notes: order.shipping_notes || '',
+      signed_nf_photo: order.signed_nf_photo || '',
+      load_photos: Array.isArray(order.load_photos) ? order.load_photos : []
     });
   };
 
@@ -327,6 +460,96 @@ export default function Shipping() {
                     />
                   </div>
                 </div>
+
+                <Separator className="my-2" />
+                <h3 className="text-md font-bold text-slate-800">Registro de Retirada</h3>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium text-slate-700">Nome de quem retirou</label>
+                    <Input
+                      placeholder="Nome do motorista / cliente"
+                      value={shippingData.driver_name}
+                      onChange={(e) => setShippingData({...shippingData, driver_name: e.target.value})}
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-slate-700">CPF do Motorista</label>
+                    <Input
+                      placeholder="000.000.000-00"
+                      value={shippingData.driver_cpf}
+                      onChange={(e) => setShippingData({...shippingData, driver_cpf: e.target.value})}
+                      className="mt-1"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="text-sm font-medium text-slate-700">Observações de Expedição</label>
+                    <textarea
+                      placeholder="Alguma avaria ou instrução extra?"
+                      value={shippingData.shipping_notes}
+                      onChange={(e) => setShippingData({...shippingData, shipping_notes: e.target.value})}
+                      className="w-full mt-1 min-h-20 text-sm p-3 rounded-md border border-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+                  {/* Foto NF Assinada */}
+                  <div className="border border-slate-200 rounded-lg p-4 bg-slate-50">
+                     <p className="text-sm font-bold text-slate-800 mb-2">Canhoto / NF Assinada</p>
+                     {shippingData.signed_nf_photo ? (
+                       <div className="relative aspect-video bg-black/5 rounded-md overflow-hidden mb-3 group">
+                         <img src={shippingData.signed_nf_photo} className="w-full h-full object-cover" alt="NF Assinada" />
+                         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                            <Button size="icon" variant="destructive" onClick={() => setShippingData({...shippingData, signed_nf_photo: ''})}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                         </div>
+                       </div>
+                     ) : (
+                       <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-slate-300 border-dashed rounded-lg cursor-pointer bg-white hover:bg-slate-50 transition-colors">
+                          <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                              <Camera className="w-8 h-8 text-slate-400 mb-2" />
+                              <p className="text-sm text-slate-500 font-medium">Tirar foto</p>
+                          </div>
+                          <input type="file" className="hidden" accept="image/*" capture="environment" onChange={(e) => handleImageCapture(e, 'signed_nf_photo')} />
+                       </label>
+                     )}
+                  </div>
+
+                  {/* Fotos da Carga */}
+                  <div className="border border-slate-200 rounded-lg p-4 bg-slate-50">
+                     <div className="flex justify-between items-center mb-2">
+                       <p className="text-sm font-bold text-slate-800">Fotos da Carga</p>
+                       <span className="text-xs font-medium text-slate-500 bg-slate-200 px-2 py-0.5 rounded-full">
+                         {shippingData.load_photos?.length || 0} fotos
+                       </span>
+                     </div>
+                     
+                     {shippingData.load_photos?.length > 0 && (
+                       <div className="grid grid-cols-3 gap-2 mb-3">
+                         {shippingData.load_photos.map((photo, i) => (
+                           <div key={i} className="relative aspect-square bg-black/5 rounded-md overflow-hidden group">
+                             <img src={photo} className="w-full h-full object-cover" alt={`Carga ${i+1}`} />
+                             <button
+                               onClick={() => removeLoadPhoto(i)} 
+                               className="absolute top-1 right-1 bg-red-600 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                             >
+                                <X className="h-3 w-3" />
+                             </button>
+                           </div>
+                         ))}
+                       </div>
+                     )}
+
+                     <label className="flex items-center justify-center w-full h-10 border border-slate-300 rounded-lg cursor-pointer bg-white hover:bg-slate-50 transition-colors text-slate-600 font-medium text-sm gap-2">
+                        <Upload className="w-4 h-4" />
+                        Adicionar Foto
+                        <input type="file" className="hidden" accept="image/*" capture="environment" onChange={(e) => handleImageCapture(e, 'load_photos')} />
+                     </label>
+                  </div>
+                </div>
                 <div className="flex gap-2">
                    <Button
                      onClick={() => updateShippingInfoMutation.mutate(selectedOrder)}
@@ -336,7 +559,6 @@ export default function Shipping() {
                      Atualizar Dados
                    </Button>
                    {selectedOrder.status !== 'EXPEDIDO' && (
-                     <>
                        <Button
                          onClick={() => shipOrderMutation.mutate(selectedOrder)}
                          disabled={shipOrderMutation.isPending}
@@ -345,15 +567,16 @@ export default function Shipping() {
                          <Truck className="h-4 w-4 mr-2" />
                          Expedir Agora
                        </Button>
+                   )}
+                   {selectedOrder.status === 'EXPEDIDO' && (
                        <Button
                          onClick={() => cancelShippingMutation.mutate(selectedOrder)}
                          disabled={cancelShippingMutation.isPending}
                          variant="destructive"
                        >
-                         <X className="h-4 w-4 mr-2" />
-                         Cancelar Expedição
+                         <RotateCcw className="h-4 w-4 mr-2" />
+                         Cancelar Expedição e Retornar Estoque
                        </Button>
-                     </>
                    )}
                  </div>
               </CardContent>
@@ -399,7 +622,15 @@ export default function Shipping() {
                               {item.product_sku}
                             </p>
                             <p className="font-medium text-slate-900">{item.product_name}</p>
-                            <p className="text-sm text-slate-600 mt-1">Qtd: {item.qty}</p>
+                            <div className="flex items-center gap-3 mt-1">
+                               <p className="text-sm text-slate-600">Qtd: {item.qty} un</p>
+                               {item.separation_location && (
+                                  <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] flex items-center gap-1">
+                                     <MapPin className="h-3 w-3" />
+                                     {item.separation_location}
+                                  </Badge>
+                               )}
+                            </div>
                           </div>
                           <div className="flex gap-2">
                             <Button

@@ -112,11 +112,12 @@ export default function NotificationsPanel({ open, onClose }) {
           base44.entities.Product.filter({ company_id: cid }, 'sku', 500),
         ]);
 
+        const productionAlertsSafe = (productionAlerts && Array.isArray(productionAlerts)) ? productionAlerts : [];
         const productMap = Object.fromEntries((products || []).map(p => [p.id, p]));
 
         const notifs = [];
 
-        productionAlerts.forEach((alert, idx) => {
+        productionAlertsSafe.forEach((alert, idx) => {
           notifs.push({ id: `prod-alert-${idx}-${alert.related_op_id || idx}`, title: alert.title, message: alert.message, severity: alert.severity || 'medium', page: alert.page || 'ProductionOrders' });
         });
 

@@ -54,14 +54,14 @@ export default function MaterialTracking({ opId, opNumber }) {
 
   // Adicionar entregas de BOM aos materiais transferidos
   const deliveredMaterials = bomDeliveries
-    .filter(bd => bd.qty_delivered > 0)
+    .filter(bd => (Number(bd.qty) || 0) > 0)
     .map(bd => ({
       product_id: bd.component_id,
-      product_name: bd.component_name,
-      product_sku: bd.component_sku,
-      qty: bd.qty_delivered,
+      product_name: bd.component_name || bd.product_name || 'Componente BOM',
+      product_sku: bd.component_sku || bd.product_sku || '-',
+      qty: Number(bd.qty) || 0,
       type: 'BOM_DELIVERY',
-      created_date: bd.updated_date || bd.created_date
+      created_date: bd.updated_date || bd.created_date || new Date().toISOString()
     }));
 
   // Consolidar quantidade transferida por produto (incluindo entregas de BOM)
