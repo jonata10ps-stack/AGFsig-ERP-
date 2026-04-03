@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient, useQueryClient as useQC } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { useCompanyId } from '@/components/useCompanyId';
 import { Link } from 'react-router-dom';
@@ -102,7 +102,8 @@ export default function OPConsumptionControl() {
       try {
         const result = await base44.entities.BOMDeliveryControl.filter({});
         console.log('✅ BOMDeliveryControl carregados:', result.length);
-        console.log('✅ BOM Deliveries com qty_delivered > 0:', result.filter(d => (d.qty_delivered || 0) > 0).length);
+        // Suportar qty e qty_delivered para retrocompatibilidade
+        console.log('✅ BOM Deliveries com qty > 0:', result.filter(d => (Number(d.qty || d.qty_delivered) || 0) > 0).length);
         return result;
       } catch (error) {
         console.error('❌ Erro ao carregar BOMDeliveryControl:', error);
@@ -191,12 +192,7 @@ export default function OPConsumptionControl() {
   });
 
   // Combinar consumos registrados com movimentos de inventário diretos e MaterialConsumption
-  // Os OPConsumptionControls já são a fonte de verdade; BOMDeliveries e InventoryMoves aparecem
-  // apenas se NÃO há OPConsumptionControl para aquele par op+produto
-  // EXCETO: InventoryMoves que possuem OPConsumptionControl apontando para eles (pelo inventory_move_id)
-  // são representados pelo próprio OPConsumptionControl, então não devem aparecer em duplicata.
-  // InventoryMoves SEM OPConsumptionControl vinculado a eles devem sempre aparecer.
-
+  
   // Registrar todos os inventory_move_ids já cobertos por algum OPConsumptionControl
   const coveredMoveIds = new Set(
     controls.filter(c => c.control_status !== 'FECHADO' && c.inventory_move_id)
@@ -207,13 +203,17 @@ export default function OPConsumptionControl() {
   const opControlQtyByKey = {};
   controls.filter(c => c.control_status !== 'FECHADO').forEach(c => {
     const key = `${c.op_id}-${c.consumed_product_id}`;
-    opControlQtyByKey[key] = (opControlQtyByKey[key] || 0) + (c.qty || 0);
+    opControlQtyByKey[key] = (opControlQtyByKey[key] || 0) + (Number(c.qty) || 0);
   });
 
   // Registrar pares op+produto cobertos por BOMDeliveries (para evitar duplicata com InventoryMoves manuais)
   const bomOpProductKeys = new Set();
-  bomDeliveries.filter(bd => (bd.qty_delivered || 0) > 0).forEach(bd => {
-    bomOpProductKeys.add(`${bd.op_id}-${bd.component_id}`);
+  bomDeliveries.forEach(bd => {
+    const qty = Number(bd.qty || bd.qty_delivered) || 0;
+    if (qty > 0) {
+      const compId = bd.consumed_product_id || bd.component_id;
+      bomOpProductKeys.add(`${bd.op_id}-${compId}`);
+    }
   });
 
   const allConsumptions = [
@@ -221,17 +221,24 @@ export default function OPConsumptionControl() {
     ...controls.filter(c => c.control_status !== 'FECHADO'),
      // BOM Deliveries - mostrar se há quantidade entregue além do que OPConsumptionControl já cobre
      ...bomDeliveries.filter(bd => {
-        if ((bd.qty_delivered || 0) === 0) return false;
-        const key = `${bd.op_id}-${bd.component_id}`;
+        const qty = Number(bd.qty || bd.qty_delivered) || 0;
+        if (qty === 0) return false;
+        
+        const compId = bd.consumed_product_id || bd.component_id;
+        const key = `${bd.op_id}-${compId}`;
         const coveredByControl = opControlQtyByKey[key] || 0;
         // Mostrar se há qty de BOMPicking não coberta por OPConsumptionControl
-        return (bd.qty_delivered - coveredByControl) > 0;
+        return (qty - coveredByControl) > 0;
       }).map(delivery => {
-        const key = `${delivery.op_id}-${delivery.component_id}`;
+        const compId = delivery.consumed_product_id || delivery.component_id;
+        const qty = Number(delivery.qty || delivery.qty_delivered) || 0;
+        
+        const key = `${delivery.op_id}-${compId}`;
         const coveredByControl = opControlQtyByKey[key] || 0;
-        const bomPickingQty = delivery.qty_delivered - coveredByControl;
+        const bomPickingQty = qty - coveredByControl;
+        
         const op = allOPs.find(o => o.id === delivery.op_id);
-        const product = products?.find(p => p.id === delivery.component_id);
+        const product = products?.find(p => p.id === compId);
         const warehouse = warehouses?.find(w => w.id === delivery.from_warehouse_id);
         const location = locations?.find(l => l.id === delivery.from_location_id);
         const locationDescription = location ? `${location.rua || ''}${location.rua && location.modulo ? ' / ' : ''}${location.modulo || ''}${(location.rua || location.modulo) && location.nivel ? ' / ' : ''}${location.nivel || ''}${(location.rua || location.modulo || location.nivel) && location.posicao ? ' / ' : ''}${location.posicao || ''}`.trim() : '';
@@ -243,9 +250,9 @@ export default function OPConsumptionControl() {
           numero_op_externo: op?.numero_op_externo || '',
           product_id: op?.product_id || '',
           product_name: op?.product_name || '',
-          consumed_product_id: delivery.component_id,
-          consumed_product_sku: delivery.component_sku || product?.sku || '',
-          consumed_product_name: delivery.component_name || product?.name || '',
+          consumed_product_id: compId,
+          consumed_product_sku: delivery.consumed_product_sku || delivery.component_sku || product?.sku || '',
+          consumed_product_name: delivery.consumed_product_name || delivery.component_name || product?.name || '',
           qty: bomPickingQty,
           op_status: op?.status,
           control_status: 'ABERTO',
@@ -260,7 +267,8 @@ export default function OPConsumptionControl() {
       }),
       // Material Consumptions - apenas se NÃO existe OPConsumptionControl para este produto+OP
       ...materialConsumptions.filter(consumption => {
-        return !seenOpProductKeys.has(`${consumption.op_id}-${consumption.product_id}`);
+        const key = `${consumption.op_id}-${consumption.product_id}`;
+        return !opControlQtyByKey[key] && !bomOpProductKeys.has(key);
       }).map(consumption => {
         const op = allOPs.find(o => o.id === consumption.op_id);
         const warehouse = warehouses?.find(w => w.id === consumption.warehouse_id);
@@ -291,6 +299,7 @@ export default function OPConsumptionControl() {
       ...inventoryMoves.filter(move => {
         if (coveredMoveIds.has(move.id)) return false;
         if (bomOpProductKeys.has(`${move.related_id}-${move.product_id}`)) return false;
+        if (opControlQtyByKey[`${move.related_id}-${move.product_id}`]) return false;
         return true;
       }).map(move => {
         const op = allOPs.find(o => o.id === move.related_id);
@@ -349,7 +358,6 @@ export default function OPConsumptionControl() {
   });
 
   // Filtrar por busca e status
-  // Por padrão, esconder OPs ENCERRADAS e CANCELADAS
   const ACTIVE_STATUSES = ['ABERTA', 'EM_ANDAMENTO', 'PAUSADA'];
   const filtered = groupedByOP.filter(group => {
     const matchesSearch = group.op_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -364,46 +372,6 @@ export default function OPConsumptionControl() {
     }
     return matchesSearch && matchesStatus;
   });
-
-  // Closar controles quando OP é encerrada
-  const closeControlMutation = useMutation({
-    mutationFn: async (opId) => {
-      const itemsToClose = controls.filter(c => c.op_id === opId && c.control_status === 'ABERTO');
-      
-      for (const item of itemsToClose) {
-        await base44.entities.OPConsumptionControl.update(item.id, {
-          control_status: 'FECHADO',
-          closed_at: new Date().toISOString()
-        });
-      }
-    },
-    onSuccess: () => {
-       refetchControls();
-       toast.success('Controle fechado');
-     },
-    onError: () => {
-      toast.error('Erro ao fechar controle');
-    }
-  });
-
-  // Monitorar invalidações e refetch
-  useEffect(() => {
-    const unsubscribe = queryClient.getQueryCache().subscribe((event) => {
-      if (event.type === 'updated' && event.action?.type === 'invalidateQueries') {
-        if (event.query.queryKey[0] === 'op-consumption-controls' || 
-            event.query.queryKey[0] === 'bom-delivery-controls' ||
-            event.query.queryKey[0] === 'material-consumptions' ||
-            event.query.queryKey[0] === 'inventory-moves-to-op') {
-          // Refetch all related queries
-          refetchControls();
-          refetchBOM();
-          refetchMaterials();
-          refetchMoves();
-        }
-      }
-    });
-    return unsubscribe;
-  }, [queryClient, refetchControls, refetchBOM, refetchMaterials, refetchMoves]);
 
   const handleShowDetails = (group) => {
     setSelectedOP(group);
@@ -606,10 +574,10 @@ export default function OPConsumptionControl() {
         open={reverseDialogOpen}
         onOpenChange={setReverseDialogOpen}
         consumptionItem={selectedConsumption}
-        bomDelivery={selectedConsumption ? bomDeliveries.find(bd => 
-          bd.op_id === selectedConsumption.op_id && 
-          bd.component_id === selectedConsumption.consumed_product_id
-        ) : null}
+        bomDelivery={selectedConsumption ? bomDeliveries.find(bd => {
+          const compId = bd.consumed_product_id || bd.component_id;
+          return bd.op_id === selectedConsumption.op_id && compId === selectedConsumption.consumed_product_id;
+        }) : null}
         companyId={companyId}
       />
 

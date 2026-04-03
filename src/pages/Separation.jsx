@@ -18,16 +18,16 @@ function ItemRow({ item, selectedOrder, companyId, onSeparate }) {
   const [isExpanded, setIsExpanded] = useState(false);
 
   // Buscar se o produto tem BOM
-  const { data: boms, isLoading: loadingBOM } = useQuery({
+  const { data: allBoms, isLoading: loadingBOM } = useQuery({
     queryKey: ['product-bom', companyId, item.product_id],
     queryFn: () => companyId ? base44.entities.BOM.filter({ 
       product_id: item.product_id, 
-      is_active: true,
       company_id: companyId 
     }) : Promise.resolve([]),
     enabled: !!companyId && !!item.product_id,
   });
 
+  const boms = (allBoms || []).filter(b => b.is_active === true || b.is_active === 'true');
   const activeBOM = boms?.[0];
 
   // Buscar itens do BOM se ele existir

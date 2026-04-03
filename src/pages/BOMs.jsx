@@ -20,11 +20,12 @@ export default function BOMs() {
   const [newBOM, setNewBOM] = useState({ selectedProduct: null });
   const queryClient = useQueryClient();
 
-  const { data: boms = [], isLoading } = useQuery({
+  const { data: allBoms = [], isLoading } = useQuery({
     queryKey: ['boms', companyId],
-    queryFn: () => companyId ? base44.entities.BOM.filter({ company_id: companyId, is_active: true }, '-created_date') : Promise.resolve([]),
+    queryFn: () => companyId ? base44.entities.BOM.filter({ company_id: companyId }, '-created_date') : Promise.resolve([]),
     enabled: !!companyId,
   });
+  const boms = allBoms.filter(b => b.is_active === true || b.is_active === 'true');
 
   const { data: products = [] } = useQuery({
     queryKey: ['products', companyId],

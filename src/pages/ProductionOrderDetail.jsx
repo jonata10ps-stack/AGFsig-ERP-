@@ -573,13 +573,15 @@ export default function ProductionOrderDetail() {
           
           // Calcular quantidade total necessária vs entregue
           for (const bomItem of bomItems) {
-            const qtyNeeded = bomItem.quantity * op.qty_planned;
+            const qtyNeeded = Number(bomItem.quantity || 0) * Number(op.qty_planned || 0);
+            
+            // Suportar IDs novos e antigos para cruzamento
             const delivered = deliveryControls
-              .filter(dc => dc.bom_item_id === bomItem.id)
-              .reduce((sum, dc) => sum + (dc.qty_delivered || 0), 0);
+              .filter(dc => (dc.consumed_product_id === bomItem.component_id) || (dc.component_id === bomItem.component_id))
+              .reduce((sum, dc) => sum + (Number(dc.qty || dc.qty_delivered) || 0), 0);
             
             if (delivered < qtyNeeded) {
-              warnings.push(`Componente ${bomItem.component_sku} - faltam ${qtyNeeded - delivered} unidades`);
+              warnings.push(`Componente ${bomItem.component_sku || 'da BOM'} - entregues ${delivered} de ${qtyNeeded} un`);
             }
           }
         }

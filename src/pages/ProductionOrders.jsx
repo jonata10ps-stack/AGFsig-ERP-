@@ -321,27 +321,51 @@ export default function ProductionOrders() {
     mutationFn: async (data) => {
       // Criar OP
       const op = await base44.entities.ProductionOrder.create({ ...data, company_id: companyId });
+      console.log('✅ OP criada:', op.id, op.numero_op_externo);
       
-      // Buscar BOM do produto
+      // Buscar BOM do produto — is_active é text no banco, pode ser "true" ou true
       const boms = await base44.entities.BOM.filter({ 
-        product_id: data.product_id,
-        is_active: true
+        company_id: companyId,
+        product_id: data.product_id
       });
       
-      if (boms.length > 0) {
-        const bom = boms[0];
+      console.log('🔍 BOMs encontradas para product_id', data.product_id, ':', boms.length, boms);
+      
+      // Filtrar manualmente por is_active (pode ser string "true" ou boolean true)
+      const activeBoms = boms.filter(b => 
+        b.is_active === true || b.is_active === 'true' || b.is_active === 'TRUE'
+      );
+      console.log('🔍 BOMs ativas:', activeBoms.length);
+      
+      if (activeBoms.length > 0) {
+        const bom = activeBoms[0];
+        console.log('📋 BOM selecionada:', bom.id, 'current_version_id:', bom.current_version_id);
         
-        // Buscar itens do BOM da versão ativa
-        const bomItems = await base44.entities.BOMItem.filter({ 
-          company_id: companyId,
-          bom_version_id: bom.current_version_id 
-        });
+        // Buscar itens do BOM — tentar com bom_version_id primeiro, fallback para bom_id
+        let bomItems = [];
+        
+        if (bom.current_version_id) {
+          bomItems = await base44.entities.BOMItem.filter({ 
+            bom_version_id: bom.current_version_id 
+          });
+          console.log('🔍 BOMItems por bom_version_id:', bomItems.length);
+        }
+        
+        // Fallback: buscar por bom_id se não encontrou por versão
+        if (bomItems.length === 0) {
+          bomItems = await base44.entities.BOMItem.filter({ 
+            bom_id: bom.id 
+          });
+          console.log('🔍 BOMItems por bom_id (fallback):', bomItems.length);
+        }
+        
+        console.log('📦 BOMItems encontrados:', bomItems.length, bomItems.map(i => i.component_name));
         
         // Criar etapas baseadas nos roteiros dos componentes do BOM
         let stepSequence = 1;
         const stepsToCreate = [];
         
-        for (const bomItem of bomItems.sort((a, b) => a.sequence - b.sequence)) {
+        for (const bomItem of bomItems.sort((a, b) => (Number(a.sequence) || 0) - (Number(b.sequence) || 0))) {
           // Se o item tem roteiros definidos (array routes)
           if (bomItem.routes && Array.isArray(bomItem.routes) && bomItem.routes.length > 0) {
             for (const routeRef of bomItem.routes.sort((a, b) => a.sequence - b.sequence)) {
@@ -395,28 +419,36 @@ export default function ProductionOrders() {
           await Promise.all(
             stepsToCreate.map(step => base44.entities.ProductionStep.create(step))
           );
+          console.log('✅ Etapas criadas:', stepsToCreate.length);
         }
 
-        // --- NOVO: Criar controles de entrega de material (BOMDeliveryControl) ---
-        // Isso permite que o estoque veja o que precisa separar para esta OP
+        // --- Criar controles de entrega de material (BOMDeliveryControl) ---
+        console.log('🚀 Criando BOMDeliveryControl para', bomItems.length, 'itens...');
         for (const bomItem of bomItems) {
           const qtyPlannedNum = Number(bomItem.quantity || 0) * Number(data.qty_planned || 0);
           
-          await base44.entities.BOMDeliveryControl.create({
-            op_id: op.id,
-            op_number: String(op.numero_op_externo || op.op_number || ''),
-            numero_op_externo: String(op.numero_op_externo || ''),
-            product_id: op.product_id,
-            product_name: String(op.product_name || ''),
-            product_sku: String(op.product_sku || ''),
-            consumed_product_id: bomItem.component_id,
-            consumed_product_sku: String(bomItem.component_sku || ''),
-            consumed_product_name: String(bomItem.component_name || ''),
-            qty_planned: isNaN(qtyPlannedNum) ? "0" : String(qtyPlannedNum),
-            qty_delivered: "0",
-            status: 'ABERTO'
-          });
+          try {
+            const ctrl = await base44.entities.BOMDeliveryControl.create({
+              op_id: op.id,
+              op_number: String(op.numero_op_externo || op.op_number || ''),
+              numero_op_externo: String(op.numero_op_externo || ''),
+              product_id: op.product_id,
+              product_name: String(op.product_name || ''),
+              product_sku: String(op.product_sku || ''),
+              consumed_product_id: bomItem.component_id,
+              consumed_product_sku: String(bomItem.component_sku || ''),
+              consumed_product_name: String(bomItem.component_name || ''),
+              qty_planned: isNaN(qtyPlannedNum) ? "0" : String(qtyPlannedNum),
+              qty_delivered: "0",
+              status: 'ABERTO'
+            });
+            console.log('✅ BOMDeliveryControl criado:', ctrl?.id, bomItem.component_name);
+          } catch (err) {
+            console.error('❌ Erro ao criar BOMDeliveryControl:', err, 'para', bomItem.component_name);
+          }
         }
+      } else {
+        console.warn('⚠️ Nenhuma BOM ativa encontrada para o produto', data.product_id);
       }
       
       return op;
@@ -464,15 +496,14 @@ export default function ProductionOrders() {
         
         // 3. Verificar BOM não entregue
         if (op) {
-          const boms = await base44.entities.BOM.filter({
+          const allBoms = await base44.entities.BOM.filter({
             company_id: companyId,
-            product_id: op.product_id,
-            is_active: true
+            product_id: op.product_id
           });
+          const boms = allBoms.filter(b => b.is_active === true || b.is_active === 'true');
           
           if (boms?.[0]) {
             const bomItems = await base44.entities.BOMItem.filter({
-              company_id: companyId,
               bom_version_id: boms[0].current_version_id
             });
             

@@ -42,9 +42,13 @@ export default function BOMDeliveryPicking() {
 
   const { data: deliveryControls = [], isLoading: loadingControls, refetch: refetchControls } = useQuery({
     queryKey: ['bom-delivery-controls', opId],
-    queryFn: () => base44.entities.BOMDeliveryControl.filter({ 
-      status: 'ABERTO' 
-    }),
+    queryFn: async () => {
+      // Buscar todos os controles desta OP (ABERTO e ENTREGUE)
+      const controls = await base44.entities.BOMDeliveryControl.filter({ 
+        op_id: opId 
+      });
+      return controls || [];
+    },
     enabled: !!opId && !!companyId,
   });
 
@@ -53,12 +57,21 @@ export default function BOMDeliveryPicking() {
     queryFn: async () => {
       const boms = await base44.entities.BOM.filter({ 
         company_id: companyId,
-        product_id: op.product_id,
-        active: true
+        product_id: op.product_id
       });
-      return boms?.[0];
+      // Filtrar manualmente por is_active (pode ser string "true" ou boolean true)
+      const activeBoms = (boms || []).filter(b =>
+        b.is_active === true || b.is_active === 'true' || b.is_active === 'TRUE'
+      );
+      return activeBoms?.[0] || null;
     },
     enabled: !!op?.product_id && !!companyId,
+  });
+
+  const { data: bomItems = [] } = useQuery({
+    queryKey: ['bom-items', bom?.current_version_id],
+    queryFn: () => base44.entities.BOMItem.filter({ bom_version_id: bom.current_version_id }),
+    enabled: !!bom?.current_version_id,
   });
 
   const { data: productionSteps = [] } = useQuery({
@@ -76,7 +89,6 @@ export default function BOMDeliveryPicking() {
         
         // Buscar route_ids dos BOMItems
         const bomItems = await base44.entities.BOMItem.filter({
-          company_id: companyId,
           bom_version_id: bom.current_version_id
         });
         
@@ -113,69 +125,100 @@ export default function BOMDeliveryPicking() {
   });
 
   const initializeControlMutation = useMutation({
-     mutationFn: async ({ bomVersionId, companyIdParam, opIdParam, opNumberParam, qtyPlanned }) => {
+     mutationFn: async ({ bomVersionId, opData }) => {
        const bomItems = await base44.entities.BOMItem.filter({
-         company_id: companyIdParam,
          bom_version_id: bomVersionId
        });
 
-       if (bomItems.length === 0) return;
+       console.log('🔍 BOMItems encontrados para inicialização:', bomItems.length);
 
-       const controlsToCreate = bomItems.map(item => ({
-         company_id: companyIdParam,
-         op_id: opIdParam,
-         op_number: opNumberParam,
-         bom_item_id: item.id,
-         component_id: item.component_id,
-         component_sku: item.component_sku,
-         component_name: item.component_name,
-         qty_required: item.quantity * qtyPlanned,
-         qty_delivered: 0,
-         qty_pending: item.quantity * qtyPlanned,
-         status: 'ABERTO',
-         unit: item.unit
-       }));
+       if (bomItems.length === 0) {
+         console.warn('⚠️ Nenhum BOMItem encontrado para bom_version_id:', bomVersionId);
+         return;
+       }
 
-       await base44.entities.BOMDeliveryControl.bulkCreate(controlsToCreate);
+       // Salvar Nome/SKU/ID corretos para evitar que fiquem vazios (consumed_product_*)
+       const controlsToCreate = bomItems.map(item => {
+         const qtyPlannedNum = Number(item.quantity || 0) * Number(opData.qty_planned || 0);
+         return {
+           op_id: opData.id,
+           numero_op_externo: String(opData.numero_op_externo || ''),
+           product_id: opData.product_id,
+           product_name: String(opData.product_name || ''),
+           consumed_product_id: item.component_id || '',
+           consumed_product_name: item.component_name || '',
+           consumed_product_sku: item.component_sku || '',
+           qty_planned: isNaN(qtyPlannedNum) ? "0" : String(qtyPlannedNum),
+           qty: "0",
+           status: 'ABERTO'
+         };
+       });
+
+       console.log('🚀 Criando BOMDeliveryControl:', controlsToCreate.length, 'registros (um a um)...');
+       for (const ctrl of controlsToCreate) {
+         try {
+           const result = await base44.entities.BOMDeliveryControl.create(ctrl);
+           console.log('✅ BOMDeliveryControl criado:', result?.id, ctrl.consumed_product_id);
+         } catch (err) {
+           console.error('❌ Erro ao criar BOMDeliveryControl:', err, 'para', ctrl.consumed_product_id);
+         }
+       }
+       console.log('✅ Processo de criação concluído');
      },
     onSuccess: () => {
+      initializingRef.current = false;
       refetchControls();
+      toast.success('Componentes do BOM carregados com sucesso!');
+    },
+    onError: (error) => {
+      initializingRef.current = false;
+      console.error('❌ Erro ao criar BOMDeliveryControl:', error);
+      toast.error('Erro ao carregar componentes do BOM');
     }
   });
 
   useEffect(() => {
-    if (op && bom && deliveryControls.length === 0 && companyId && opId && bom.current_version_id && !initializingRef.current) {
+    if (op && bom && !loadingControls && deliveryControls.length === 0 && companyId && opId && bom.current_version_id && !initializingRef.current) {
+      console.log('🔄 Auto-inicializando BOMDeliveryControl para OP', opId, 'com BOM versão', bom.current_version_id);
       initializingRef.current = true;
       initializeControlMutation.mutate({
         bomVersionId: bom.current_version_id,
-        companyIdParam: companyId,
-        opIdParam: opId,
-        opNumberParam: op.op_number,
-        qtyPlanned: op.qty_planned
+        opData: op
       });
     }
-  }, [op, bom, companyId, opId]);
+  }, [op, bom, companyId, opId, loadingControls, deliveryControls.length]);
 
   const handleQrScan = (sku) => {
     const searchSku = sku.trim().toUpperCase();
+    
+    // Como BOMDeliveryControl não tem SKU, precisamos cruzar com bomItems
+    const targetBomItem = bomItems.find(bi => bi.component_sku?.trim().toUpperCase() === searchSku);
+    
+    if (!targetBomItem) {
+      toast.error(`SKU "${sku}" não encontrado na BOM deste produto.`);
+      return;
+    }
+
+    // Suportar registros novos (consumed_product_id) e antigos (component_id)
     const component = deliveryControls.find(item => 
-      item.component_sku?.trim().toUpperCase() === searchSku
+      (item.consumed_product_id === targetBomItem.component_id) || 
+      (item.component_id === targetBomItem.component_id)
     );
     
     if (component && component.status === 'ABERTO') {
-      setScannedComponent(component);
+      setScannedComponent({
+        ...component,
+        component_name: targetBomItem.component_name || component.consumed_product_name,
+        component_sku: targetBomItem.component_sku || component.consumed_product_sku
+      });
       setDeliveryLocation('');
       setDeliveryQty('');
       setScannerOpen(false);
-      toast.success(`Componente ${component.component_name} encontrado!`);
+      toast.success(`Componente ${targetBomItem.component_name} encontrado!`);
     } else if (component?.status === 'ENTREGUE') {
       toast.info('Este componente já foi completamente entregue');
     } else {
-      const availableSkus = deliveryControls
-        .filter(c => c.status === 'ABERTO')
-        .map(c => c.component_sku)
-        .join(', ');
-      toast.error(`SKU "${sku}" não encontrado. SKUs disponíveis: ${availableSkus || 'nenhum'}`);
+      toast.error(`Dados de entrega não inicializados para o componente ${targetBomItem.component_name}`);
     }
   };
 
@@ -224,14 +267,17 @@ export default function BOMDeliveryPicking() {
 
       const allBalances = await base44.entities.StockBalance.filter({ company_id: companyId });
       
+      // ID do produto pode estar em campos diferentes dependendo da versão do registro
+      const productId = scannedComponent.consumed_product_id || scannedComponent.component_id;
+
       const stockBalance = allBalances.find(b =>
-        b.product_id === scannedComponent.component_id &&
+        b.product_id === productId &&
         b.location_id === location.id &&
         b.qty_available > 0
       );
 
       if (!stockBalance) {
-        const productBalances = allBalances.filter(b => b.product_id === scannedComponent.component_id && b.qty_available > 0);
+        const productBalances = allBalances.filter(b => b.product_id === productId && b.qty_available > 0);
         const availableLocations = productBalances
           .map(b => {
             const loc = locations.find(l => l.id === b.location_id);
@@ -249,7 +295,7 @@ export default function BOMDeliveryPicking() {
       const inventoryMove = await base44.entities.InventoryMove.create({
         company_id: companyId,
         type: 'PRODUCAO_CONSUMO',
-        product_id: scannedComponent.component_id,
+        product_id: productId,
         qty: qty,
         from_warehouse_id: location.warehouse_id,
         from_location_id: location.id,
@@ -264,13 +310,13 @@ export default function BOMDeliveryPicking() {
       });
 
       // 3. Atualizar controle de entrega
-      const newQtyDelivered = (scannedComponent.qty_delivered || 0) + qty;
-      const newQtyPending = scannedComponent.qty_required - newQtyDelivered;
-      const newStatus = newQtyPending === 0 ? 'ENTREGUE' : 'ABERTO';
+      const currentQty = Number(scannedComponent.qty || 0);
+      const newQty = currentQty + qty;
+      const qtyRequired = Number(scannedComponent.qty_planned || 0);
+      const newStatus = newQty >= qtyRequired ? 'ENTREGUE' : 'ABERTO';
 
       await base44.entities.BOMDeliveryControl.update(scannedComponent.id, {
-        qty_delivered: newQtyDelivered,
-        qty_pending: newQtyPending,
+        qty: newQty,
         status: newStatus
       });
 
@@ -279,13 +325,13 @@ export default function BOMDeliveryPicking() {
       const existingControl = await base44.entities.OPConsumptionControl.filter({
         company_id: companyId,
         op_id: opId,
-        consumed_product_id: scannedComponent.component_id
+        consumed_product_id: productId
       });
       console.log('Controles existentes:', existingControl);
 
       if (existingControl && existingControl.length > 0) {
         const control = existingControl[0];
-        const newTotal = (control.qty || 0) + qty;
+        const newTotal = (Number(control.qty) || 0) + qty;
         await base44.entities.OPConsumptionControl.update(control.id, {
           qty: newTotal,
           inventory_move_id: inventoryMove.id,
@@ -298,7 +344,7 @@ export default function BOMDeliveryPicking() {
           numero_op_externo: op.numero_op_externo,
           product_id: op.product_id,
           product_name: op.product_name,
-          consumed_product_id: scannedComponent.component_id,
+          consumed_product_id: productId,
           consumed_product_sku: scannedComponent.component_sku,
           consumed_product_name: scannedComponent.component_name,
           qty: qty,
@@ -356,10 +402,10 @@ export default function BOMDeliveryPicking() {
     );
   }
 
-  // Deduplicar por bom_item_id para evitar exibição de duplicatas
+  // Deduplicar por component_id para evitar exibição de duplicatas
   const uniqueDeliveryControls = Object.values(
     deliveryControls.reduce((acc, item) => {
-      const key = item.bom_item_id || item.component_id;
+      const key = item.consumed_product_id || item.component_id || item.id;
       if (!acc[key]) {
         acc[key] = item;
       }
@@ -367,10 +413,10 @@ export default function BOMDeliveryPicking() {
     }, {})
   );
 
-  const totalRequired = uniqueDeliveryControls.reduce((sum, item) => sum + item.qty_required, 0);
-  const totalDelivered = uniqueDeliveryControls.reduce((sum, item) => sum + (item.qty_delivered || 0), 0);
+  const totalRequired = uniqueDeliveryControls.reduce((sum, item) => sum + (Number(item.qty_planned) || 0), 0);
+  const totalDelivered = uniqueDeliveryControls.reduce((sum, item) => sum + (Number(item.qty) || 0), 0);
   const progress = totalRequired > 0 ? Math.round((totalDelivered / totalRequired) * 100) : 0;
-  const allDelivered = uniqueDeliveryControls.every(item => item.status === 'ENTREGUE');
+  const allDelivered = uniqueDeliveryControls.length > 0 && uniqueDeliveryControls.every(item => item.status === 'ENTREGUE');
 
   return (
     <div className="space-y-6">
@@ -512,7 +558,7 @@ export default function BOMDeliveryPicking() {
               </div>
               <div className="text-center">
                 <p className="text-xs text-slate-500">Entregue</p>
-                <p className="text-2xl font-bold text-emerald-600">{scannedComponent.qty_delivered || 0}</p>
+                <p className="text-2xl font-bold text-emerald-600">{scannedComponent.qty || 0}</p>
               </div>
               <div className="text-center">
                 <p className="text-xs text-slate-500">Faltam</p>
@@ -621,9 +667,20 @@ export default function BOMDeliveryPicking() {
           </Card>
         ) : (
           uniqueDeliveryControls.map((item) => {
-            const itemProgress = item.qty_required > 0 
-              ? Math.round(((item.qty_delivered || 0) / item.qty_required) * 100) 
+            // Buscar dados extras do BOMItem (suporta IDs novos e antigos)
+            const compId = item.consumed_product_id || item.component_id;
+            const bomItem = bomItems.find(bi => bi.component_id === compId);
+            
+            const qtyReq = Number(item.qty_planned) || 0;
+            const qtyDel = Number(item.qty) || 0; // Usando 'qty' do banco
+            const qtyPend = qtyReq - qtyDel;
+            const itemProgress = qtyReq > 0 
+              ? Math.round((qtyDel / qtyReq) * 100) 
               : 0;
+            
+            // Prioridade: Dados salvos no registro -> Dados do BOMItem -> Fallback
+            const itemName = item.consumed_product_name || bomItem?.component_name || item.product_name || 'Componente';
+            const itemSku = item.consumed_product_sku || bomItem?.component_sku || '-';
 
             return (
               <Card 
@@ -635,15 +692,15 @@ export default function BOMDeliveryPicking() {
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
-                          <h3 className="font-medium text-slate-900">{item.component_name}</h3>
+                          <h3 className="font-medium text-slate-900">{itemName}</h3>
                           {item.status === 'ENTREGUE' && (
                             <Badge className="bg-emerald-100 text-emerald-700">Entregue</Badge>
                           )}
                         </div>
-                        <p className="text-sm text-slate-500">SKU: {item.component_sku}</p>
+                        <p className="text-sm text-slate-500">SKU: {itemSku}</p>
                       </div>
                       <Badge variant="outline" className="text-lg">
-                        {item.qty_required} un
+                        {qtyReq} {bomItem?.unit || 'un'}
                       </Badge>
                     </div>
 
@@ -651,7 +708,7 @@ export default function BOMDeliveryPicking() {
 
                     <div className="flex justify-between text-sm">
                       <span className="text-slate-500">
-                        Entregues: {item.qty_delivered || 0} / {item.qty_required}
+                        Entregues: {qtyDel} / {qtyReq}
                       </span>
                       <span className="font-medium">{itemProgress}%</span>
                     </div>
@@ -659,7 +716,13 @@ export default function BOMDeliveryPicking() {
                     {item.status === 'ABERTO' && (
                        <Button
                          onClick={() => {
-                           setScannedComponent(item);
+                           setScannedComponent({
+                             ...item,
+                             component_name: itemName,
+                             component_sku: itemSku,
+                             qty_required: qtyReq,
+                             qty_pending: qtyPend
+                           });
                            setDeliveryLocation('');
                            setDeliveryQty('');
                          }}
