@@ -21,8 +21,10 @@ export async function processProductionOrderControls(moveData, companyId, invent
   const qtyInput = parseFloat(moveData.qty) || 0;
 
   // Detectar direção do movimento
+  // SAIDA/PRODUCAO_CONSUMO: Aumenta o total entregue/consumido
+  // ENTRADA/ESTORNO/PRODUCAO_REVERSO: Diminui o total entregue/consumido
   const isAdding = ['SAIDA', 'PRODUCAO_CONSUMO', 'BAIXA'].includes(moveData.type);
-  const isSubtracting = ['ENTRADA', 'ESTORNO'].includes(moveData.type);
+  const isSubtracting = ['ENTRADA', 'ESTORNO', 'PRODUCAO_REVERSO'].includes(moveData.type);
 
   if (!isAdding && !isSubtracting) {
     console.log('ℹ️ Tipo de movimento ignorado para controles de OP:', moveData.type);
@@ -37,6 +39,7 @@ export async function processProductionOrderControls(moveData, companyId, invent
   try {
     // 1. Atualizar BOMDeliveryControl
     const deliveryControls = await base44.entities.BOMDeliveryControl.filter({
+      company_id: companyId,
       op_id: opId,
       component_id: productId
     });
@@ -54,7 +57,7 @@ export async function processProductionOrderControls(moveData, companyId, invent
       }
     } else if (isAdding) {
       // Criar como item EXTRA na BOM se não existir (apenas se for adição)
-      const opData = await base44.entities.ProductionOrder.filter({ id: opId }).then(d => d?.[0]);
+      const opData = await base44.entities.ProductionOrder.filter({ company_id: companyId, id: opId }).then(d => d?.[0]);
       if (opData) {
         await base44.entities.BOMDeliveryControl.create({
           company_id: companyId,
@@ -70,6 +73,7 @@ export async function processProductionOrderControls(moveData, companyId, invent
 
     // 2. Atualizar ou Criar OPConsumptionControl
     const consumptionControls = await base44.entities.OPConsumptionControl.filter({
+      company_id: companyId,
       op_id: opId,
       consumed_product_id: productId
     });
@@ -82,8 +86,8 @@ export async function processProductionOrderControls(moveData, companyId, invent
         inventory_move_id: inventoryMoveId || consumptionControls[0].inventory_move_id
       });
     } else if (isAdding) {
-      const opData = await base44.entities.ProductionOrder.filter({ id: opId }).then(d => d?.[0]);
-      const prodData = await base44.entities.Product.filter({ id: productId }).then(d => d?.[0]);
+      const opData = await base44.entities.ProductionOrder.filter({ company_id: companyId, id: opId }).then(d => d?.[0]);
+      const prodData = await base44.entities.Product.filter({ company_id: companyId, id: productId }).then(d => d?.[0]);
       
       if (opData && prodData) {
         await base44.entities.OPConsumptionControl.create({

@@ -76,9 +76,9 @@ export default function Shipping() {
   const { data: orders, isLoading } = useQuery({
     queryKey: ['orders-for-shipping', companyId],
     queryFn: async () => {
-      if (!companyId) return [];
+      // Buscar últimos pedidos e mostrar apenas o que está pronto para ser expedido (já separado fisicamente)
       const all = await base44.entities.SalesOrder.filter({ company_id: companyId }, '-created_date', 200);
-      return all.filter(o => o.status !== 'CANCELADO');
+      return (all || []).filter(o => o.status === 'SEPARADO');
     },
     enabled: !!companyId,
   });

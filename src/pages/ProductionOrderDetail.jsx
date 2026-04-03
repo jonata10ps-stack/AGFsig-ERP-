@@ -27,6 +27,9 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import ProductSearchSelect from '@/components/products/ProductSearchSelect';
+import ClientSearchSelect from '@/components/clients/ClientSearchSelect';
+import { executeInventoryTransaction } from '@/utils/inventoryTransactionUtils';
+import { processProductionOrderControls } from '@/utils/productionControlUtils';
 
 export default function ProductionOrderDetail() {
   const { companyId } = useCompanyId();
@@ -44,6 +47,8 @@ export default function ProductionOrderDetail() {
 
   const [consumptionProduct, setConsumptionProduct] = useState(null);
   const [consumptionQty, setConsumptionQty] = useState('');
+  const [consumptionWarehouseId, setConsumptionWarehouseId] = useState('');
+  const [consumptionLocationId, setConsumptionLocationId] = useState('');
   const [showAddStepDialog, setShowAddStepDialog] = useState(false);
   const [stepName, setStepName] = useState('');
   const [stepDescription, setStepDescription] = useState('');
@@ -56,6 +61,9 @@ export default function ProductionOrderDetail() {
   const [cancelLoading, setCancelLoading] = useState(false);
   const [editingOpNumber, setEditingOpNumber] = useState(false);
   const [editOpNumberValue, setEditOpNumberValue] = useState('');
+  const [isEditingClient, setIsEditingClient] = useState(false);
+  const [tempClientId, setTempClientId] = useState('');
+  const [tempClientName, setTempClientName] = useState('');
   const initializingRef = useRef(false);
   const initializingTimeoutRef = useRef(null);
 
@@ -82,6 +90,18 @@ export default function ProductionOrderDetail() {
     queryKey: ['locations', companyId],
     queryFn: () => base44.entities.Location.filter({ company_id: companyId, active: true }),
     enabled: !!companyId,
+  });
+
+  const { data: bomDeliveries = [] } = useQuery({
+    queryKey: ['bom-deliveries-op', opId, companyId],
+    queryFn: () => base44.entities.BOMDeliveryControl.filter({ company_id: companyId, op_id: opId }),
+    enabled: !!opId && !!companyId,
+  });
+
+  const { data: materialConsumptions = [] } = useQuery({
+    queryKey: ['material-consumptions-op', opId, companyId],
+    queryFn: () => base44.entities.MaterialConsumption.filter({ company_id: companyId, op_id: opId }),
+    enabled: !!opId && !!companyId,
   });
 
   // Real-time subscription for step updates - disabled during initialization
@@ -196,8 +216,8 @@ export default function ProductionOrderDetail() {
 
   const registerConsumptionMutation = useMutation({
     mutationFn: async () => {
-      if (!consumptionProduct || !consumptionQty) {
-        throw new Error('Produto e quantidade são obrigatórios');
+      if (!consumptionProduct || !consumptionQty || !consumptionWarehouseId || !consumptionLocationId) {
+        throw new Error('Preencha produto, quantidade, armazém e localização');
       }
 
       const qty = parseFloat(consumptionQty);
@@ -207,37 +227,39 @@ export default function ProductionOrderDetail() {
 
       const user = await base44.auth.me();
 
-      // Buscar saldo de estoque para baixar (qualquer localização com saldo)
-      const allBalances = await base44.entities.StockBalance.filter({
+      // Buscar saldo especificamente na localização selecionada
+      const balanceWithStock = await base44.entities.StockBalance.filter({
         company_id: companyId,
         product_id: consumptionProduct.id,
-      });
-      const balanceWithStock = allBalances.find(b => (b.qty_available || 0) >= qty);
-      if (!balanceWithStock) {
-        const totalAvailable = allBalances.reduce((s, b) => s + (b.qty_available || 0), 0);
-        throw new Error(`Saldo insuficiente para ${consumptionProduct.name}. Disponível: ${totalAvailable}`);
+        warehouse_id: consumptionWarehouseId,
+        location_id: consumptionLocationId
+      }).then(d => d?.[0]);
+
+      if (!balanceWithStock || (balanceWithStock.qty_available || 0) < qty) {
+        const available = balanceWithStock?.qty_available || 0;
+        throw new Error(`Saldo insuficiente na localização selecionada. Disponível: ${available} ${consumptionProduct.unit || 'UN'}`);
       }
 
-      // 1. Criar movimento de inventário (SAÍDA no Kardex)
-      await base44.entities.InventoryMove.create({
+      // 1. Criar movimento de inventário e baixar saldo (Centralizado)
+      const moveData = {
         company_id: companyId,
         type: 'PRODUCAO_CONSUMO',
         product_id: consumptionProduct.id,
         qty: qty,
-        from_warehouse_id: balanceWithStock.warehouse_id,
-        from_location_id: balanceWithStock.location_id,
+        from_warehouse_id: consumptionWarehouseId,
+        from_location_id: consumptionLocationId,
         related_type: 'OP',
         related_id: opId,
         reason: `Consumo da OP-${op.op_number}`,
         unit_cost: consumptionProduct.cost_price || 0
-      });
+      };
 
-      // 2. Baixar saldo de estoque
-      await base44.entities.StockBalance.update(balanceWithStock.id, {
-        qty_available: (balanceWithStock.qty_available || 0) - qty,
-      });
+      const move = await executeInventoryTransaction(moveData, companyId);
 
-      // 3. Criar registro de consumo de material
+      // 2. Atualizar controles de OP (BOM e Consumo Centralizado)
+      await processProductionOrderControls(moveData, companyId, move.id);
+
+      // 3. Criar registro de material (Rastreabilidade adicional)
       await base44.entities.MaterialConsumption.create({
         company_id: companyId,
         op_id: opId,
@@ -245,16 +267,19 @@ export default function ProductionOrderDetail() {
         product_sku: consumptionProduct.sku,
         product_name: consumptionProduct.name,
         qty_consumed: qty,
-        warehouse_id: balanceWithStock.warehouse_id,
-        location_id: balanceWithStock.location_id,
+        warehouse_id: consumptionWarehouseId,
+        location_id: consumptionLocationId,
         registered_by: user.email,
         registered_date: new Date().toISOString()
       });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['production-order', opId, companyId] });
+      queryClient.invalidateQueries({ queryKey: ['op-consumption-controls', companyId] });
       setConsumptionProduct(null);
       setConsumptionQty('');
+      setConsumptionWarehouseId('');
+      setConsumptionLocationId('');
       toast.success('Consumo registrado com sucesso');
     },
     onError: (error) => {
@@ -286,6 +311,15 @@ export default function ProductionOrderDetail() {
   const closeOpMutation = useMutation({
     mutationFn: async () => {
       try {
+        // Bloqueio de segurança contra encerramento duplo
+        const currentOP = await base44.entities.ProductionOrder.filter({ company_id: companyId, id: opId }).then(d => d?.[0]);
+        if (currentOP?.status === 'ENCERRADA') {
+          throw new Error('Esta OP já foi encerrada anteriormente.');
+        }
+        if (currentOP?.status === 'CANCELADA') {
+          throw new Error('Não é possível encerrar uma OP cancelada.');
+        }
+
         // Get warehouse - required
         let warehouseId = op.warehouse_id;
         if (!warehouseId) {
@@ -300,9 +334,9 @@ export default function ProductionOrderDetail() {
           warehouseId = defaultWarehouse.id;
         }
 
-        // 1. Create inventory movement (PRODUCAO_ENTRADA) and update stock balance
+        // 1. Centralizado: Criar entrada de produção no estoque
         if (op.qty_produced > 0) {
-          await base44.entities.InventoryMove.create({
+          await executeInventoryTransaction({
             company_id: companyId,
             type: 'PRODUCAO_ENTRADA',
             product_id: op.product_id,
@@ -312,37 +346,12 @@ export default function ProductionOrderDetail() {
             related_type: 'OP',
             related_id: opId,
             reason: `Produção finalizada da OP-${op.op_number}`
-          });
-
-          // Update or create stock balance
-          const stockBalances = await base44.entities.StockBalance.filter({
-            company_id: companyId,
-            product_id: op.product_id,
-            warehouse_id: warehouseId,
-            location_id: op.location_id || undefined
-          });
-
-          if (stockBalances && stockBalances.length > 0) {
-            await base44.entities.StockBalance.update(stockBalances[0].id, {
-              qty_available: (stockBalances[0].qty_available || 0) + op.qty_produced
-            });
-          } else {
-            await base44.entities.StockBalance.create({
-              company_id: companyId,
-              product_id: op.product_id,
-              warehouse_id: warehouseId,
-              location_id: op.location_id || undefined,
-              qty_available: op.qty_produced,
-              qty_reserved: 0,
-              qty_separated: 0
-            });
-          }
+          }, companyId);
         }
 
         // 2. Update OP status to ENCERRADA and save warehouse/location if not already set
         const updateData = { 
-          status: 'ENCERRADA',
-          closed_at: new Date().toISOString()
+          status: 'ENCERRADA'
         };
 
         if (!op.warehouse_id) {
@@ -464,7 +473,7 @@ export default function ProductionOrderDetail() {
       // Check consumptions directly
       const [consumptions, bomDeliveries, materialConsumptions, allMoves] = await Promise.all([
         base44.entities.OPConsumptionControl.filter({ company_id: companyId, op_id: opId }),
-        base44.entities.BOMDeliveryControl.filter({ op_id: opId }),
+        base44.entities.BOMDeliveryControl.filter({ company_id: companyId, op_id: opId }),
         base44.entities.MaterialConsumption.filter({ company_id: companyId, op_id: opId }),
         base44.entities.InventoryMove.filter({ company_id: companyId, related_type: 'OP', related_id: opId }),
       ]);
@@ -504,6 +513,15 @@ export default function ProductionOrderDetail() {
   };
 
   const handleEncerrar = async () => {
+    if (op.status === 'ENCERRADA') {
+      toast.error('Esta OP já está encerrada.');
+      return;
+    }
+    if (op.status === 'CANCELADA') {
+      toast.error('Esta OP está cancelada e não pode ser encerrada.');
+      return;
+    }
+
     // Verificar se houve produção
     if (!op.qty_produced || op.qty_produced === 0) {
       toast.error('Não é possível encerrar uma OP sem produção registrada. Cancele a OP se não houve produção.');
@@ -552,42 +570,49 @@ export default function ProductionOrderDetail() {
     
     // 3. Verificar se BOM foi totalmente entregue
     try {
-      const boms = await base44.entities.BOM.filter({
-        company_id: companyId,
-        product_id: op.product_id,
-        active: true
-      });
+      console.log('🔍 Verificando BOM para encerramento...', { productId: op?.product_id, opId });
       
-      if (boms?.[0]) {
-        const bomItems = await base44.entities.BOMItem.filter({
-          company_id: companyId,
-          bom_version_id: boms[0].current_version_id
-        });
+      // Buscar BOM vinculada ao produto.
+      let boms = await base44.entities.BOM.filter({ company_id: companyId, product_id: op.product_id });
+      
+      const targetBOM = boms?.find(b => b.is_active) || boms?.[0];
+      
+      if (targetBOM) {
+        const versionId = targetBOM.current_version_id || targetBOM.id;
+        const bomItems = await base44.entities.BOMItem.filter({ company_id: companyId, bom_version_id: versionId });
+        
+        console.log(`📦 Encontrados ${bomItems.length} itens na BOM para versão ${versionId}`);
         
         if (bomItems.length > 0) {
-          // Verificar controle de entrega de BOM
-          const deliveryControls = await base44.entities.BOMDeliveryControl.filter({
-            company_id: companyId,
-            op_id: opId
-          });
+          const deliveryControls = await base44.entities.BOMDeliveryControl.filter({ company_id: companyId, op_id: opId });
           
-          // Calcular quantidade total necessária vs entregue
           for (const bomItem of bomItems) {
-            const qtyNeeded = Number(bomItem.quantity || 0) * Number(op.qty_planned || 0);
-            
-            // Suportar IDs novos e antigos para cruzamento
+            const qtyPerUnit = Number(bomItem.qty || bomItem.quantity || 0);
+            if (qtyPerUnit <= 0) continue;
+
+            const qtyNeeded = qtyPerUnit * Number(op.qty_planned || 0);
             const delivered = deliveryControls
-              .filter(dc => (dc.consumed_product_id === bomItem.component_id) || (dc.component_id === bomItem.component_id))
+              .filter(dc => (dc.component_id === bomItem.component_id) || (dc.consumed_product_id === bomItem.component_id))
               .reduce((sum, dc) => sum + (Number(dc.qty) || 0), 0);
             
-            if (delivered < qtyNeeded) {
-              warnings.push(`Componente ${bomItem.component_sku || 'da BOM'} - entregues ${delivered} de ${qtyNeeded} un`);
+            if (delivered < (qtyNeeded - 0.001)) {
+              warnings.push(`Componente ${bomItem.component_sku || bomItem.component_name || 'Material'} - entregues ${delivered} de ${qtyNeeded} ${bomItem.unit || 'un'}`);
             }
           }
+        } else {
+           console.log('⚠️ Itens da BOM não encontrados para a versão.');
         }
+      } else {
+         console.log('⚠️ Nenhuma BOM ativa ou disponível encontrada para o produto:', op.product_id);
+         // Fallback: Se não encontrou BOM, verificar se houve QUALQUER consumo registrado na OP
+         const consumptions = await base44.entities.OPConsumptionControl.filter({ company_id: companyId, op_id: opId });
+         if (!consumptions || consumptions.length === 0) {
+           warnings.push("Atenção: Nenhum consumo de material registrado para esta OP no Controle de Produção.");
+         }
       }
     } catch (e) {
-      console.error('Erro ao verificar BOM:', e);
+      console.error('❌ Erro detalhado ao verificar BOM:', e);
+      warnings.push("Erro ao validar itens da BOM. Verifique manualmente se todos os componentes foram entregues.");
     }
     
     // Se houver avisos, mostrar diálogo
@@ -649,6 +674,23 @@ export default function ProductionOrderDetail() {
     },
     onError: (error) => {
       toast.error(error.message || 'Erro ao atualizar número da OP');
+    }
+  });
+
+  const updateClientMutation = useMutation({
+    mutationFn: async ({ clientId, clientName }) => {
+      return base44.entities.ProductionOrder.update(opId, { 
+        client_id: clientId,
+        client_name: clientName
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['production-order', opId] });
+      setIsEditingClient(false);
+      toast.success('Cliente atualizado');
+    },
+    onError: (error) => {
+      toast.error('Erro ao atualizar cliente: ' + error.message);
     }
   });
 
@@ -728,7 +770,7 @@ export default function ProductionOrderDetail() {
         <div className="flex flex-wrap gap-2">
           <Button 
             onClick={() => op.status === 'PAUSADA' ? resumeOpMutation.mutate() : pauseOpMutation.mutate()}
-            disabled={pauseOpMutation.isPending || resumeOpMutation.isPending}
+            disabled={pauseOpMutation.isPending || resumeOpMutation.isPending || op.status === 'ENCERRADA' || op.status === 'CANCELADA'}
             variant="outline" 
             size="sm"
           >
@@ -737,6 +779,7 @@ export default function ProductionOrderDetail() {
           </Button>
           <Button 
             onClick={handleSepararBOM}
+            disabled={op.status === 'ENCERRADA' || op.status === 'CANCELADA'}
             variant="outline" 
             size="sm"
           >
@@ -753,7 +796,7 @@ export default function ProductionOrderDetail() {
           </Button>
           <Button 
             onClick={handleRegistrarProducao}
-            disabled={registerProductionMutation.isPending || op.qty_produced >= op.qty_planned}
+            disabled={registerProductionMutation.isPending || op.qty_produced >= op.qty_planned || op.status === 'ENCERRADA' || op.status === 'CANCELADA'}
             variant="outline" 
             size="sm"
           >
@@ -762,8 +805,8 @@ export default function ProductionOrderDetail() {
           </Button>
           <Button 
             onClick={handleEncerrar}
-            disabled={closeOpMutation.isPending}
-            className="bg-green-600 hover:bg-green-700"
+            disabled={closeOpMutation.isPending || op.status === 'ENCERRADA' || op.status === 'CANCELADA'}
+            className={op.status === 'ENCERRADA' ? "bg-slate-400" : "bg-green-600 hover:bg-green-700"}
             size="sm"
           >
             <CheckCircle2 className="h-4 w-4 mr-2" />
@@ -771,7 +814,7 @@ export default function ProductionOrderDetail() {
           </Button>
           <Button 
             onClick={handleCancelar}
-            disabled={cancelLoading || cancelOpMutation.isPending}
+            disabled={cancelLoading || cancelOpMutation.isPending || op.status === 'ENCERRADA' || op.status === 'CANCELADA'}
             variant="destructive" 
             size="sm"
           >
@@ -807,11 +850,68 @@ export default function ProductionOrderDetail() {
                   <p className="text-sm text-slate-500">Data Conclusão</p>
                   <p className="font-semibold">{op.due_date ? format(new Date(op.due_date), 'dd/MM/yyyy', { locale: ptBR }) : '-'}</p>
                 </div>
-                <div>
-                  <p className="text-sm text-slate-500">Prioridade</p>
-                  <Badge className="mt-1">{op.priority}</Badge>
-                </div>
-              </div>
+                 <div>
+                   <p className="text-sm text-slate-500">Prioridade</p>
+                   <Badge className="mt-1">{op.priority}</Badge>
+                 </div>
+                 <div className="col-span-2 border-t pt-4">
+                   <div className="flex items-center justify-between">
+                     <p className="text-sm text-slate-500 italic block">Vinculado ao Cliente</p>
+                     {!isEditingClient && (
+                       <Button 
+                         variant="ghost" 
+                         size="sm" 
+                         className="h-6 w-6 p-0 hover:bg-slate-100"
+                         onClick={() => {
+                           setTempClientId(op.client_id || '');
+                           setTempClientName(op.client_name || '');
+                           setIsEditingClient(true);
+                         }}
+                         disabled={op.status === 'ENCERRADA' || op.status === 'CANCELADA'}
+                       >
+                         <Pencil className="h-3 w-3 text-slate-400" />
+                       </Button>
+                     )}
+                   </div>
+                   
+                   {isEditingClient ? (
+                     <div className="mt-2 space-y-2">
+                       <ClientSearchSelect 
+                         value={tempClientId}
+                         onSelect={(id) => {
+                           // Fetch client name for display if needed
+                           base44.entities.Client.list().then(clients => {
+                             const found = clients.find(c => c.id === id);
+                             setTempClientId(id);
+                             setTempClientName(found?.name || '');
+                           });
+                         }}
+                         placeholder="Buscar cliente..."
+                       />
+                       <div className="flex justify-end gap-2">
+                         <Button 
+                           size="sm" 
+                           variant="outline" 
+                           onClick={() => setIsEditingClient(false)}
+                         >
+                           Cancelar
+                         </Button>
+                         <Button 
+                           size="sm" 
+                           onClick={() => updateClientMutation.mutate({ clientId: tempClientId, clientName: tempClientName })}
+                           disabled={updateClientMutation.isPending}
+                         >
+                           {updateClientMutation.isPending ? 'Salvando...' : 'Salvar'}
+                         </Button>
+                       </div>
+                     </div>
+                   ) : (
+                     <p className="font-semibold text-indigo-600">
+                       {op.client_name || (op.client_id ? 'Carregando...' : 'Não vinculado')}
+                     </p>
+                   )}
+                 </div>
+               </div>
 
               {/* Warehouse and Location */}
               <div className="border-t pt-4">
@@ -852,14 +952,109 @@ export default function ProductionOrderDetail() {
                   onChange={(e) => setConsumptionQty(e.target.value)}
                 />
               </div>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <Label>Armazém Origem</Label>
+                  <Select 
+                    value={consumptionWarehouseId} 
+                    onValueChange={(val) => {
+                      setConsumptionWarehouseId(val);
+                      setConsumptionLocationId('');
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione o armazém" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {warehouses?.map(w => (
+                        <SelectItem key={w.id} value={w.id}>{w.code} - {w.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Localização Origem</Label>
+                  <Select 
+                    value={consumptionLocationId} 
+                    onValueChange={setConsumptionLocationId}
+                    disabled={!consumptionWarehouseId}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione a localização" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {locations?.filter(l => l.warehouse_id === consumptionWarehouseId).map(l => (
+                        <SelectItem key={l.id} value={l.id}>{l.barcode} ({l.name || 'S/N'})</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
               <Button 
                 onClick={() => registerConsumptionMutation.mutate()}
                 disabled={registerConsumptionMutation.isPending}
-                className="w-full"
+                className="w-full bg-indigo-600 hover:bg-indigo-700"
               >
                 {registerConsumptionMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Plus className="h-4 w-4 mr-2" />}
                 Registrar Consumo
               </Button>
+            </CardContent>
+          </Card>
+
+          {/* Consumos Registrados */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Materiais Entregues / Consumidos</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {bomDeliveries?.length === 0 && materialConsumptions?.length === 0 ? (
+                  <p className="text-sm text-slate-500 text-center py-4">Nenhum consumo ou entrega registrado para esta OP.</p>
+                ) : (
+                  <>
+                    {bomDeliveries?.length > 0 && (
+                      <div>
+                        <h4 className="text-sm font-semibold mb-2 text-slate-700">Entregas do BOM</h4>
+                        <div className="space-y-2">
+                          {bomDeliveries.map(bd => (
+                            <div key={bd.id} className="flex justify-between items-center p-2 rounded border bg-slate-50 text-sm">
+                              <div>
+                                <p className="font-medium">{bd.component_name || bd.consumed_product_name}</p>
+                                <p className="text-xs text-slate-500">[{bd.component_sku || bd.consumed_product_sku}]</p>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <Badge variant="outline" className={`${bd.status === 'ENTREGUE' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                                  {bd.status}
+                                </Badge>
+                                <span className="font-bold">{Number(bd.qty || 0).toLocaleString('pt-BR')} un</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {materialConsumptions?.length > 0 && (
+                      <div className="pt-2">
+                        <h4 className="text-sm font-semibold mb-2 text-slate-700">Consumos Manuais</h4>
+                        <div className="space-y-2">
+                          {materialConsumptions.map(mc => (
+                            <div key={mc.id} className="flex justify-between items-center p-2 rounded border bg-slate-50 text-sm">
+                              <div>
+                                <p className="font-medium">{mc.product_name}</p>
+                                <p className="text-xs text-slate-500">[{mc.product_sku}]</p>
+                              </div>
+                              <span className="font-bold text-indigo-600">{Number(mc.qty_consumed || 0).toLocaleString('pt-BR')} un</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
             </CardContent>
           </Card>
 
@@ -1041,12 +1236,7 @@ export default function ProductionOrderDetail() {
                   <p className="font-semibold">{format(new Date(op.start_date), 'dd/MM/yyyy HH:mm', { locale: ptBR })}</p>
                 </div>
               )}
-              {op.closed_at && (
-                <div>
-                  <p className="text-slate-500">Finalizada em</p>
-                  <p className="font-semibold">{format(new Date(op.closed_at), 'dd/MM/yyyy HH:mm', { locale: ptBR })}</p>
-                </div>
-              )}
+
             </CardContent>
           </Card>
         </div>

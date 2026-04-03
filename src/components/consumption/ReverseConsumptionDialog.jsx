@@ -84,11 +84,9 @@ export default function ReverseConsumptionDialog({
       // 2. Centralizado: Criar Movimento e Atualizar Saldo (Garante consistência)
       const moveData = {
         company_id: companyId,
-        type: 'ESTORNO',
+        type: 'PRODUCAO_REVERSO',
         product_id: consumptionItem.consumed_product_id,
         qty: qty,
-        from_warehouse_id: null,
-        from_location_id: null,
         to_warehouse_id: warehouseId,
         to_location_id: selectedLocation,
         related_type: 'OP',

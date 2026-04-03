@@ -28,8 +28,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Progress } from '@/components/ui/progress';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import ptBR from 'date-fns/locale/pt-BR';
 import ProductSearchSelect from '@/components/products/ProductSearchSelect';
+import ClientSearchSelect from '@/components/clients/ClientSearchSelect';
 import {
   Dialog as QRDialog,
   DialogContent as QRDialogContent,
@@ -68,7 +69,9 @@ function CreateOPForm({ products, routes, orders, warehouses, locations, onSave,
     warehouse_name: '',
     location_id: '',
     location_barcode: '',
-    notes: ''
+    notes: '',
+    client_id: '',
+    client_name: ''
   });
 
   const [warehouseLocations, setWarehouseLocations] = useState([]);
@@ -149,6 +152,18 @@ function CreateOPForm({ products, routes, orders, warehouses, locations, onSave,
         />
         <p className="text-sm text-slate-500">Digite o número da OP já criada no sistema TOTVS</p>
       </div>
+
+      <ClientSearchSelect
+        label="Cliente (Opcional)"
+        value={form.client_id}
+        onSelect={(id) => {
+          const client = base44.entities.Client.list().then(clients => {
+            const found = clients.find(c => c.id === id);
+            setForm({ ...form, client_id: id, client_name: found?.name || '' });
+          });
+        }}
+        placeholder="Vincular a um cliente..."
+      />
 
       <ProductSearchSelect
         label="Produto"
@@ -542,9 +557,6 @@ export default function ProductionOrders() {
       }
 
       const updateData = { status };
-      if (status === 'ENCERRADA') {
-        updateData.closed_at = new Date().toISOString();
-      }
       return base44.entities.ProductionOrder.update(id, updateData);
     },
     onSuccess: () => {

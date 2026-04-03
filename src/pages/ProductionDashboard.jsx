@@ -119,11 +119,11 @@ export default function ProductionDashboard() {
 
     // Tempo médio de ciclo (em dias)
     const completedWithDates = filteredOps.filter(op => 
-      op.status === 'ENCERRADA' && op.start_date && op.closed_at
+      op.status === 'ENCERRADA' && op.start_date && (op.updated_date || op.created_date)
     );
     const avgCycleTime = completedWithDates.length > 0
       ? completedWithDates.reduce((sum, op) => {
-          const days = differenceInDays(parseISO(op.closed_at), parseISO(op.start_date));
+          const days = differenceInDays(parseISO(op.updated_date || op.created_date), parseISO(op.start_date));
           return sum + days;
         }, 0) / completedWithDates.length
       : 0;

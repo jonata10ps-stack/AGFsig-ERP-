@@ -182,7 +182,7 @@ export default function Separation() {
 
   const undoSeparationMutation = useMutation({
     mutationFn: async (move) => {
-       // 1. Reverter no inventário (no destino)
+       // 1. Processar no inventário (no destino) para garantir saldo disponível
        await executeInventoryTransaction({
          type: 'DESFAZER_SEPARACAO',
          product_id: move.product_id,
@@ -193,6 +193,9 @@ export default function Separation() {
          related_id: move.related_id,
          reason: `Estorno de Picking: ${move.to_location_id}`
        }, companyId);
+
+       // 2. Apagar a move original de SEPARACAO para limpar a UI
+       await base44.entities.InventoryMove.delete(move.id);
 
        // 2. Atualizar item do pedido
        const item = items.find(i => i.product_id === move.product_id);
@@ -207,10 +210,12 @@ export default function Separation() {
        }
     },
     onSuccess: () => {
-       queryClient.invalidateQueries({ queryKey: ['order-items', selectedOrder?.id] });
+       const orderId = selectedOrder?.id;
+       queryClient.invalidateQueries({ queryKey: ['order-items', orderId] });
        queryClient.invalidateQueries({ queryKey: ['orders-for-separation', companyId] });
+       queryClient.invalidateQueries({ queryKey: ['separations-moves', orderId] });
        queryClient.invalidateQueries({ queryKey: ['separations-moves'] });
-       toast.success('Retirada estornada para o local de expedição');
+       toast.success('Retirada estornada com sucesso');
     }
   });
 

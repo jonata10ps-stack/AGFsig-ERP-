@@ -39,8 +39,10 @@ export async function executeInventoryTransaction(moveData, companyId) {
 
   try {
     // --- 1. VALIDAÇÃO DE SALDO NEGATIVO (Para SAIDA, TRANSFERENCIA, CONSUMO, etc) ---
+    // PRODUCAO_REVERSO é uma ENTRADA (devolução de material), NÃO deve estar aqui
     const isOutgoing = ['SAIDA', 'PRODUCAO_CONSUMO', 'BAIXA', 'RESERVA', 'TRANSFERENCIA', 'SEPARACAO'].includes(type);
     
+    // Para PRODUCAO_REVERSO: é sempre uma ENTRADA (devolução), ignora validação de saída.
     if (isOutgoing) {
       const sourceBalances = await base44.entities.StockBalance.filter({
         company_id: companyId,
@@ -60,7 +62,7 @@ export async function executeInventoryTransaction(moveData, companyId) {
         if (!canShip) {
            throw new Error(`Saldo insuficiente para Expedição! Total: ${currentAvailable + currentSeparated}, Solicitado: ${moveQty}.`);
         }
-      } else if (currentAvailable < moveQty) {
+      } else if (type !== 'PRODUCAO_REVERSO' && currentAvailable < moveQty) {
         throw new Error(`Saldo insuficiente! Disponível: ${currentAvailable}, Solicitado: ${moveQty}. Lançamento bloqueado.`);
       }
     }
@@ -89,8 +91,8 @@ export async function executeInventoryTransaction(moveData, companyId) {
       await updateStockBalance(companyId, product_id, from_warehouse_id, from_location_id, { available: -moveQty });
     }
     
-    // CASO B: Entrada (Apenas soma no destino e atualiza custo médio)
-    else if (type === 'ENTRADA') {
+    // CASO B: Entrada / Produção Encerrada (Apenas soma no destino e atualiza custo médio)
+    else if (['ENTRADA', 'PRODUCAO_ENTRADA', 'PRODUCAO_REVERSO'].includes(type)) {
       await updateStockBalance(companyId, product_id, to_warehouse_id, to_location_id, { available: moveQty, cost: unit_cost });
     }
     
