@@ -103,10 +103,10 @@ export default function CreateInventoryMove() {
     enabled: !!companyId && !!form.related_id && form.related_type === 'OP',
   });
 
-  // Validar saldo disponÃ­vel em tempo real
+  // Validar saldo disponível em tempo real
   useEffect(() => {
     const validateStock = async () => {
-      console.log('=== VALIDAÃ‡ÃƒO DE ESTOQUE ===');
+      console.log('=== VALIDAÁ‡ÁƒO DE ESTOQUE ===');
       console.log('companyId:', companyId);
       console.log('product_id:', form.product_id);
       console.log('from_warehouse_id:', form.from_warehouse_id);
@@ -115,7 +115,7 @@ export default function CreateInventoryMove() {
       console.log('type:', form.type);
       
       if (!companyId || !form.product_id || !form.from_warehouse_id || form.qty <= 0) {
-        console.log('ValidaÃ§Ã£o ignorada - dados incompletos');
+        console.log('Validação ignorada - dados incompletos');
         setAvailableStock(null);
         setStockError(null);
         return;
@@ -129,7 +129,7 @@ export default function CreateInventoryMove() {
             warehouse_id: form.from_warehouse_id
           };
           
-          // Se tiver location_id especÃ­fico, filtrar por ele
+          // Se tiver location_id específico, filtrar por ele
           if (form.from_location_id) {
             filterQuery.location_id = form.from_location_id;
           }
@@ -140,11 +140,11 @@ export default function CreateInventoryMove() {
           console.log('Detalhes dos saldos:', JSON.stringify(balances, null, 2));
 
           const totalAvailable = balances.reduce((sum, b) => sum + (b.qty_available || 0), 0);
-          console.log('Total disponÃ­vel calculado:', totalAvailable);
+          console.log('Total disponível calculado:', totalAvailable);
           setAvailableStock(totalAvailable);
 
           if (totalAvailable < form.qty) {
-            setStockError(`Estoque insuficiente! DisponÃ­vel: ${totalAvailable}`);
+            setStockError(`Estoque insuficiente! Disponível: ${totalAvailable}`);
           } else {
             setStockError(null);
           }
@@ -230,65 +230,65 @@ export default function CreateInventoryMove() {
   const handleSubmit = (e) => {
     e.preventDefault();
 
-    // Evitar mÃºltiplos submits
+    // Evitar múltiplos submits
     if (createMoveMutation.isPending) {
       return;
     }
 
     if (!form.product_id || form.qty <= 0) {
-      toast.error('Produto e quantidade sÃ£o obrigatÃ³rios');
+      toast.error('Produto e quantidade são obrigatórios');
       return;
     }
 
     if (form.type === 'ENTRADA' && !form.to_warehouse_id) {
-      toast.error('ArmazÃ©m de destino Ã© obrigatÃ³rio para entrada');
+      toast.error('Armazém de destino é obrigatório para entrada');
       return;
     }
 
     if (form.type === 'SAIDA' && !form.from_warehouse_id) {
-      toast.error('ArmazÃ©m de origem Ã© obrigatÃ³rio para saÃ­da');
+      toast.error('Armazém de origem é obrigatório para saída');
       return;
     }
 
     if (form.type === 'BAIXA' && !form.from_warehouse_id) {
-      toast.error('ArmazÃ©m de origem Ã© obrigatÃ³rio para baixa');
+      toast.error('Armazém de origem é obrigatório para baixa');
       return;
     }
 
     if (form.type === 'BAIXA' && !form.baixa_motivo) {
-      toast.error('Motivo da baixa Ã© obrigatÃ³rio');
+      toast.error('Motivo da baixa é obrigatório');
       return;
     }
 
     if (form.type === 'BAIXA' && !form.cost_center_id) {
-      toast.error('Centro de custos Ã© obrigatÃ³rio para baixa');
+      toast.error('Centro de custos é obrigatório para baixa');
       return;
     }
 
     if (form.type === 'TRANSFERENCIA' && (!form.from_warehouse_id || !form.to_warehouse_id)) {
-      toast.error('ArmazÃ©ns de origem e destino sÃ£o obrigatÃ³rios para transferÃªncia');
+      toast.error('Armazéns de origem e destino são obrigatórios para transferência');
       return;
     }
 
     if (form.type === 'TRANSFERENCIA' && !form.from_location_id) {
-      toast.error('LocalizaÃ§Ã£o de origem Ã© obrigatÃ³ria para transferÃªncia');
+      toast.error('Localização de origem é obrigatória para transferência');
       return;
     }
 
     if (form.type === 'TRANSFERENCIA' && !form.to_location_id) {
-      toast.error('LocalizaÃ§Ã£o de destino Ã© obrigatÃ³ria para transferÃªncia');
+      toast.error('Localização de destino é obrigatória para transferência');
       return;
     }
 
     if (stockError) {
-      toast.error('Estoque insuficiente para esta operaÃ§Ã£o');
+      toast.error('Estoque insuficiente para esta operação');
       return;
     }
 
-    // ValidaÃ§Ã£o final: garantir que nÃ£o resultarÃ¡ em saldo negativo
+    // Validação final: garantir que não resultará em saldo negativo
     if ((form.type === 'SAIDA' || form.type === 'TRANSFERENCIA' || form.type === 'BAIXA') && availableStock !== null) {
       if (availableStock - form.qty < 0) {
-        toast.error('OperaÃ§Ã£o nÃ£o permitida: resultaria em saldo negativo');
+        toast.error('Operação não permitida: resultaria em saldo negativo');
         return;
       }
     }
@@ -327,8 +327,8 @@ export default function CreateInventoryMove() {
 
   const MOVE_TYPES = {
     ENTRADA: 'Entrada',
-    SAIDA: 'SaÃ­da',
-    TRANSFERENCIA: 'TransferÃªncia',
+    SAIDA: 'Saída',
+    TRANSFERENCIA: 'Transferência',
     BAIXA: 'Baixa de Estoque'
   };
 
@@ -338,9 +338,9 @@ export default function CreateInventoryMove() {
     'Perda',
     'Quebra',
     'Uso Interno',
-    'DoaÃ§Ã£o',
+    'Doação',
     'Descarte',
-    'Amostra GrÃ¡tis',
+    'Amostra Grátis',
     'Outro'
   ];
 
@@ -354,7 +354,7 @@ export default function CreateInventoryMove() {
         </Link>
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Nova Movimentação de Estoque</h1>
-          <p className="text-slate-500">Registre entradas, saÃ­das e transferÃªncias</p>
+          <p className="text-slate-500">Registre entradas, saídas e transferências</p>
         </div>
       </div>
 
@@ -387,7 +387,7 @@ export default function CreateInventoryMove() {
                     label="Produto *"
                     value={form.product_id}
                     onSelect={(v) => setForm({ ...form, product_id: v })}
-                    placeholder="Buscar por cÃ³digo ou descriÃ§Ã£o..."
+                    placeholder="Buscar por código ou descrição..."
                     required
                   />
                 </div>
@@ -411,10 +411,10 @@ export default function CreateInventoryMove() {
                             toast.success(`Produto ${product.sku} selecionado`);
                             setScanProductOpen(false);
                           } else {
-                            toast.error('Produto nÃ£o encontrado');
+                            toast.error('Produto não encontrado');
                           }
                         }}
-                        placeholder="Escaneie o cÃ³digo do produto"
+                        placeholder="Escaneie o código do produto"
                       />
                     </DialogContent>
                   </Dialog>
@@ -426,7 +426,7 @@ export default function CreateInventoryMove() {
                 <Alert className="bg-amber-50 border-amber-200 text-amber-800 py-2">
                   <AlertCircle className="h-4 w-4 mt-0.5" />
                   <AlertDescription className="text-xs">
-                    <strong>Item Extra:</strong> Este produto nÃ£o consta na BOM original desta OP. Ele serÃ¡ registrado como um consumo adicional (Extra).
+                    <strong>Item Extra:</strong> Este produto não consta na BOM original desta OP. Ele será registrado como um consumo adicional (Extra).
                   </AlertDescription>
                 </Alert>
               )}
@@ -443,12 +443,12 @@ export default function CreateInventoryMove() {
               />
               {availableStock !== null && (form.type === 'SAIDA' || form.type === 'TRANSFERENCIA' || form.type === 'BAIXA') && (
                 <p className={`text-sm ${stockError ? 'text-red-600' : 'text-emerald-600'}`}>
-                  DisponÃ­vel: {availableStock}
+                  Disponível: {availableStock}
                 </p>
               )}
             </div>
 
-            {/* Campos especÃ­ficos para BAIXA */}
+            {/* Campos específicos para BAIXA */}
             {form.type === 'BAIXA' && (
               <>
                 <div className="space-y-2">
@@ -504,7 +504,7 @@ export default function CreateInventoryMove() {
               <>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>ArmazÃ©m de Origem *</Label>
+                    <Label>Armazém de Origem *</Label>
                     <Select value={form.from_warehouse_id} onValueChange={(v) => setForm({ ...form, from_warehouse_id: v, from_location_id: '' })}>
                       <SelectTrigger>
                         <SelectValue placeholder="Selecione..." />
@@ -517,12 +517,12 @@ export default function CreateInventoryMove() {
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label>LocalizaÃ§Ã£o de Origem</Label>
+                    <Label>Localização de Origem</Label>
                     <div className="flex gap-2">
                       <div className="flex-1">
                         <Select value={form.from_location_id} onValueChange={(v) => setForm({ ...form, from_location_id: v })}>
                           <SelectTrigger>
-                            <SelectValue placeholder="Selecione a localizaÃ§Ã£o" />
+                            <SelectValue placeholder="Selecione a localização" />
                           </SelectTrigger>
                           <SelectContent>
                             {fromLocations?.map(l => (
@@ -539,7 +539,7 @@ export default function CreateInventoryMove() {
                         </DialogTrigger>
                         <DialogContent>
                           <DialogHeader>
-                            <DialogTitle>Escanear LocalizaÃ§Ã£o de Origem</DialogTitle>
+                            <DialogTitle>Escanear Localização de Origem</DialogTitle>
                           </DialogHeader>
                           <QRScanner
                             active={scanFromLocationOpen}
@@ -547,13 +547,13 @@ export default function CreateInventoryMove() {
                               const location = locations?.find(l => l.barcode === code || l.barcode === code.trim());
                               if (location) {
                                 setForm({ ...form, from_location_id: location.id, from_warehouse_id: location.warehouse_id });
-                                toast.success(`LocalizaÃ§Ã£o ${location.barcode} selecionada`);
+                                toast.success(`Localização ${location.barcode} selecionada`);
                                 setScanFromLocationOpen(false);
                               } else {
-                                toast.error('LocalizaÃ§Ã£o nÃ£o encontrada');
+                                toast.error('Localização não encontrada');
                               }
                             }}
-                            placeholder="Escaneie o QR da localizaÃ§Ã£o de origem"
+                            placeholder="Escaneie o QR da localização de origem"
                           />
                         </DialogContent>
                       </Dialog>
@@ -568,7 +568,7 @@ export default function CreateInventoryMove() {
               <>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>ArmazÃ©m de Destino *</Label>
+                    <Label>Armazém de Destino *</Label>
                     <Select value={form.to_warehouse_id} onValueChange={(v) => setForm({ ...form, to_warehouse_id: v, to_location_id: '' })}>
                       <SelectTrigger>
                         <SelectValue placeholder="Selecione..." />
@@ -581,12 +581,12 @@ export default function CreateInventoryMove() {
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label>LocalizaÃ§Ã£o de Destino</Label>
+                    <Label>Localização de Destino</Label>
                     <div className="flex gap-2">
                       <div className="flex-1">
                         <Select value={form.to_location_id} onValueChange={(v) => setForm({ ...form, to_location_id: v })}>
                           <SelectTrigger>
-                            <SelectValue placeholder="Selecione a localizaÃ§Ã£o" />
+                            <SelectValue placeholder="Selecione a localização" />
                           </SelectTrigger>
                           <SelectContent>
                             {toLocations?.map(l => (
@@ -603,7 +603,7 @@ export default function CreateInventoryMove() {
                         </DialogTrigger>
                         <DialogContent>
                           <DialogHeader>
-                            <DialogTitle>Escanear LocalizaÃ§Ã£o de Destino</DialogTitle>
+                            <DialogTitle>Escanear Localização de Destino</DialogTitle>
                           </DialogHeader>
                           <QRScanner
                             active={scanToLocationOpen}
@@ -611,13 +611,13 @@ export default function CreateInventoryMove() {
                               const location = locations?.find(l => l.barcode === code || l.barcode === code.trim());
                               if (location) {
                                 setForm({ ...form, to_location_id: location.id, to_warehouse_id: location.warehouse_id });
-                                toast.success(`LocalizaÃ§Ã£o ${location.barcode} selecionada`);
+                                toast.success(`Localização ${location.barcode} selecionada`);
                                 setScanToLocationOpen(false);
                               } else {
-                                toast.error('LocalizaÃ§Ã£o nÃ£o encontrada');
+                                toast.error('Localização não encontrada');
                               }
                             }}
-                            placeholder="Escaneie o QR da localizaÃ§Ã£o de destino"
+                            placeholder="Escaneie o QR da localização de destino"
                           />
                         </DialogContent>
                       </Dialog>
@@ -627,10 +627,10 @@ export default function CreateInventoryMove() {
               </>
             )}
 
-            {/* Custo UnitÃ¡rio (apenas ENTRADA) */}
+            {/* Custo Unitário (apenas ENTRADA) */}
             {form.type === 'ENTRADA' && (
               <div className="space-y-2">
-                <Label>Custo UnitÃ¡rio (R$)</Label>
+                <Label>Custo Unitário (R$)</Label>
                 <Input
                   type="number"
                   step="0.01"
@@ -651,7 +651,7 @@ export default function CreateInventoryMove() {
                   <SelectContent>
                     <SelectItem value={null}>Nenhum</SelectItem>
                     <SelectItem value="PEDIDO">Pedido de Venda</SelectItem>
-                    <SelectItem value="OP">Ordem de ProduÃ§Ã£o</SelectItem>
+                    <SelectItem value="OP">Ordem de Produção</SelectItem>
                     <SelectItem value="COMPRA">Compra</SelectItem>
                   </SelectContent>
                 </Select>
@@ -702,7 +702,7 @@ export default function CreateInventoryMove() {
                               toast.success(`OP ${op.numero_op_externo} selecionada`);
                               setScanOPOpen(false);
                             } else {
-                              toast.error('OP nÃ£o encontrada');
+                              toast.error('OP não encontrada');
                             }
                           }}
                           placeholder="Escaneie o QR da OP"
@@ -728,7 +728,7 @@ export default function CreateInventoryMove() {
                     </Badge>
                   </div>
                   <p className="text-[10px] text-slate-500 bg-indigo-50 p-1.5 rounded border border-indigo-100">
-                    <strong>Dica:</strong> Se precisar entregar um item que nÃ£o estÃ¡ nesta lista, basta buscÃ¡-lo normalmente no campo <strong>"Produto"</strong> no topo da pÃ¡gina. Ele serÃ¡ registrado como um "item extra" para esta OP.
+                    <strong>Dica:</strong> Se precisar entregar um item que não está nesta lista, basta buscá-lo normalmente no campo <strong>"Produto"</strong> no topo da página. Ele será registrado como um "item extra" para esta OP.
                   </p>
                 </div>
                 
@@ -751,7 +751,7 @@ export default function CreateInventoryMove() {
                             ...form,
                             product_id: comp.consumed_product_id,
                             qty: remaining,
-                            type: 'SAIDA', // Geralmente Ã© saÃ­da/baixa para a produÃ§Ã£o
+                            type: 'SAIDA', // Geralmente é saída/baixa para a produção
                             reason: `Baixa OP ${opComponents[0]?.op_number || ''}`
                           });
                           toast.info(`Selecionado: ${comp.consumed_product_name}`);
@@ -771,13 +771,13 @@ export default function CreateInventoryMove() {
                     ))}
                   </div>
                 )}
-                <p className="text-[10px] text-slate-400">Clique em um componente para preencher o formulÃ¡rio automaticamente.</p>
+                <p className="text-[10px] text-slate-400">Clique em um componente para preencher o formulário automaticamente.</p>
               </div>
             )}
 
             {/* Motivo */}
             <div className="space-y-2">
-              <Label>Motivo / ObservaÃ§Ãµes</Label>
+              <Label>Motivo / ObservaçÁµes</Label>
               <Textarea
                 value={form.reason}
                 onChange={(e) => setForm({ ...form, reason: e.target.value })}
@@ -794,7 +794,7 @@ export default function CreateInventoryMove() {
               </Alert>
             )}
 
-            {/* BotÃµes */}
+            {/* BotÁµes */}
             <div className="flex justify-end gap-3 pt-4">
               <Link to={createPageUrl('InventoryMoves')}>
                 <Button type="button" variant="outline">Cancelar</Button>
@@ -832,7 +832,7 @@ export default function CreateInventoryMove() {
           </DialogHeader>
           <div className="space-y-4">
             <p className="text-sm text-slate-600">
-              A baixa de estoque foi registrada. Deseja gerar o PDF da requisiÃ§Ã£o de baixa?
+              A baixa de estoque foi registrada. Deseja gerar o PDF da requisição de baixa?
             </p>
             <div className="flex gap-3">
               <Button
@@ -840,7 +840,7 @@ export default function CreateInventoryMove() {
                 onClick={handleCloseBaixaDialog}
                 className="flex-1"
               >
-                NÃ£o, Continuar
+                Não, Continuar
               </Button>
               <Button
                 onClick={() => {

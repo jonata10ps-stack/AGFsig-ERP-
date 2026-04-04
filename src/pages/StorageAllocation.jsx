@@ -18,38 +18,38 @@ import QRScanner from '../components/scanner/QRScanner';
 import { executeInventoryTransaction } from '@/utils/inventoryTransactionUtils';
 import { cn } from '@/lib/utils';
 
-// FunÃ§Ã£o para calcular score de uma localizaÃ§Ã£o
+// Função para calcular score de uma localização
 function calculateLocationScore(location, product, stockBalances) {
   let score = 100;
 
-  // LocalizaÃ§Ã£o jÃ¡ tem este produto? (FIFO + consolidaÃ§Ã£o)
+  // Localização já tem este produto? (FIFO + consolidação)
   const hasProduct = stockBalances?.find(
     sb => sb.location_id === location.id && sb.product_id === product.id
   );
   if (hasProduct) {
-    score += 50; // Priorizar consolidaÃ§Ã£o
+    score += 50; // Priorizar consolidação
   }
 
-  // Verificar ocupaÃ§Ã£o da localizaÃ§Ã£o
+  // Verificar ocupação da localização
   const locationOccupancy = stockBalances?.filter(
     sb => sb.location_id === location.id
   ).reduce((sum, sb) => sum + (sb.qty_available || 0), 0) || 0;
 
   const occupancyRate = location.capacity ? locationOccupancy / location.capacity : 0;
 
-  // Penalizar localizaÃ§Ãµes muito cheias (< 20% espaÃ§o livre)
+  // Penalizar localizaçÁµes muito cheias (< 20% espaço livre)
   if (occupancyRate > 0.8) {
     score -= 30;
   } else if (occupancyRate > 0.5) {
     score -= 10;
   }
 
-  // Bonificar localizaÃ§Ãµes vazias se nÃ£o hÃ¡ produto consolidado
+  // Bonificar localizaçÁµes vazias se não há produto consolidado
   if (!hasProduct && occupancyRate === 0) {
     score += 20;
   }
 
-  // Priorizar nÃ­veis mÃ©dios (mais ergonÃ´micos)
+  // Priorizar níveis médios (mais ergonômicos)
   const nivel = location.nivel?.toUpperCase();
   if (nivel === 'M' || nivel === 'MEDIO' || nivel === '2') {
     score += 15;
@@ -57,7 +57,7 @@ function calculateLocationScore(location, product, stockBalances) {
     score += 5;
   }
 
-  // Priorizar ruas/mÃ³dulos iniciais (mais prÃ³ximos)
+  // Priorizar ruas/módulos iniciais (mais próximos)
   const rua = parseInt(location.rua) || 999;
   const modulo = parseInt(location.modulo) || 999;
   
@@ -67,25 +67,25 @@ function calculateLocationScore(location, product, stockBalances) {
   return score;
 }
 
-// Sugerir melhores localizaÃ§Ãµes
+// Sugerir melhores localizaçÁµes
 function suggestBestLocations(product, locations, stockBalances, warehouseId, limit = 3) {
   if (!locations || !product) return [];
 
-  // Filtrar localizaÃ§Ãµes: preferir do mesmo armazÃ©m, mas aceitar sem warehouse_id
+  // Filtrar localizaçÁµes: preferir do mesmo armazém, mas aceitar sem warehouse_id
   let validLocations = locations.filter(l => l.active !== false);
   
-  // Se temos localizaÃ§Ãµes do armazÃ©m especÃ­fico, usar sÃ³ essas
+  // Se temos localizaçÁµes do armazém específico, usar só essas
   const warehouseLocations = validLocations.filter(l => l.warehouse_id === warehouseId);
   if (warehouseLocations.length > 0) {
     validLocations = warehouseLocations;
   }
 
-  // Se nÃ£o hÃ¡ localizaÃ§Ãµes, retornar todas as ativas
+  // Se não há localizaçÁµes, retornar todas as ativas
   if (validLocations.length === 0) {
     validLocations = locations.filter(l => l.active !== false);
   }
 
-  // Calcular score para cada localizaÃ§Ã£o
+  // Calcular score para cada localização
   const scored = validLocations.map(location => ({
     location,
     score: calculateLocationScore(location, product, stockBalances || []),
@@ -192,7 +192,7 @@ export default function StorageAllocation() {
     enabled: !!companyId,
   });
 
-  // Quando selecionar um item, gerar sugestÃµes
+  // Quando selecionar um item, gerar sugestÁµes
   useEffect(() => {
     if (selectedItem && products && locations) {
       const product = products.find(p => p.id === selectedItem.product_id);
@@ -215,7 +215,7 @@ export default function StorageAllocation() {
    mutationFn: async ({ item, locationId, qty }) => {
      const batch = batches?.find(b => b.id === item.batch_id);
      
-     // Se o item nÃ£o tem warehouse_id, buscar armazÃ©m padrÃ£o
+     // Se o item não tem warehouse_id, buscar armazém padrão
      let warehouseId = item.warehouse_id;
      if (!warehouseId) {
        const warehouses = await base44.entities.Warehouse.filter({
@@ -224,7 +224,7 @@ export default function StorageAllocation() {
        });
        const defaultWarehouse = warehouses.find(w => w.type === 'ACABADO') || warehouses[0];
        if (!defaultWarehouse) {
-         throw new Error('Nenhum armazÃ©m ativo encontrado');
+         throw new Error('Nenhum armazém ativo encontrado');
        }
        warehouseId = defaultWarehouse.id;
        
@@ -431,28 +431,28 @@ export default function StorageAllocation() {
     );
     
     if (!location) {
-      toast.error('LocalizaÃ§Ã£o nÃ£o encontrada');
+      toast.error('Localização não encontrada');
       return;
     }
 
     if (location.warehouse_id !== selectedItem.warehouse_id) {
-      toast.error('LocalizaÃ§Ã£o pertence a outro armazÃ©m');
+      toast.error('Localização pertence a outro armazém');
       return;
     }
 
     setSelectedLocation(location);
     setManualLocationCode('');
-    toast.success(`LocalizaÃ§Ã£o selecionada: ${location.barcode}`);
+    toast.success(`Localização selecionada: ${location.barcode}`);
   };
 
   const handleAllocate = () => {
     if (!selectedItem || !selectedLocation) {
-      toast.error('Selecione item e localizaÃ§Ã£o');
+      toast.error('Selecione item e localização');
       return;
     }
 
     if (qtyToAllocate <= 0 || qtyToAllocate > selectedItem.qty) {
-      toast.error('Quantidade invÃ¡lida');
+      toast.error('Quantidade inválida');
       return;
     }
 
@@ -563,9 +563,9 @@ export default function StorageAllocation() {
                           </p>
                           <div className="flex flex-wrap items-center gap-2 mt-1">
                             {item.isFromProduction ? (
-                              <Badge variant="secondary" className="bg-purple-100 text-purple-700 text-[10px]">PRODUÇÃO</Badge>
+                              <Badge variant="secondary" className="bg-purple-100 text-purple-700 text-[10px]">PRODUÇÁO</Badge>
                             ) : item.isFromExpeditionDock ? (
-                              <Badge variant="secondary" className="bg-amber-100 text-amber-700 text-[10px]">DOCA EXPEDIÇÃO</Badge>
+                              <Badge variant="secondary" className="bg-amber-100 text-amber-700 text-[10px]">DOCA EXPEDIÇÁO</Badge>
                             ) : item.isFromStockBalance ? (
                               <Badge variant="secondary" className="bg-slate-100 text-slate-700 text-[10px]">SEM ENDEREÇO</Badge>
                             ) : (
@@ -614,7 +614,7 @@ export default function StorageAllocation() {
               <div className="h-6 w-6 rounded-full bg-emerald-600 text-white flex items-center justify-center text-sm font-bold">
                 2
               </div>
-              Bipar LocalizaÃ§Ã£o
+              Bipar Localização
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -629,17 +629,17 @@ export default function StorageAllocation() {
                   onScan={(code) => {
                     const location = locations?.find(l => l.barcode === code);
                     if (!location) {
-                      toast.error('LocalizaÃ§Ã£o nÃ£o encontrada');
+                      toast.error('Localização não encontrada');
                       return;
                     }
                     if (location.warehouse_id !== selectedItem.warehouse_id) {
-                      toast.error('LocalizaÃ§Ã£o pertence a outro armazÃ©m');
+                      toast.error('Localização pertence a outro armazém');
                       return;
                     }
                     handleSelectLocation(location);
-                    toast.success(`LocalizaÃ§Ã£o: ${location.barcode}`);
+                    toast.success(`Localização: ${location.barcode}`);
                   }}
-                  placeholder="Escaneie o cÃ³digo da localizaÃ§Ã£o"
+                  placeholder="Escaneie o código da localização"
                   active={!!selectedItem && !selectedLocation}
                 />
 
@@ -657,7 +657,7 @@ export default function StorageAllocation() {
                  ) : suggestedLocations.length === 0 ? (
                    <div className="text-center py-4 text-slate-500">
                      <AlertCircle className="h-6 w-6 mx-auto text-slate-300 mb-2" />
-                     <p className="text-xs">Nenhuma localizaÃ§Ã£o disponÃ­vel</p>
+                     <p className="text-xs">Nenhuma localização disponível</p>
                    </div>
                  ) : (
                   <div className="space-y-2 max-h-60 overflow-y-auto">
@@ -694,7 +694,7 @@ export default function StorageAllocation() {
                           <div className="flex gap-2">
                             {hasProduct && (
                               <Badge className="bg-blue-100 text-blue-700 text-xs">
-                                Produto jÃ¡ aqui
+                                Produto já aqui
                               </Badge>
                             )}
                             {occupancy > 0 && (
@@ -720,7 +720,7 @@ export default function StorageAllocation() {
               <div className="h-6 w-6 rounded-full bg-purple-600 text-white flex items-center justify-center text-sm font-bold">
                 3
               </div>
-              Confirmar AlocaÃ§Ã£o
+              Confirmar Alocação
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -739,7 +739,7 @@ export default function StorageAllocation() {
                   </div>
 
                   <div className="p-3 bg-slate-50 rounded-lg">
-                    <p className="text-xs text-slate-500 mb-1">LocalizaÃ§Ã£o</p>
+                    <p className="text-xs text-slate-500 mb-1">Localização</p>
                     <p className="font-mono text-sm font-bold text-emerald-600">{selectedLocation.barcode}</p>
                     <p className="text-sm">
                       {[selectedLocation.rua, selectedLocation.modulo, selectedLocation.nivel]
@@ -780,13 +780,13 @@ export default function StorageAllocation() {
                       </Button>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-xs text-slate-500">DisponÃ­vel: {selectedItem.qty}</span>
+                      <span className="text-xs text-slate-500">Disponível: {selectedItem.qty}</span>
                       <Button
                         size="sm"
                         variant="ghost"
                         onClick={() => setQtyToAllocate(selectedItem.qty)}
                       >
-                        MÃ¡ximo
+                        Máximo
                       </Button>
                     </div>
                   </div>
@@ -795,7 +795,7 @@ export default function StorageAllocation() {
                     <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
                       <p className="text-sm text-amber-800 flex items-center gap-2">
                         <AlertCircle className="h-4 w-4" />
-                        AlocaÃ§Ã£o parcial - Restam {(selectedItem.qty - qtyToAllocate).toFixed(2)} unidades
+                        Alocação parcial - Restam {(selectedItem.qty - qtyToAllocate).toFixed(2)} unidades
                       </p>
                     </div>
                   )}
@@ -815,7 +815,7 @@ export default function StorageAllocation() {
                   ) : (
                     <>
                       <CheckCircle className="h-5 w-5 mr-2" />
-                      Confirmar AlocaÃ§Ã£o
+                      Confirmar Alocação
                     </>
                   )}
                 </Button>

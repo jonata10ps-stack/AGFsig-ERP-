@@ -560,7 +560,7 @@ export default function Separation() {
                     onScan={(code) => {
                       const pro = pickConfig.prods?.[0];
                       if (pro && pro.sku?.toLowerCase() !== code.toLowerCase() && pro.barcode?.toLowerCase() !== code.toLowerCase()) {
-                         toast.error("Produto lido NÃO confere com o item do pedido!");
+                         toast.error("Produto lido NÁO confere com o item do pedido!");
                          return;
                       }
                       setScanProd(code.trim());

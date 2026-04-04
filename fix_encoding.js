@@ -1,5 +1,5 @@
-const fs = require('fs');
-const path = require('path');
+import fs from 'fs';
+import path from 'path';
 
 const replacements = {
   'Ã§Ã£o': 'ção',
@@ -13,7 +13,7 @@ const replacements = {
   'Ãª': 'ê',
   'Ã´': 'ô',
   'Ã ': 'à',
-  'Ã': 'Á', // Special case
+  'Ã': 'Á',
 };
 
 function fixFile(filePath) {
