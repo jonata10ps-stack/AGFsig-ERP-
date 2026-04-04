@@ -114,7 +114,7 @@ export default function OPConsumptionControl() {
       const moves = await base44.entities.InventoryMove.filter({ company_id: companyId });
       return moves.filter(m => 
         m.related_type === 'OP' && 
-        (m.type === 'SAIDA' || m.type === 'PRODUCAO_CONSUMO')
+        ['SAIDA', 'PRODUCAO_CONSUMO', 'PRODUCAO_REVERSO', 'ESTORNO', 'ENTRADA', 'BAIXA'].includes(m.type)
       );
     },
     enabled: !!companyId,
@@ -122,124 +122,82 @@ export default function OPConsumptionControl() {
 
   // Data processing logic wrapped in useMemo to prevent re-calculations and stabilize refs
   const allConsumptions = useMemo(() => {
-    // Inventory Moves já cobertos por OPConsumptionControl
-    const coveredMoveIds = new Set(
-      controls.filter(c => c.control_status !== 'FECHADO' && c.inventory_move_id)
-        .map(c => c.inventory_move_id)
-    );
+    const aggregated = {};
+    const getKey = (opId, prodId) => `${opId}|${prodId}`;
 
-    // Soma de quantidades por par OP+Produto já em Controle
-    const opControlQtyByKey = {};
-    controls.filter(c => c.control_status !== 'FECHADO').forEach(c => {
-      const key = `${c.op_id}-${c.consumed_product_id}`;
-      opControlQtyByKey[key] = (opControlQtyByKey[key] || 0) + (Number(c.qty) || 0);
+    // 1. Controls
+    controls.filter(c => c.control_status !== 'FECHADO' && Number(c.qty) > 0).forEach(c => {
+      const key = getKey(c.op_id, c.consumed_product_id);
+      if (!aggregated[key]) aggregated[key] = { ctrlQty: 0, bomQty: 0, mcQty: 0, moveQty: 0 };
+      aggregated[key].ctrlQty += Number(c.qty);
+      if (!aggregated[key].metaCtrl) aggregated[key].metaCtrl = c;
     });
 
-    // Chaves OP+Produto já atendidas via BOMDelivery para evitar duplicatas manuais
-    const bomOpProductKeys = new Set();
-    bomDeliveries.forEach(bd => {
-      const qty = Number(bd.qty) || 0;
-      if (qty > 0) {
-        const compId = bd.consumed_product_id || bd.component_id;
-        bomOpProductKeys.add(`${bd.op_id}-${compId}`);
+    // 2. BOM Deliveries
+    bomDeliveries.filter(bd => Number(bd.qty) > 0).forEach(bd => {
+      const compId = bd.consumed_product_id || bd.component_id;
+      const key = getKey(bd.op_id, compId);
+      if (!aggregated[key]) aggregated[key] = { ctrlQty: 0, bomQty: 0, mcQty: 0, moveQty: 0 };
+      aggregated[key].bomQty += Number(bd.qty);
+      if (!aggregated[key].metaBom) aggregated[key].metaBom = bd;
+    });
+
+    // 3. Material Consumptions
+    materialConsumptions.filter(mc => Number(mc.qty_consumed) > 0).forEach(mc => {
+      const key = getKey(mc.op_id, mc.product_id);
+      if (!aggregated[key]) aggregated[key] = { ctrlQty: 0, bomQty: 0, mcQty: 0 };
+      aggregated[key].mcQty += Number(mc.qty_consumed);
+      if (!aggregated[key].metaMc) aggregated[key].metaMc = mc;
+    });
+
+    // Resolve into final items
+    const items = [];
+    Object.entries(aggregated).forEach(([key, data]) => {
+      let finalQty = 0;
+      
+      const ctrlQty = Math.abs(data.ctrlQty || 0);
+      const bomQty = Math.abs(data.bomQty || 0);
+      const mcQty = Math.abs(data.mcQty || 0);
+      
+      if (ctrlQty > 0 || bomQty > 0) {
+        finalQty = Math.max(ctrlQty, bomQty);
+      } else if (mcQty > 0) {
+        finalQty = mcQty;
       }
+
+      if (finalQty <= 0) return;
+
+      const baseMeta = data.metaCtrl || data.metaBom || data.metaMc;
+      if (!baseMeta) return;
+
+      const opId = baseMeta.op_id;
+      const op = allOPs.find(o => String(o.id) === String(opId));
+      let prodId = baseMeta.consumed_product_id || baseMeta.component_id || baseMeta.product_id;
+      const product = products.find(p => String(p.id) === String(prodId));
+      
+      const locId = baseMeta.location_id || baseMeta.from_location_id;
+      const location = locations.find(l => String(l.id) === String(locId));
+
+      items.push({
+        id: `grouped-${key}`,
+        op_id: opId,
+        op_number: op?.op_number || baseMeta.op_number || 'N/A',
+        product_name: op?.product_name || 'N/A',
+        consumed_product_id: prodId,
+        consumed_product_sku: product?.sku || baseMeta.consumed_product_sku || baseMeta.component_sku || 'N/A',
+        consumed_product_name: product?.name || baseMeta.consumed_product_name || baseMeta.component_name || 'N/A',
+        qty: finalQty,
+        op_status: op?.status || 'ABERTA',
+        control_status: 'ABERTO',
+        created_date: baseMeta.updated_date || baseMeta.created_date || baseMeta.registered_date,
+        warehouse_id: baseMeta.warehouse_id || baseMeta.from_warehouse_id,
+        warehouse_name: baseMeta.warehouse_name || baseMeta.from_warehouse_name || '',
+        location_barcode: baseMeta.location_barcode || baseMeta.from_location_barcode || location?.barcode || '',
+      });
     });
 
-    const items = [
-      // 1. Controles Abertos existentes
-      ...controls.filter(c => c.control_status !== 'FECHADO'),
-
-      // 2. BOM Deliveries não vinculados
-      ...bomDeliveries.filter(bd => {
-        const qty = Number(bd.qty) || 0;
-        if (qty <= 0) return false;
-        const compId = bd.consumed_product_id || bd.component_id;
-        const key = `${bd.op_id}-${compId}`;
-        const covered = opControlQtyByKey[key] || 0;
-        return (qty - covered) > 0.001;
-      }).map(delivery => {
-        const compId = delivery.consumed_product_id || delivery.component_id;
-        const qty = Number(delivery.qty) || 0;
-        const key = `${delivery.op_id}-${compId}`;
-        const coveredByControl = opControlQtyByKey[key] || 0;
-        const bomPickingQty = qty - coveredByControl;
-        
-        const op = allOPs.find(o => o.id === delivery.op_id);
-        const product = products.find(p => p.id === compId);
-        const location = locations.find(l => l.id === delivery.from_location_id);
-        
-        return {
-          id: `bom-${delivery.id}`,
-          op_id: delivery.op_id,
-          op_number: delivery.op_number || op?.op_number || 'N/A',
-          numero_op_externo: op?.numero_op_externo || '',
-          product_id: op?.product_id || '',
-          product_name: op?.product_name || 'N/A',
-          consumed_product_id: compId,
-          consumed_product_sku: delivery.consumed_product_sku || delivery.component_sku || product?.sku || 'N/A',
-          consumed_product_name: delivery.consumed_product_name || delivery.component_name || product?.name || 'N/A',
-          qty: bomPickingQty,
-          op_status: op?.status || 'ABERTA',
-          control_status: 'ABERTO',
-          created_date: delivery.updated_date || delivery.created_date,
-          warehouse_id: delivery.from_warehouse_id,
-          warehouse_name: delivery.from_warehouse_name || '',
-          location_barcode: delivery.from_location_barcode || location?.barcode || '',
-          from_bom_delivery: true,
-        };
-      }),
-
-      // 3. Material Consumptions sem controle
-      ...materialConsumptions.filter(consumption => {
-        const key = `${consumption.op_id}-${consumption.product_id}`;
-        return !opControlQtyByKey[key] && !bomOpProductKeys.has(key);
-      }).map(consumption => {
-        const op = allOPs.find(o => o.id === consumption.op_id);
-        return {
-          id: `material-${consumption.id}`,
-          op_id: consumption.op_id,
-          op_number: op?.op_number || 'N/A',
-          product_name: op?.product_name || 'N/A',
-          consumed_product_id: consumption.product_id,
-          consumed_product_sku: consumption.product_sku || 'N/A',
-          consumed_product_name: consumption.product_name || 'N/A',
-          qty: consumption.qty_consumed,
-          op_status: op?.status || 'ABERTA',
-          control_status: 'ABERTO',
-          created_date: consumption.registered_date,
-          from_material_consumption: true,
-        };
-      }),
-
-      // 4. Inventory Moves residuais
-      ...inventoryMoves.filter(move => {
-        if (coveredMoveIds.has(move.id)) return false;
-        const key = `${move.related_id}-${move.product_id}`;
-        if (bomOpProductKeys.has(key)) return false;
-        if (opControlQtyByKey[key]) return false;
-        return true;
-      }).map(move => {
-        const op = allOPs.find(o => o.id === move.related_id);
-        const product = products.find(p => p.id === move.product_id);
-        return {
-          id: `move-${move.id}`,
-          op_id: move.related_id,
-          op_number: op?.op_number || 'N/A',
-          product_name: op?.product_name || 'N/A',
-          consumed_product_id: move.product_id,
-          consumed_product_sku: product?.sku || 'N/A',
-          consumed_product_name: product?.name || 'N/A',
-          qty: move.qty,
-          op_status: op?.status || 'ABERTA',
-          control_status: 'ABERTO',
-          created_date: move.created_date,
-          inventory_move_id: move.id,
-          from_inventory_move: true,
-        };
-      })
-    ];
     return items;
-  }, [controls, bomDeliveries, materialConsumptions, inventoryMoves, allOPs, products, locations]);
+  }, [controls, bomDeliveries, materialConsumptions, allOPs, products, locations]);
 
   // Group items by OP
   const groupedData = useMemo(() => {

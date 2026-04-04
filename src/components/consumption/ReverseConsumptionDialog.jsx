@@ -65,22 +65,8 @@ export default function ReverseConsumptionDialog({
       const selectedLocationData = locations.find(l => l.id === selectedLocation);
       const warehouseId = selectedLocationData?.warehouse_id;
 
-      let realId = consumptionItem.id;
-      if (consumptionItem.id?.includes('-')) {
-        const parts = consumptionItem.id.split('-');
-        const prefix = parts[0];
-        realId = parts.slice(1).join('-');
-
-        // 1. Caso especial: MaterialConsumption
-        if (prefix === 'material' && consumptionItem.from_material_consumption) {
-          if (Math.abs(qty - consumptionItem.qty) < 0.001) {
-            await base44.entities.MaterialConsumption.delete(realId);
-          } else {
-            await base44.entities.MaterialConsumption.update(realId, { qty_consumed: consumptionItem.qty - qty });
-          }
-        }
-      }
-
+      // A sincronização de exclusão das tabelas OPConsumptionControl, BOMDeliveryControl
+      // e MaterialConsumption será feita automaticamente pela função centralizada processProductionOrderControls.
       // 2. Centralizado: Criar Movimento e Atualizar Saldo (Garante consistência)
       const moveData = {
         company_id: companyId,

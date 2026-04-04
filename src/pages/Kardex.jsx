@@ -22,6 +22,7 @@ const MOVEMENT_TYPES = {
   SEPARACAO: { label: 'Separação', color: 'bg-purple-100 text-purple-700', icon: TrendingDown },
   PRODUCAO_ENTRADA: { label: 'Produção (Entrada)', color: 'bg-emerald-100 text-emerald-700', icon: TrendingUp },
   PRODUCAO_CONSUMO: { label: 'Produção (Consumo)', color: 'bg-red-100 text-red-700', icon: TrendingDown },
+  PRODUCAO_REVERSO: { label: 'Estorno de Produção', color: 'bg-emerald-100 text-emerald-700', icon: TrendingUp },
   AJUSTE: { label: 'Ajuste', color: 'bg-slate-100 text-slate-700', icon: FileText },
   BAIXA: { label: 'Baixa', color: 'bg-red-100 text-red-700', icon: TrendingDown },
 };
@@ -82,7 +83,7 @@ export default function Kardex() {
 
     let balance = 0;
     return sorted.map(move => {
-      const isEntry = ['ENTRADA', 'PRODUCAO_ENTRADA'].includes(move.type);
+      const isEntry = ['ENTRADA', 'PRODUCAO_ENTRADA', 'PRODUCAO_REVERSO', 'ESTORNO'].includes(move.type);
       const isTransfer = move.type === 'TRANSFERENCIA';
       const isAjuste = move.type === 'AJUSTE';
       const qty = move.qty || 0;
@@ -111,11 +112,11 @@ export default function Kardex() {
   };
 
   const totalEntries = movements?.reduce((sum, m) => 
-    ['ENTRADA', 'PRODUCAO_ENTRADA'].includes(m.type) ? sum + (m.qty || 0) : sum, 0
+    ['ENTRADA', 'PRODUCAO_ENTRADA', 'PRODUCAO_REVERSO', 'ESTORNO'].includes(m.type) ? sum + (m.qty || 0) : sum, 0
   ) || 0;
 
   const totalExits = movements?.reduce((sum, m) => 
-    !['ENTRADA', 'PRODUCAO_ENTRADA', 'TRANSFERENCIA'].includes(m.type) ? sum + (m.qty || 0) : sum, 0
+    !['ENTRADA', 'PRODUCAO_ENTRADA', 'PRODUCAO_REVERSO', 'ESTORNO', 'TRANSFERENCIA'].includes(m.type) ? sum + (m.qty || 0) : sum, 0
   ) || 0;
 
   const finalBalance = movementsWithBalance.length > 0 ? movementsWithBalance[0].balance : 0;
@@ -272,7 +273,7 @@ export default function Kardex() {
                                   {move.to_location_id && ` / ${locationMap[move.to_location_id]?.barcode}`}
                                 </TableCell>
                                 <TableCell className="text-right font-medium">
-                                  {['ENTRADA', 'PRODUCAO_ENTRADA'].includes(move.type) || 
+                                  {['ENTRADA', 'PRODUCAO_ENTRADA', 'PRODUCAO_REVERSO', 'ESTORNO'].includes(move.type) || 
                                    (move.type === 'AJUSTE' && !move.from_warehouse_id) ? (
                                     <span className="text-emerald-600">+{move.qty}</span>
                                   ) : (

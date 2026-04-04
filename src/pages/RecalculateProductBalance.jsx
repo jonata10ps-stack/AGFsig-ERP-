@@ -54,11 +54,12 @@ export default function RecalculateProductBalance() {
           movesByWarehouse[warehouseId] = { entradas: 0, saidas: 0, saldo: 0 };
         }
 
-        if (move.type === 'ENTRADA' || move.type === 'PRODUCAO_ENTRADA') {
+        if (['ENTRADA', 'PRODUCAO_ENTRADA', 'PRODUCAO_REVERSO', 'ESTORNO'].includes(move.type)) {
           movesByWarehouse[warehouseId].entradas += move.qty;
           if (move.type === 'ENTRADA') entradas += move.qty;
           if (move.type === 'PRODUCAO_ENTRADA') producoes += move.qty;
-        } else if (move.type === 'SAIDA') {
+          if (['PRODUCAO_REVERSO', 'ESTORNO'].includes(move.type)) entradas += move.qty; // Log as equivalent to entry
+        } else if (['SAIDA', 'PRODUCAO_CONSUMO', 'BAIXA'].includes(move.type)) {
           movesByWarehouse[warehouseId].saidas += move.qty;
           saidas += move.qty;
         } else if (move.type === 'CONSUMO_OP') {

@@ -84,12 +84,12 @@ export default function StockConsistencyCheck() {
       }
 
       // Tipos que AUMENTAM o estoque total
-      if (['ENTRADA', 'PRODUCAO_ENTRADA'].includes(move.type)) {
+      if (['ENTRADA', 'PRODUCAO_ENTRADA', 'PRODUCAO_REVERSO', 'ESTORNO'].includes(move.type)) {
         kardexMap[key].kardex_qty += move.qty;
       }
       
       // Tipos que DIMINUEM o estoque total
-      if (['SAIDA', 'PRODUCAO_CONSUMO', 'BAIXA'].includes(move.type)) {
+      else if (['SAIDA', 'PRODUCAO_CONSUMO', 'BAIXA'].includes(move.type)) {
         kardexMap[key].kardex_qty -= move.qty;
       }
 

@@ -94,7 +94,7 @@ export default function ProductionOrderDetail() {
 
   const { data: bomDeliveries = [] } = useQuery({
     queryKey: ['bom-deliveries-op', opId, companyId],
-    queryFn: () => base44.entities.BOMDeliveryControl.filter({ company_id: companyId, op_id: opId }),
+    queryFn: () => base44.entities.BOMDeliveryControl.filter({ op_id: opId }),
     enabled: !!opId && !!companyId,
   });
 
@@ -473,7 +473,7 @@ export default function ProductionOrderDetail() {
       // Check consumptions directly
       const [consumptions, bomDeliveries, materialConsumptions, allMoves] = await Promise.all([
         base44.entities.OPConsumptionControl.filter({ company_id: companyId, op_id: opId }),
-        base44.entities.BOMDeliveryControl.filter({ company_id: companyId, op_id: opId }),
+        base44.entities.BOMDeliveryControl.filter({ op_id: opId }),
         base44.entities.MaterialConsumption.filter({ company_id: companyId, op_id: opId }),
         base44.entities.InventoryMove.filter({ company_id: companyId, related_type: 'OP', related_id: opId }),
       ]);
@@ -584,7 +584,7 @@ export default function ProductionOrderDetail() {
         console.log(`📦 Encontrados ${bomItems.length} itens na BOM para versão ${versionId}`);
         
         if (bomItems.length > 0) {
-          const deliveryControls = await base44.entities.BOMDeliveryControl.filter({ company_id: companyId, op_id: opId });
+          const deliveryControls = await base44.entities.BOMDeliveryControl.filter({ op_id: opId });
           
           for (const bomItem of bomItems) {
             const qtyPerUnit = Number(bomItem.qty || bomItem.quantity || 0);
@@ -1010,15 +1010,15 @@ export default function ProductionOrderDetail() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {bomDeliveries?.length === 0 && materialConsumptions?.length === 0 ? (
+                {(bomDeliveries?.filter(bd => Number(bd.qty) > 0).length === 0) && (materialConsumptions?.filter(mc => Number(mc.qty_consumed) > 0).length === 0) ? (
                   <p className="text-sm text-slate-500 text-center py-4">Nenhum consumo ou entrega registrado para esta OP.</p>
                 ) : (
                   <>
-                    {bomDeliveries?.length > 0 && (
+                    {bomDeliveries?.filter(bd => Number(bd.qty) > 0).length > 0 && (
                       <div>
                         <h4 className="text-sm font-semibold mb-2 text-slate-700">Entregas do BOM</h4>
                         <div className="space-y-2">
-                          {bomDeliveries.map(bd => (
+                          {bomDeliveries.filter(bd => Number(bd.qty) > 0).map(bd => (
                             <div key={bd.id} className="flex justify-between items-center p-2 rounded border bg-slate-50 text-sm">
                               <div>
                                 <p className="font-medium">{bd.component_name || bd.consumed_product_name}</p>
@@ -1036,11 +1036,11 @@ export default function ProductionOrderDetail() {
                       </div>
                     )}
                     
-                    {materialConsumptions?.length > 0 && (
+                    {materialConsumptions?.filter(mc => Number(mc.qty_consumed) > 0).length > 0 && (
                       <div className="pt-2">
                         <h4 className="text-sm font-semibold mb-2 text-slate-700">Consumos Manuais</h4>
                         <div className="space-y-2">
-                          {materialConsumptions.map(mc => (
+                          {materialConsumptions.filter(mc => Number(mc.qty_consumed) > 0).map(mc => (
                             <div key={mc.id} className="flex justify-between items-center p-2 rounded border bg-slate-50 text-sm">
                               <div>
                                 <p className="font-medium">{mc.product_name}</p>
