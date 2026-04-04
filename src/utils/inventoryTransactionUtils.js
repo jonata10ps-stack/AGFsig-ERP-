@@ -121,7 +121,7 @@ export async function executeInventoryTransaction(moveData, companyId) {
 
     // CASO F: Estorno (Soma no disponível do destino)
     else if (type === 'ESTORNO') {
-      await updateStockBalance(companyId, product_id, from_warehouse_id, from_location_id, { available: moveQty });
+      await updateStockBalance(companyId, product_id, to_warehouse_id, to_location_id, { available: moveQty });
     }
 
     return move;
@@ -142,16 +142,25 @@ async function updateStockBalance(companyId, productId, warehouseId, locationId,
   const filter = {
     company_id: companyId,
     product_id: productId,
-    warehouse_id: warehouseId,
-    location_id: locationId || null
+    warehouse_id: warehouseId
   };
 
+  // Se houver locationId, filtramos por ele. Se for null/undefined, não passamos no filtro 
+  // do base44 (pois o filter do base44 pode não lidar bem com null explícito em alguns casos)
+  // ou lidamos com o fato de que pode haver registros com location_id vazio.
   const balances = await base44.entities.StockBalance.filter(filter);
+  
+  // Refinar localmente para garantir matching exato de location_id (null vs undefined vs '')
+  const matchingBalances = balances.filter(b => {
+    const bLoc = b.location_id || null;
+    const targetLoc = locationId || null;
+    return bLoc === targetLoc;
+  });
 
-  if (balances.length > 0) {
+  if (matchingBalances.length > 0) {
     // Se for entrada (delta positivo), somamos no primeiro registro
     if (availableDelta >= 0 && separatedDelta >= 0) {
-      const balance = balances[0];
+      const balance = matchingBalances[0];
       const currentQty = parseFloat(balance.qty_available) || 0;
       const currentSep = parseFloat(balance.qty_separated) || 0;
       const newQty = Math.round((currentQty + availableDelta) * 1000) / 1000;
@@ -174,7 +183,7 @@ async function updateStockBalance(companyId, productId, warehouseId, locationId,
       let remainingToDeductAvail = Math.abs(availableDelta);
       let remainingToDeductSep = Math.abs(separatedDelta);
 
-      for (const bal of balances) {
+      for (const bal of matchingBalances) {
         const curAvail = parseFloat(bal.qty_available) || 0;
         const curSep = parseFloat(bal.qty_separated) || 0;
         

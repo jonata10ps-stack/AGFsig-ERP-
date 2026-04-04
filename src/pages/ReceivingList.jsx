@@ -18,6 +18,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { cn } from '@/lib/utils';
 
 const STATUS_CONFIG = {
   PENDENTE_CONFERENCIA: { color: 'bg-amber-100 text-amber-700', label: 'Pendente Conferência' },
@@ -104,52 +105,89 @@ export default function ReceivingList() {
               <p className="text-slate-500">Nenhum recebimento encontrado</p>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Número</TableHead>
-                  <TableHead>Data</TableHead>
-                  <TableHead>NF</TableHead>
-                  <TableHead>Fornecedor</TableHead>
-                  <TableHead className="text-right">Valor Total</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="w-12"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+            <div className="overflow-x-auto">
+              {/* Desktop Table */}
+              <Table className="hidden sm:table">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Número</TableHead>
+                    <TableHead>Data</TableHead>
+                    <TableHead>NF</TableHead>
+                    <TableHead>Fornecedor</TableHead>
+                    <TableHead className="text-right">Valor Total</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="w-12"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filtered?.map((batch) => (
+                    <TableRow key={batch.id}>
+                      <TableCell className="font-mono text-indigo-600 font-medium">
+                        {batch.batch_number}
+                      </TableCell>
+                      <TableCell className="text-slate-500">
+                        {batch.received_date ? format(new Date(batch.received_date), 'dd/MM/yyyy HH:mm', { locale: ptBR }) : '-'}
+                      </TableCell>
+                      <TableCell>{batch.nf_number || '-'}</TableCell>
+                      <TableCell>{batch.supplier || '-'}</TableCell>
+                      <TableCell className="text-right font-medium">
+                        {formatCurrency(batch.total_value)}
+                      </TableCell>
+                      <TableCell>
+                        <Badge className={STATUS_CONFIG[batch.status]?.color}>
+                          {STATUS_CONFIG[batch.status]?.label}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Link to={createPageUrl(`ReceivingConference?batch=${batch.id}`)}>
+                          <Button variant="ghost" size="icon">
+                            {batch.status === 'CONFERIDO' || batch.status === 'ARMAZENADO' ? (
+                              <Printer className="h-4 w-4" />
+                            ) : (
+                              <Eye className="h-4 w-4" />
+                            )}
+                          </Button>
+                        </Link>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+
+              {/* Mobile Card View */}
+              <div className="sm:hidden divide-y divide-slate-100">
                 {filtered?.map((batch) => (
-                  <TableRow key={batch.id}>
-                    <TableCell className="font-mono text-indigo-600 font-medium">
-                      {batch.batch_number}
-                    </TableCell>
-                    <TableCell className="text-slate-500">
-                      {batch.received_date ? format(new Date(batch.received_date), 'dd/MM/yyyy HH:mm', { locale: ptBR }) : '-'}
-                    </TableCell>
-                    <TableCell>{batch.nf_number || '-'}</TableCell>
-                    <TableCell>{batch.supplier || '-'}</TableCell>
-                    <TableCell className="text-right font-medium">
-                      {formatCurrency(batch.total_value)}
-                    </TableCell>
-                    <TableCell>
-                      <Badge className={STATUS_CONFIG[batch.status]?.color}>
+                  <Link 
+                    key={batch.id} 
+                    to={createPageUrl(`ReceivingConference?batch=${batch.id}`)}
+                    className="block p-4 space-y-3 active:bg-slate-50"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono text-sm text-indigo-600 font-bold">{batch.batch_number}</span>
+                      <Badge className={cn("text-[10px]", STATUS_CONFIG[batch.status]?.color)}>
                         {STATUS_CONFIG[batch.status]?.label}
                       </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Link to={createPageUrl(`ReceivingConference?batch=${batch.id}`)}>
-                        <Button variant="ghost" size="icon">
-                          {batch.status === 'CONFERIDO' || batch.status === 'ARMAZENADO' ? (
-                            <Printer className="h-4 w-4" />
-                          ) : (
-                            <Eye className="h-4 w-4" />
-                          )}
-                        </Button>
-                      </Link>
-                    </TableCell>
-                  </TableRow>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div>
+                        <p className="text-xs text-slate-400">Data:</p>
+                        <p className="text-slate-600 truncate">{batch.received_date ? format(new Date(batch.received_date), 'dd/MM/yyyy', { locale: ptBR }) : '-'}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs text-slate-400">Total:</p>
+                        <p className="font-medium text-slate-900">{formatCurrency(batch.total_value)}</p>
+                      </div>
+                    </div>
+
+                    <div>
+                      <p className="text-xs text-slate-400">Fornecedor:</p>
+                      <p className="text-slate-600 truncate">{batch.supplier || 'N/A'}</p>
+                    </div>
+                  </Link>
                 ))}
-              </TableBody>
-            </Table>
+              </div>
+            </div>
           )}
         </CardContent>
       </Card>

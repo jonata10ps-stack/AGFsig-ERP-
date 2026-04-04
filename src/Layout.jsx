@@ -376,12 +376,14 @@ export default function Layout({ children, currentPageName }) {
               </div>
             </div>
 
-            <div className="flex items-center gap-4 relative">
-              <CompanySelector />
+            <div className="flex items-center gap-2 lg:gap-4 relative">
+              <div className="max-w-[120px] sm:max-w-none">
+                <CompanySelector />
+              </div>
               <Button 
                 variant="ghost" 
                 size="icon" 
-                className="relative"
+                className="relative shrink-0"
                 onClick={() => setNotificationPanelOpen(!notificationPanelOpen)}
               >
                 <Bell className="h-5 w-5 text-slate-600" />

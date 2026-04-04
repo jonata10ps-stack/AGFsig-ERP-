@@ -147,7 +147,7 @@ export default function Separation() {
         to_location_id,
         related_type: 'PEDIDO',
         related_id: item.order_id,
-        reason: `Picking: ${from_location_id} -> ${to_location_id} p/ pedido ${item.order_id}`
+        reason: `Picking: ${from_location_id || 'Interno'} -> ${to_location_id || 'Doca'} p/ pedido ${item.order_id}`
       }, companyId);
 
       await base44.entities.SalesOrderItem.update(item.id, { 
@@ -168,7 +168,7 @@ export default function Separation() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['order-items', selectedOrder?.id] });
       queryClient.invalidateQueries({ queryKey: ['orders-for-separation', companyId] });
-      queryClient.invalidateQueries({ queryKey: ['separations-moves'] });
+      queryClient.invalidateQueries({ queryKey: ['separations-moves', selectedOrder?.id] });
       toast.success('Transferência para expedição concluída');
       setPickConfig(prev => ({ ...prev, open: false }));
       setScanProd('');
@@ -214,7 +214,6 @@ export default function Separation() {
        queryClient.invalidateQueries({ queryKey: ['order-items', orderId] });
        queryClient.invalidateQueries({ queryKey: ['orders-for-separation', companyId] });
        queryClient.invalidateQueries({ queryKey: ['separations-moves', orderId] });
-       queryClient.invalidateQueries({ queryKey: ['separations-moves'] });
        toast.success('Retirada estornada com sucesso');
     }
   });
@@ -249,12 +248,13 @@ export default function Separation() {
   };
 
   const handleConfirmLocation = () => {
-     if (!scanLoc) {
-         toast.error("Você precisa bipar ou digitar algum endereço/código de armazém.");
+     if (!scanLoc || !scanDestLoc) {
+         toast.error("Você precisa informar os endereços de origem (prateleira) e destino (doca).");
          return;
      }
      
-     const match = pickConfig.available.find(b => {
+     // 1. Resolver Origem (Match com saldo disponível)
+     const sourceMatch = pickConfig.available.find(b => {
         const l = pickConfig.locs.find(lx => lx.id === b.location_id);
         const w = pickConfig.whs.find(wx => wx.id === b.warehouse_id);
         return (l?.barcode?.toLowerCase() === scanLoc.toLowerCase() || 
@@ -262,15 +262,24 @@ export default function Separation() {
                 w?.code?.toLowerCase() === scanLoc.toLowerCase());
      });
 
-     if (!match) {
-        toast.error("O local escaneado não confere ou não possui saldo livre desse produto!");
+     if (!sourceMatch) {
+        toast.error("O local de ORIGEM não possui saldo livre desse produto!");
+        return;
+     }
+
+     // 2. Resolver Destino (Qualquer local ou armazém que bata com scanDestLoc)
+     const destLoc = pickConfig.locs.find(l => l.barcode?.toLowerCase() === scanDestLoc.toLowerCase() || l.id === scanDestLoc);
+     const destWh = pickConfig.whs.find(w => w.code?.toLowerCase() === scanDestLoc.toLowerCase() || w.id === scanDestLoc);
+
+     if (!destLoc && !destWh) {
+        toast.error("Endereço de DESTINO não encontrado no sistema.");
         return;
      }
      
      if (scanProd) {
         const pro = pickConfig.prods[0];
         if (pro.sku?.toLowerCase() !== scanProd.toLowerCase() && pro.barcode?.toLowerCase() !== scanProd.toLowerCase()) {
-           toast.error("O código do produto lido não bate com o item logístico exigido da OP.");
+           toast.error("O código do produto lido não bate com o item do pedido.");
            return;
         }
      }
@@ -281,16 +290,18 @@ export default function Separation() {
          return;
      }
      
-     if (manualQty > parseFloat(match.qty_available)) {
-         toast.error(`A prateleira ${scanLoc} possui apenas ${match.qty_available} un. disponível.`);
+     if (manualQty > parseFloat(sourceMatch.qty_available)) {
+         toast.error(`A prateleira ${scanLoc} possui apenas ${sourceMatch.qty_available} un. disponível.`);
          return;
      }
 
      separateItemMutation.mutate({ 
         item: pickConfig.item, 
         qty: manualQty, 
-        warehouse_id: match.warehouse_id, 
-        location_id: match.location_id 
+        from_warehouse_id: sourceMatch.warehouse_id, 
+        from_location_id: sourceMatch.location_id,
+        to_warehouse_id: destWh ? destWh.id : destLoc.warehouse_id,
+        to_location_id: destLoc ? destLoc.id : null
      });
   };
 

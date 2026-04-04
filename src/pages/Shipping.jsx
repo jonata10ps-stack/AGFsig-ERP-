@@ -19,6 +19,7 @@ import { ptBR } from 'date-fns/locale';
 import QRScanner from '@/components/scanner/QRScanner';
 import ShippingLabel from '@/components/shipping/ShippingLabel';
 import SerialNumberInput from '@/components/shipping/SerialNumberInput';
+import ShippingReport from '@/components/shipping/ShippingReport';
 
 export default function Shipping() {
   const queryClient = useQueryClient();
@@ -26,7 +27,9 @@ export default function Shipping() {
   const [search, setSearch] = useState('');
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [printLabel, setPrintLabel] = useState(null);
+  const [showReport, setShowReport] = useState(false);
 
+  const [activeTab, setActiveTab] = useState('pendentes'); // 'pendentes' | 'expedidos'
   const [editingOrder, setEditingOrder] = useState(null);
   const [serialInput, setSerialInput] = useState(null);
   const [shippingData, setShippingData] = useState({
@@ -76,9 +79,9 @@ export default function Shipping() {
   const { data: orders, isLoading } = useQuery({
     queryKey: ['orders-for-shipping', companyId],
     queryFn: async () => {
-      // Buscar últimos pedidos e mostrar apenas o que está pronto para ser expedido (já separado fisicamente)
-      const all = await base44.entities.SalesOrder.filter({ company_id: companyId }, '-created_date', 200);
-      return (all || []).filter(o => o.status === 'SEPARADO');
+      // Buscar últimos pedidos e mostrar Sepados e Expedidos
+      const all = await base44.entities.SalesOrder.filter({ company_id: companyId }, '-created_date', 300);
+      return (all || []).filter(o => ['SEPARADO', 'EXPEDIDO', 'FATURADO'].includes(o.status));
     },
     enabled: !!companyId,
   });
@@ -88,21 +91,27 @@ export default function Shipping() {
     queryFn: async () => {
       if (!selectedOrder || !companyId) return [];
       
-      const [orderItems, separationMoves, locations] = await Promise.all([
+      const [orderItems, separationMoves, locations, serials] = await Promise.all([
         base44.entities.SalesOrderItem.filter({ order_id: selectedOrder.id }),
         base44.entities.InventoryMove.filter({ related_id: selectedOrder.id, type: 'SEPARACAO' }),
-        base44.entities.Location.filter({ company_id: companyId })
+        base44.entities.Location.filter({ company_id: companyId }),
+        base44.entities.SerialNumber.filter({ order_id: selectedOrder.id })
       ]);
 
-      // Mapear localizações de separação para exibição na UI
+      // Mapear localizações de separação e números de série para exibição na UI
       return orderItems.map(item => {
         const moves = separationMoves.filter(m => m.product_id === item.product_id);
         const locIds = [...new Set(moves.map(m => m.from_location_id).filter(Boolean))];
         const locNames = locIds.map(id => locations.find(l => l.id === id)?.barcode).filter(Boolean).sort();
         
+        const itemSerials = serials
+          ?.filter(s => s.product_id === item.product_id)
+          ?.map(s => s.serial_number) || [];
+
         return {
           ...item,
-          separation_location: locNames.join(', ') || null
+          separation_location: locNames.join(', ') || null,
+          serial_numbers: itemSerials
         };
       });
     },
@@ -114,11 +123,14 @@ export default function Shipping() {
       // 1. Buscar itens do pedido
       const orderItems = await base44.entities.SalesOrderItem.filter({ order_id: order.id });
 
-      // 2. Buscar movimentações de SEPARACAO (Picking)
-      const separationMoves = await base44.entities.InventoryMove.filter({ related_id: order.id, type: 'SEPARACAO' });
+      // 2. Buscar movimentações existentes de SEPARACAO, SAIDA e ESTORNO
+      const moves = await base44.entities.InventoryMove.filter({ related_id: order.id });
+      const separationMoves = moves.filter(m => m.type === 'SEPARACAO');
+      const existingSaidas = moves.filter(m => m.type === 'SAIDA');
+      const existingEstornos = moves.filter(m => m.type === 'ESTORNO');
 
       // 3. Buscar e concluir reservas (se existirem)
-      const reservations = await base44.entities.Reservation.filter({ related_id: order.id });
+      const reservations = await base44.entities.Reservation.filter({ order_id: order.id });
       for (const res of reservations) {
         if (res.status === 'CANCELADA' || res.status === 'CONCLUIDA') continue;
         // Atualizar status da reserva para CONCLUIDA (pois foi expedida)
@@ -130,33 +142,45 @@ export default function Shipping() {
         const itemQty = parseFloat(item.qty) || 0;
         if (!item.product_id || itemQty <= 0) continue;
 
-        // Limpar status de item do pedido no banco
-        await base44.entities.SalesOrderItem.update(item.id, {
-          qty_separated: itemQty // Marcar como totalmente separado para consistência se necessário
-        });
+        // Calcular o saldo LÍQUIDO que já saiu (IDEMPOTÊNCIA REAL: Saídas - Estornos)
+        const totalSaida = existingSaidas
+          .filter(s => s.product_id === item.product_id)
+          .reduce((acc, curr) => acc + (parseFloat(curr.qty) || 0), 0);
+        
+        const totalEstorno = existingEstornos
+          .filter(s => s.product_id === item.product_id)
+          .reduce((acc, curr) => acc + (parseFloat(curr.qty) || 0), 0);
+        
+        // Faltando sair = Total do Item - (Saídas que não foram estornadas)
+        let remainingToShip = itemQty - (totalSaida - totalEstorno);
+        if (remainingToShip <= 0.0001) continue; // Já foi totalmente expedido!
 
         // Filtrar as movimentações de SEPARACAO Deste item
         const itemSeparations = separationMoves.filter(m => m.product_id === item.product_id);
         
-        let remainingToShip = itemQty;
-
         // 4. Efetuar a baixa real do estoque disponível (SAIDA) usando histórico de separação
         for (const sep of itemSeparations) {
            if (remainingToShip <= 0) break;
            const qtyToDeduct = Math.min(parseFloat(sep.qty), remainingToShip);
            
            if (qtyToDeduct > 0) {
-             // Utiliza função central com bloqueio atômico de saldo negativo!
-             await executeInventoryTransaction({
-               type: 'SAIDA',
-               product_id: item.product_id,
-               qty: qtyToDeduct,
-               from_warehouse_id: sep.to_warehouse_id,
-               from_location_id: sep.to_location_id,
-               related_type: 'PEDIDO',
-               related_id: order.id,
-               reason: `Expedição rastreada (Picking) do pedido ${order.order_number || order.id}`,
-             }, order.company_id);
+              const fromWhId = sep.to_warehouse_id;
+              
+              if (!fromWhId) {
+                throw new Error(`Dados de separação inválidos para o item ${item.product_name || item.product_sku}. Cancele a separação e refaça para corrigir.`);
+              }
+
+              // Utiliza função central com bloqueio atômico de saldo negativo!
+              await executeInventoryTransaction({
+                type: 'SAIDA',
+                product_id: item.product_id,
+                qty: qtyToDeduct,
+                from_warehouse_id: fromWhId,
+                from_location_id: sep.to_location_id,
+                related_type: 'PEDIDO',
+                related_id: order.id,
+                reason: `Expedição rastreada (Picking) do pedido ${order.order_number || order.id}`,
+              }, order.company_id);
              
              remainingToShip -= qtyToDeduct;
            }
@@ -166,6 +190,11 @@ export default function Shipping() {
         if (remainingToShip > 0) {
            throw new Error(`O item ${item.product_name || item.product_sku} não possui separação (picking) suficiente. Realize a Separação/Bipagem antes de expedir para garantir o endereçamento correto.`);
         }
+
+        // Registrar no item para histórico visual
+        await base44.entities.SalesOrderItem.update(item.id, {
+          qty_separated: itemQty
+        });
       }
 
       // 3. Atualizar status do pedido
@@ -203,6 +232,9 @@ export default function Shipping() {
        });
        toast.success('Pedido expedido e estoque baixado com sucesso');
      },
+     onError: (error) => {
+       toast.error('Erro na expedição: ' + error.message);
+     }
   });
 
   const updateShippingInfoMutation = useMutation({
@@ -239,6 +271,9 @@ export default function Shipping() {
        });
        toast.success('Dados de expedição atualizados');
      },
+     onError: (error) => {
+       toast.error('Erro ao atualizar dados: ' + error.message);
+     }
   });
 
   const cancelShippingMutation = useMutation({
@@ -246,8 +281,10 @@ export default function Shipping() {
       // 1. Buscar os itens do pedido
       const orderItems = await base44.entities.SalesOrderItem.filter({ order_id: order.id });
       
-      // 2. Buscar as "SAÍDAS" da expedição original para estornar as quantidades correspondentes
-      const saidas = await base44.entities.InventoryMove.filter({ related_id: order.id, type: 'SAIDA' });
+      // 2. Buscar movimentações existentes para calcular o estorno correto (Idempotência)
+      const moves = await base44.entities.InventoryMove.filter({ related_id: order.id });
+      const saidas = moves.filter(m => m.type === 'SAIDA');
+      const estornosExistentes = moves.filter(m => m.type === 'ESTORNO');
       
       // 3. Garantir a existência da Doca de Expedição Genérica
       let expWarehouse = (await base44.entities.Warehouse.filter({ company_id: order.company_id, type: 'EXPEDICAO' }))[0];
@@ -261,39 +298,45 @@ export default function Shipping() {
         });
       }
       
-      // 4. Estornar as saídas jogando os itens para essa Doca como estoque Disponível a ser trabalhado (Pendentes de Alocação)
-      for (const move of saidas) {
-        if (!move.product_id || parseFloat(move.qty) <= 0) continue;
+      // 4. Estornar APENAS o que ainda não foi estornado
+      for (const item of orderItems) {
+        const qtySaida = saidas
+          .filter(m => m.product_id === item.product_id)
+          .reduce((acc, curr) => acc + (parseFloat(curr.qty) || 0), 0);
         
-        await executeInventoryTransaction({
-           type: 'ESTORNO',
-           product_id: move.product_id,
-           qty: move.qty,
-           to_warehouse_id: expWarehouse.id, // Cai na doca temporária exigindo realocação!
-           to_location_id: null,
-           related_type: 'PEDIDO',
-           related_id: order.id,
-           reason: `Retorno de cancelamento de expedição do pedido ${order.order_number || order.id}`
-        }, order.company_id);
+        const qtyEstorno = estornosExistentes
+          .filter(m => m.product_id === item.product_id)
+          .reduce((acc, curr) => acc + (parseFloat(curr.qty) || 0), 0);
+        
+        const netToEstorno = qtySaida - qtyEstorno;
+        
+        if (netToEstorno > 0) {
+          await executeInventoryTransaction({
+             type: 'ESTORNO',
+             product_id: item.product_id,
+             qty: netToEstorno,
+             to_warehouse_id: expWarehouse.id,
+             to_location_id: null,
+             related_type: 'PEDIDO',
+             related_id: order.id,
+             reason: `Estorno de cancelamento de expedição do pedido ${order.order_number || order.id}`
+          }, order.company_id);
+        }
       }
       
-      // 5. Restabelecer Itens e Pedido para a Situação em que precisam ser Separados Novamente
-      for (const item of orderItems) {
-        await base44.entities.SalesOrderItem.update(item.id, {
-           qty_separated: 0
-        });
-      }
-
-      await base44.entities.SalesOrder.update(order.id, { status: 'CONFIRMADO' });
+      // 5. Atualizar status do pedido
+      await base44.entities.SalesOrder.update(order.id, { 
+        status: 'SEPARADO',
+      });
     },
     onSuccess: () => {
        queryClient.invalidateQueries({ queryKey: ['orders-for-shipping', companyId] });
-       setSelectedOrder(null);
-       toast.success('Expedição cancelada');
+       setSelectedOrder(prev => prev ? { ...prev, status: 'SEPARADO' } : null);
+       toast.success('Expedição cancelada! Itens retornaram para a Doca.');
      },
-    onError: (error) => {
-      toast.error('Erro ao cancelar expedição: ' + error.message);
-    }
+     onError: (error) => {
+       toast.error('Erro ao cancelar expedição: ' + error.message);
+     }
   });
 
   const handleSelectOrder = (order) => {
@@ -328,10 +371,33 @@ export default function Shipping() {
         {/* Orders List */}
         <div className="lg:col-span-1">
           <Card>
-            <CardHeader>
-              <CardTitle>Pedidos Prontos</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg">Pedidos</CardTitle>
+            <div className="flex bg-slate-100 p-1 rounded-lg mt-3">
+              <button
+                onClick={() => setActiveTab('pendentes')}
+                className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${
+                  activeTab === 'pendentes' 
+                    ? 'bg-white text-indigo-600 shadow-sm' 
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                Prontos ({orders?.filter(o => o.status !== 'EXPEDIDO' && o.status !== 'FATURADO').length || 0})
+              </button>
+              <button
+                onClick={() => setActiveTab('expedidos')}
+                className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${
+                  activeTab === 'expedidos' 
+                    ? 'bg-white text-emerald-600 shadow-sm' 
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                Expedidos ({orders?.filter(o => o.status === 'EXPEDIDO' || o.status === 'FATURADO').length || 0})
+              </button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="space-y-3">
               <QRScanner
                 onScan={(code) => {
                   const order = orders?.find(
@@ -339,6 +405,7 @@ export default function Shipping() {
                   );
                   if (order) {
                     setSelectedOrder(order);
+                    setActiveTab(order.status === 'EXPEDIDO' || order.status === 'FATURADO' ? 'expedidos' : 'pendentes');
                     toast.success(`Pedido ${order.order_number} selecionado`);
                   } else {
                     toast.error('Pedido não encontrado');
@@ -352,24 +419,41 @@ export default function Shipping() {
                   placeholder="Busque por número ou cliente..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="pl-10"
+                  className="pl-10 h-9 text-sm"
                 />
               </div>
+            </div>
 
-              {isLoading ? (
-                <div className="space-y-3">
-                  {[1, 2, 3].map(i => (
-                    <Skeleton key={i} className="h-20 w-full" />
-                  ))}
-                </div>
-              ) : filteredOrders?.length === 0 ? (
-                <div className="text-center py-8">
-                  <Truck className="h-12 w-12 mx-auto text-slate-300 mb-4" />
-                  <p className="text-slate-500">Nenhum pedido pronto</p>
-                </div>
-              ) : (
-                <div className="space-y-2 max-h-96 overflow-y-auto">
-                  {filteredOrders?.map((order) => (
+            {isLoading ? (
+              <div className="space-y-3">
+                {[1, 2, 3].map(i => (
+                  <Skeleton key={i} className="h-16 w-full" />
+                ))}
+              </div>
+            ) : (()=>{
+                const tabOrders = orders?.filter(o => {
+                  const isExp = o.status === 'EXPEDIDO' || o.status === 'FATURADO';
+                  return activeTab === 'expedidos' ? isExp : !isExp;
+                });
+                
+                const searchResults = tabOrders?.filter(o =>
+                  o.order_number?.toLowerCase().includes(search.toLowerCase()) ||
+                  o.client_name?.toLowerCase().includes(search.toLowerCase()) ||
+                  o.nf_number?.toLowerCase().includes(search.toLowerCase())
+                );
+
+                if (searchResults?.length === 0) {
+                  return (
+                    <div className="text-center py-8">
+                      <Truck className="h-10 w-10 mx-auto text-slate-200 mb-4" />
+                      <p className="text-slate-400 text-sm">Nenhum pedido nesta lista</p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
+                    {searchResults?.map((order) => (
                     <button
                       key={order.id}
                       onClick={() => handleSelectOrder(order)}
@@ -407,7 +491,8 @@ export default function Shipping() {
                     </button>
                   ))}
                 </div>
-              )}
+              );
+            })()}
             </CardContent>
           </Card>
         </div>
@@ -428,6 +513,7 @@ export default function Shipping() {
                       value={shippingData.nf_number}
                       onChange={(e) => setShippingData({...shippingData, nf_number: e.target.value})}
                       className="mt-1"
+                      disabled={selectedOrder.status === 'EXPEDIDO' && !editingOrder}
                     />
                   </div>
                   <div>
@@ -437,6 +523,7 @@ export default function Shipping() {
                       value={shippingData.carrier}
                       onChange={(e) => setShippingData({...shippingData, carrier: e.target.value})}
                       className="mt-1"
+                      disabled={selectedOrder.status === 'EXPEDIDO' && !editingOrder}
                     />
                   </div>
                   <div>
@@ -447,6 +534,7 @@ export default function Shipping() {
                       value={shippingData.weight}
                       onChange={(e) => setShippingData({...shippingData, weight: e.target.value})}
                       className="mt-1"
+                      disabled={selectedOrder.status === 'EXPEDIDO' && !editingOrder}
                     />
                   </div>
                   <div>
@@ -457,6 +545,7 @@ export default function Shipping() {
                       value={shippingData.volume}
                       onChange={(e) => setShippingData({...shippingData, volume: e.target.value})}
                       className="mt-1"
+                      disabled={selectedOrder.status === 'EXPEDIDO' && !editingOrder}
                     />
                   </div>
                 </div>
@@ -472,6 +561,7 @@ export default function Shipping() {
                       value={shippingData.driver_name}
                       onChange={(e) => setShippingData({...shippingData, driver_name: e.target.value})}
                       className="mt-1"
+                      disabled={selectedOrder.status === 'EXPEDIDO' && !editingOrder}
                     />
                   </div>
                   <div>
@@ -481,6 +571,7 @@ export default function Shipping() {
                       value={shippingData.driver_cpf}
                       onChange={(e) => setShippingData({...shippingData, driver_cpf: e.target.value})}
                       className="mt-1"
+                      disabled={selectedOrder.status === 'EXPEDIDO' && !editingOrder}
                     />
                   </div>
                   <div className="col-span-2">
@@ -490,6 +581,7 @@ export default function Shipping() {
                       value={shippingData.shipping_notes}
                       onChange={(e) => setShippingData({...shippingData, shipping_notes: e.target.value})}
                       className="w-full mt-1 min-h-20 text-sm p-3 rounded-md border border-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent"
+                      disabled={selectedOrder.status === 'EXPEDIDO' && !editingOrder}
                     />
                   </div>
                 </div>
@@ -543,21 +635,25 @@ export default function Shipping() {
                        </div>
                      )}
 
-                     <label className="flex items-center justify-center w-full h-10 border border-slate-300 rounded-lg cursor-pointer bg-white hover:bg-slate-50 transition-colors text-slate-600 font-medium text-sm gap-2">
-                        <Upload className="w-4 h-4" />
-                        Adicionar Foto
-                        <input type="file" className="hidden" accept="image/*" capture="environment" onChange={(e) => handleImageCapture(e, 'load_photos')} />
-                     </label>
+                     {!(selectedOrder.status === 'EXPEDIDO' && !editingOrder) && (
+                        <label className="flex items-center justify-center w-full h-10 border border-slate-300 rounded-lg cursor-pointer bg-white hover:bg-slate-50 transition-colors text-slate-600 font-medium text-sm gap-2 mt-4">
+                           <Upload className="w-4 h-4" />
+                           Adicionar Foto
+                           <input type="file" className="hidden" accept="image/*" capture="environment" onChange={(e) => handleImageCapture(e, 'load_photos')} />
+                        </label>
+                     )}
                   </div>
                 </div>
                 <div className="flex gap-2">
-                   <Button
-                     onClick={() => updateShippingInfoMutation.mutate(selectedOrder)}
-                     disabled={updateShippingInfoMutation.isPending}
-                     className="bg-indigo-600 hover:bg-indigo-700"
-                   >
-                     Atualizar Dados
-                   </Button>
+                   {!(selectedOrder.status === 'EXPEDIDO' && !editingOrder) && (
+                     <Button
+                       onClick={() => updateShippingInfoMutation.mutate(selectedOrder)}
+                       disabled={updateShippingInfoMutation.isPending}
+                       className="bg-indigo-600 hover:bg-indigo-700"
+                     >
+                       {selectedOrder.status === 'EXPEDIDO' ? 'Salvar Edição' : 'Atualizar Dados'}
+                     </Button>
+                   )}
                    {selectedOrder.status !== 'EXPEDIDO' && (
                        <Button
                          onClick={() => shipOrderMutation.mutate(selectedOrder)}
@@ -566,16 +662,6 @@ export default function Shipping() {
                        >
                          <Truck className="h-4 w-4 mr-2" />
                          Expedir Agora
-                       </Button>
-                   )}
-                   {selectedOrder.status === 'EXPEDIDO' && (
-                       <Button
-                         onClick={() => cancelShippingMutation.mutate(selectedOrder)}
-                         disabled={cancelShippingMutation.isPending}
-                         variant="destructive"
-                       >
-                         <RotateCcw className="h-4 w-4 mr-2" />
-                         Cancelar Expedição e Retornar Estoque
                        </Button>
                    )}
                  </div>
@@ -591,14 +677,58 @@ export default function Shipping() {
                   : 'Selecione um pedido'
                 }
               </CardTitle>
-              {selectedOrder?.status === 'EXPEDIDO' && !editingOrder && (
-                <Button
-                  onClick={() => setEditingOrder(true)}
-                  className="bg-slate-600 hover:bg-slate-700"
-                >
-                  Editar Dados
-                </Button>
-              )}
+              <div className="flex gap-2">
+                {selectedOrder?.status === 'EXPEDIDO' && (
+                  <>
+                    <Button
+                      onClick={() => setShowReport(true)}
+                      variant="outline"
+                      size="sm"
+                      className="border-indigo-200 text-indigo-700 hover:bg-indigo-50 shadow-sm"
+                    >
+                      <FileText className="h-4 w-4 mr-2" />
+                      Relatório
+                    </Button>
+                    {!editingOrder && (
+                      <Button
+                        onClick={() => cancelShippingMutation.mutate(selectedOrder)}
+                        variant="outline"
+                        size="sm"
+                        disabled={cancelShippingMutation.isPending}
+                        className="border-red-100 text-red-600 hover:bg-red-50 shadow-sm"
+                      >
+                        <RotateCcw className="h-4 w-4 mr-2" />
+                        Cancelar Expedição
+                      </Button>
+                    )}
+                  </>
+                )}
+
+                {selectedOrder?.status === 'SEPARADO' && (
+                  <Button
+                    onClick={() => {
+                        toast.info('Iniciando expedição do pedido...');
+                        shipOrderMutation.mutate(selectedOrder);
+                    }}
+                    variant="outline"
+                    size="sm"
+                    className="border-amber-200 text-amber-700 hover:bg-amber-50 shadow-sm"
+                  >
+                    <Truck className="h-4 w-4 mr-1 text-amber-600" />
+                    Expedir Agora
+                  </Button>
+                )}
+
+                {selectedOrder?.status === 'EXPEDIDO' && !editingOrder && (
+                  <Button
+                    onClick={() => setEditingOrder(true)}
+                    size="sm"
+                    className="bg-slate-600 hover:bg-slate-700 text-white shadow-sm"
+                  >
+                    Editar Dados
+                  </Button>
+                )}
+              </div>
             </CardHeader>
             <CardContent>
               {!selectedOrder ? (
@@ -705,6 +835,13 @@ export default function Shipping() {
            onSuccess={() => queryClient.invalidateQueries({ queryKey: ['order-items-shipping'] })}
          />
        )}
-      </div>
-      );
-      }
+      {showReport && selectedOrder && (
+        <ShippingReport 
+          order={selectedOrder} 
+          items={items}
+          onClose={() => setShowReport(false)} 
+        />
+      )}
+    </div>
+  );
+}

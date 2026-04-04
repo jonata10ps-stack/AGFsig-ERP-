@@ -16,6 +16,7 @@ import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
 import QRScanner from '../components/scanner/QRScanner';
 import { executeInventoryTransaction } from '@/utils/inventoryTransactionUtils';
+import { cn } from '@/lib/utils';
 
 // FunÃ§Ã£o para calcular score de uma localizaÃ§Ã£o
 function calculateLocationScore(location, product, stockBalances) {
@@ -119,19 +120,30 @@ export default function StorageAllocation() {
     queryFn: async () => {
       if (!companyId) return [];
       
-      const [receivingItems, stockBalances, expeditionWarehouses] = await Promise.all([
+      const [receivingItems, stockBalances, expeditionWarehouses, productionRequests] = await Promise.all([
         base44.entities.ReceivingItem.filter({ company_id: companyId, status: 'CONFERIDO' }),
         base44.entities.StockBalance.filter({ company_id: companyId }),
-        base44.entities.Warehouse.filter({ company_id: companyId, type: 'EXPEDICAO' })
+        base44.entities.Warehouse.filter({ company_id: companyId, type: 'EXPEDICAO' }),
+        base44.entities.ProductionRequest.filter({ company_id: companyId, status: 'PRODUZIDO' })
       ]);
+
+      const expWhIds = new Set(expeditionWarehouses.map(w => w.id));
       
       // 1. Itens vindos do recebimento de compras
       const validReceivingItems = receivingItems.filter(item => item.qty > 0);
       
-      // 2 e 3. Saldos em estoque (Limbo ou Doca) - CONSOLIDADO
+      // 2. Itens vindos da produção
+      const validProductionItems = productionRequests.map(pr => ({
+        ...pr,
+        qty: pr.qty || 0,
+        isFromProduction: true,
+        product_name: pr.product_name || 'Produto Produzido'
+      })).filter(item => item.qty > 0);
+      
+      // 3 e 4. Saldos em estoque (Limbo ou Doca) - CONSOLIDADO
       const stockGroups = stockBalances.reduce((acc, sb) => {
         const isLimbo = !sb.warehouse_id && !sb.location_id;
-        const isDock = expWhIds.has(sb.warehouse_id);
+        const isDock = expWhIds.has(sb.warehouse_id) && !sb.location_id;
         const qty = parseFloat(sb.qty_available) || 0;
         
         if ((isLimbo || isDock) && qty > 0) {
@@ -151,7 +163,7 @@ export default function StorageAllocation() {
 
       const consolidatedStock = Object.values(stockGroups);
       
-      return [...validReceivingItems, ...consolidatedStock];
+      return [...validReceivingItems, ...validProductionItems, ...consolidatedStock];
     },
     enabled: !!companyId,
   });
@@ -321,6 +333,84 @@ export default function StorageAllocation() {
     }
   });
 
+   const handleRecalculateBalance = async (productId) => {
+     if (!productId || !companyId) return;
+     const tId = toast.loading('Recalculando e auditando saldos do produto...');
+     try {
+       // 1. Obter todos os movimentos históricos deste produto
+       const moves = await base44.entities.InventoryMove.filter({ product_id: productId, company_id: companyId });
+       
+       // 2. Agrupar por Armazém/Localização
+       const actualBalances = {}; // { "wh_id_loc_id": { wh, loc, qty } }
+       
+       for (const move of moves) {
+         const qty = parseFloat(move.qty) || 0;
+         const { type, from_warehouse_id, from_location_id, to_warehouse_id, to_location_id } = move;
+
+         // Auxiliar para somar/subtrair
+         const updateMap = (wh, loc, delta) => {
+           if (!wh) return;
+           const key = `${wh}_${loc || 'null'}`;
+           if (!actualBalances[key]) actualBalances[key] = { wh, loc: loc || null, qty: 0 };
+           actualBalances[key].qty = Math.round((actualBalances[key].qty + delta) * 1000) / 1000;
+         };
+
+         // Lógica de Somas/Subtrações baseada no inventoryTransactionUtils.js
+         if (['ENTRADA', 'PRODUCAO_ENTRADA', 'PRODUCAO_REVERSO', 'ESTORNO'].includes(type)) {
+           updateMap(to_warehouse_id, to_location_id, qty);
+         } else if (['SAIDA', 'PRODUCAO_CONSUMO', 'BAIXA', 'RESERVA'].includes(type)) {
+           updateMap(from_warehouse_id, from_location_id, -qty);
+         } else if (['TRANSFERENCIA', 'SEPARACAO'].includes(type)) {
+           updateMap(from_warehouse_id, from_location_id, -qty);
+           updateMap(to_warehouse_id, to_location_id, qty);
+         }
+       }
+
+       // 3. Buscar saldos atuais e atualizar/criar conforme o calculado
+       const currentStockBalances = await base44.entities.StockBalance.filter({ product_id: productId, company_id: companyId });
+       
+       // Atualizar existentes
+       for (const balance of currentStockBalances) {
+         const key = `${balance.warehouse_id}_${balance.location_id || 'null'}`;
+         const target = actualBalances[key];
+         const actualQty = target ? target.qty : 0;
+         
+         if (parseFloat(balance.qty_available) !== actualQty) {
+           await base44.entities.StockBalance.update(balance.id, { qty_available: String(actualQty) });
+         }
+         // Marcar como processado
+         if (target) delete actualBalances[key];
+       }
+
+       // Criar faltantes (que têm movimento no Kardex mas não têm linha no StockBalance)
+       for (const key in actualBalances) {
+         const item = actualBalances[key];
+         if (item.qty === 0) continue; // Ignorar saldos zerados se não existir o registro
+         
+         await base44.entities.StockBalance.create({
+           company_id: companyId,
+           product_id: productId,
+           warehouse_id: item.wh,
+           location_id: item.loc,
+           qty_available: String(item.qty),
+           qty_separated: '0',
+           qty_reserved: '0',
+           avg_cost: '0',
+           last_move_date: new Date().toISOString()
+         });
+       }
+
+       toast.dismiss(tId);
+       toast.success('Auditoria completa! Saldos recalculados e corrigidos com sucesso.');
+       queryClient.invalidateQueries({ queryKey: ['pending-allocation'] });
+       queryClient.invalidateQueries({ queryKey: ['stock-balances-allocation'] });
+     } catch (err) {
+       toast.dismiss(tId);
+       console.error('Erro na auditoria:', err);
+       toast.error('Erro ao recalcular saldo: ' + err.message);
+     }
+   };
+
   const handleSelectItem = (item) => {
     setSelectedItem(item);
     setQtyToAllocate(item.qty);
@@ -379,8 +469,8 @@ export default function StorageAllocation() {
   const totalPendingQty = pendingItems?.reduce((sum, item) => sum + item.qty, 0) || 0;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6 px-1 sm:px-0">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <Link to={createPageUrl('ReceivingList')}>
             <Button variant="ghost" size="icon">
@@ -388,11 +478,14 @@ export default function StorageAllocation() {
             </Button>
           </Link>
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">AlocaÃ§Ã£o Inteligente</h1>
-            <p className="text-slate-500">Sistema de sugestÃ£o automÃ¡tica de localizaÃ§Ãµes</p>
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-900">Alocação Inteligente</h1>
+            <p className="text-xs sm:text-sm text-slate-500">Sistema de sugestão automática de localizações</p>
           </div>
         </div>
-        <Badge className={totalPendingQty > 0 ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"}>
+        <Badge className={cn(
+          "w-fit sm:w-auto self-start sm:self-auto",
+          totalPendingQty > 0 ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"
+        )}>
           {pendingItems?.length || 0} item(ns) / {totalPendingQty} unidades pendentes
         </Badge>
       </div>
@@ -402,7 +495,7 @@ export default function StorageAllocation() {
           <CardContent className="p-4 flex items-center gap-3">
             <CheckCircle className="h-6 w-6 text-emerald-600" />
             <div>
-              <p className="font-medium text-emerald-900">Nenhum item pendente de alocaÃ§Ã£o</p>
+              <p className="font-medium text-emerald-900">Nenhum item pendente de alocação</p>
               <p className="text-sm text-emerald-700">Todos os itens conferidos foram alocados.</p>
             </div>
           </CardContent>
@@ -428,10 +521,10 @@ export default function StorageAllocation() {
                   handleSelectItem(item);
                   toast.success(`Produto: ${item.product_name}`);
                 } else {
-                  toast.error('Produto nÃ£o encontrado nos itens pendentes');
+                  toast.error('Produto não encontrado nos itens pendentes');
                 }
               }}
-              placeholder="Escaneie o cÃ³digo do produto"
+              placeholder="Escaneie o código do produto"
               active={!selectedItem}
             />
 
@@ -449,16 +542,18 @@ export default function StorageAllocation() {
                   const isSelected = selectedItem?.id === item.id;
                   
                   return (
-                    <button
+                    <div
                       key={item.id}
-                      onClick={() => handleSelectItem(item)}
                       className={`w-full text-left p-3 rounded-lg border transition-all ${
                         isSelected
                           ? 'bg-indigo-50 border-indigo-300 ring-2 ring-indigo-200'
                           : 'bg-white border-slate-200 hover:border-indigo-200'
                       }`}
                     >
-                      <div className="flex items-start justify-between">
+                      <div 
+                        className="flex items-start justify-between cursor-pointer"
+                        onClick={() => handleSelectItem(item)}
+                      >
                         <div className="flex-1 min-w-0">
                           <p className="font-mono text-sm text-indigo-600 font-bold">
                             {item.product_sku || (products?.find(p => p.id === item.product_id)?.sku)}
@@ -467,7 +562,9 @@ export default function StorageAllocation() {
                             {item.product_name || (products?.find(p => p.id === item.product_id)?.name)}
                           </p>
                           <div className="flex flex-wrap items-center gap-2 mt-1">
-                            {item.isFromExpeditionDock ? (
+                            {item.isFromProduction ? (
+                              <Badge variant="secondary" className="bg-purple-100 text-purple-700 text-[10px]">PRODUÇÃO</Badge>
+                            ) : item.isFromExpeditionDock ? (
                               <Badge variant="secondary" className="bg-amber-100 text-amber-700 text-[10px]">DOCA EXPEDIÇÃO</Badge>
                             ) : item.isFromStockBalance ? (
                               <Badge variant="secondary" className="bg-slate-100 text-slate-700 text-[10px]">SEM ENDEREÇO</Badge>
@@ -483,7 +580,26 @@ export default function StorageAllocation() {
                           <p className="text-lg font-bold text-slate-900">{item.qty}</p>
                         </div>
                       </div>
-                    </button>
+                      <div className="flex gap-2 mt-3 justify-end pointer-events-auto">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRecalculateBalance(item.product_id)}
+                          className="text-amber-500 hover:text-amber-600 hover:bg-amber-50"
+                          title="Reparar Saldo"
+                        >
+                          <Sparkles className="h-4 w-4" />
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => handleSelectItem(item)}
+                          className="text-indigo-600 border-indigo-200 hover:bg-indigo-50"
+                        >
+                          Alocar
+                        </Button>
+                      </div>
+                    </div>
                   );
                 })}
               </div>
