@@ -171,11 +171,13 @@ export const base44 = {
       let cachedUser = null;
       let lastFetch = 0;
       const CACHE_TTL = 30000;
-      return async () => {
+      
+      const meFunc = async (force = false) => {
         const { data: { session }, error } = await supabase.auth.getSession();
         if (error || !session) throw new Error('Não autenticado');
         const now = Date.now();
-        if (cachedUser && (now - lastFetch < CACHE_TTL)) return cachedUser;
+        if (!force && cachedUser && (now - lastFetch < CACHE_TTL)) return cachedUser;
+        
         const { data: profile } = await supabase.from('User').select('*').eq('email', session.user.email).maybeSingle();
         cachedUser = {
           id: session.user.id,
@@ -184,13 +186,28 @@ export const base44 = {
           role: profile?.role || 'admin',
           company_id: profile?.company_id || '00000000-0000-0000-0000-000000000000',
           current_company_id: profile?.company_id || '00000000-0000-0000-0000-000000000000',
+          company_ids: profile?.company_ids || [],
           account_status: 'APROVADO',
           active: true
         };
         lastFetch = now;
         return cachedUser;
       };
+
+      meFunc.clearCache = () => { cachedUser = null; lastFetch = 0; };
+      return meFunc;
     })(),
+    updateMe: async (data) => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Não autenticado');
+      const { error } = await supabase.from('User').update(data).eq('email', session.user.email);
+      if (error) throw error;
+      // Corrigir: Limpar cache após atualização
+      if (typeof base44.auth.me.clearCache === 'function') {
+        base44.auth.me.clearCache();
+      }
+      return true;
+    },
     logout: async () => {
       await supabase.auth.signOut();
       window.location.href = '/login';
