@@ -23,25 +23,25 @@ export default function StockBalances() {
 
   const { data: balances, isLoading } = useQuery({
     queryKey: ['stock-balances', companyId],
-    queryFn: () => companyId ? base44.entities.StockBalance.filter({ company_id: companyId }) : Promise.resolve([]),
+    queryFn: () => companyId ? base44.entities.StockBalance.listAll({ company_id: companyId }) : Promise.resolve([]),
     enabled: !!companyId,
   });
 
   const { data: products } = useQuery({
     queryKey: ['products', companyId],
-    queryFn: () => companyId ? base44.entities.Product.filter({ company_id: companyId }) : Promise.resolve([]),
+    queryFn: () => companyId ? base44.entities.Product.listAll({ company_id: companyId }) : Promise.resolve([]),
     enabled: !!companyId,
   });
 
   const { data: warehouses } = useQuery({
     queryKey: ['warehouses', companyId],
-    queryFn: () => companyId ? base44.entities.Warehouse.filter({ company_id: companyId }) : Promise.resolve([]),
+    queryFn: () => companyId ? base44.entities.Warehouse.listAll({ company_id: companyId }) : Promise.resolve([]),
     enabled: !!companyId,
   });
 
   const { data: locations } = useQuery({
     queryKey: ['locations', companyId],
-    queryFn: () => companyId ? base44.entities.Location.filter({ company_id: companyId }) : Promise.resolve([]),
+    queryFn: () => companyId ? base44.entities.Location.listAll({ company_id: companyId }) : Promise.resolve([]),
     enabled: !!companyId,
   });
 

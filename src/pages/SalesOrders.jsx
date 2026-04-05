@@ -324,31 +324,31 @@ export default function SalesOrders() {
 
   const { data: orders, isLoading } = useQuery({
     queryKey: ['sales-orders', companyId],
-    queryFn: () => base44.entities.SalesOrder.filter({ company_id: companyId }),
+    queryFn: () => companyId ? base44.entities.SalesOrder.listAll({ company_id: companyId }) : Promise.resolve([]),
     enabled: !!companyId,
   });
-
+  
   const { data: clients } = useQuery({
     queryKey: ['clients', companyId],
-    queryFn: () => base44.entities.Client.filter({ company_id: companyId, active: true }),
+    queryFn: () => companyId ? base44.entities.Client.listAll({ company_id: companyId, active: true }) : Promise.resolve([]),
     enabled: !!companyId,
   });
-
+  
   const { data: sellers } = useQuery({
     queryKey: ['sellers', companyId],
-    queryFn: () => base44.entities.Seller.filter({ company_id: companyId, active: true }),
+    queryFn: () => companyId ? base44.entities.Seller.listAll({ company_id: companyId, active: true }) : Promise.resolve([]),
     enabled: !!companyId,
   });
-
+  
   const { data: products } = useQuery({
     queryKey: ['products', companyId],
-    queryFn: () => base44.entities.Product.filter({ company_id: companyId, active: true }),
+    queryFn: () => companyId ? base44.entities.Product.listAll({ company_id: companyId, active: true }) : Promise.resolve([]),
     enabled: !!companyId,
   });
-
+  
   const { data: paymentConditions } = useQuery({
     queryKey: ['payment-conditions', companyId],
-    queryFn: () => base44.entities.PaymentCondition.filter({ company_id: companyId, active: true }),
+    queryFn: () => companyId ? base44.entities.PaymentCondition.listAll({ company_id: companyId, active: true }) : Promise.resolve([]),
     enabled: !!companyId,
   });
 

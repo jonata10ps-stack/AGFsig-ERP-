@@ -37,7 +37,7 @@ export default function InventoryMoves() {
 
   const { data: moves, isLoading } = useQuery({
     queryKey: ['inventory-moves', companyId],
-    queryFn: () => companyId ? base44.entities.InventoryMove.filter({ company_id: companyId }, '-created_date') : Promise.resolve([]),
+    queryFn: () => companyId ? base44.entities.InventoryMove.listAll({ company_id: companyId }, '-created_date') : Promise.resolve([]),
     enabled: !!companyId,
   });
 

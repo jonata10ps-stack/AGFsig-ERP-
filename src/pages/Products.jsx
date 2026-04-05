@@ -200,21 +200,7 @@ export default function Products() {
 
   const { data: products, isLoading } = useQuery({
     queryKey: ['products', companyId],
-    queryFn: async () => {
-      if (!companyId) return [];
-      // Busca paginada para garantir todos os registros (API limita 5000 por chamada)
-      const PAGE = 5000;
-      let all = [];
-      let skip = 0;
-      while (true) {
-        const page = await base44.entities.Product.filter({ company_id: companyId }, 'sku', PAGE, skip);
-        if (!page || page.length === 0) break;
-        all = all.concat(page);
-        if (page.length < PAGE) break;
-        skip += PAGE;
-      }
-      return all;
-    },
+    queryFn: () => companyId ? base44.entities.Product.listAll({ company_id: companyId }, 'sku') : Promise.resolve([]),
     enabled: !!companyId,
     staleTime: 0,
   });

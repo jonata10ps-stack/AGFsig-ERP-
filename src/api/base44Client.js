@@ -55,8 +55,11 @@ const mapAuditFields = (data) => {
 
 const createEntityHandler = (entityName) => {
   return {
-    async list(sort = '-created_date', limit = 1000) {
-      let query = supabase.from(entityName).select('*').limit(limit);
+    async list(sort = '-created_date', limit = 1000, skip = 0) {
+      let query = supabase.from(entityName).select('*');
+      if (limit > 0) {
+        query = query.range(skip, skip + limit - 1);
+      }
       if (typeof sort === 'string') {
         const isDesc = sort.startsWith('-');
         const column = isDesc ? sort.substring(1) : sort;
@@ -68,10 +71,11 @@ const createEntityHandler = (entityName) => {
       return mapAuditFields(data) || [];
     },
     
-    async filter(conditions = {}, sort, limit = 1000) {
+    async filter(conditions = {}, sort, limit = 1000, skip = 0) {
       const sanitizedFilters = sanitizeData(conditions, entityName);
-      let query = supabase.from(entityName).select('*').limit(limit);
+      let query = supabase.from(entityName).select('*');
       
+      // Apply filters first
       for (const [key, value] of Object.entries(sanitizedFilters)) {
         if (value !== undefined) {
           if (value === null) query = query.is(key, null);
@@ -79,15 +83,48 @@ const createEntityHandler = (entityName) => {
           else query = query.eq(key, value);
         }
       }
+
+      // Apply sorting
       if (typeof sort === 'string') {
         const isDesc = sort.startsWith('-');
         const column = isDesc ? sort.substring(1) : sort;
         const sortColumn = (column === 'created_date' || column === 'registered_date' || column === 'created_at') ? 'created_at' : column;
         query = query.order(sortColumn, { ascending: !isDesc });
       }
+
+      // Apply range last (PostgREST best practice)
+      if (limit > 0) {
+        query = query.range(skip, skip + limit - 1);
+      }
+      
       const { data, error } = await query;
       if (error) throw error;
       return mapAuditFields(data) || [];
+    },
+
+    async listAll(conditions = {}, sort) {
+      const CHUNK_SIZE = 1000;
+      let allData = [];
+      let currentSkip = 0;
+      let hasMore = true;
+
+      while (hasMore) {
+        console.info(`[base44] Fetching ${entityName} - Skip: ${currentSkip}`);
+        const page = await this.filter(conditions, sort, CHUNK_SIZE, currentSkip);
+        
+        if (!page || page.length === 0) {
+          hasMore = false;
+        } else {
+          allData = [...allData, ...page];
+          console.info(`[base44] Found ${page.length} items (Total so far: ${allData.length})`);
+          if (page.length < CHUNK_SIZE) {
+            hasMore = false;
+          } else {
+            currentSkip += CHUNK_SIZE;
+          }
+        }
+      }
+      return allData;
     },
     
     async create(data) {

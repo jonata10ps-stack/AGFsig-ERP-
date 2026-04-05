@@ -304,31 +304,31 @@ export default function ProductionOrders() {
 
   const { data: orders, isLoading } = useQuery({
     queryKey: ['production-orders', companyId],
-    queryFn: () => companyId ? base44.entities.ProductionOrder.filter({ company_id: companyId }, '-created_date') : Promise.resolve([]),
+    queryFn: () => companyId ? base44.entities.ProductionOrder.listAll({ company_id: companyId }, '-created_date') : Promise.resolve([]),
     enabled: !!companyId,
   });
 
   const { data: products } = useQuery({
     queryKey: ['products-all', companyId],
-    queryFn: () => companyId ? base44.entities.Product.filter({ company_id: companyId }) : Promise.resolve([]),
+    queryFn: () => companyId ? base44.entities.Product.listAll({ company_id: companyId }) : Promise.resolve([]),
     enabled: !!companyId,
   });
 
   const { data: routes } = useQuery({
     queryKey: ['production-routes', companyId],
-    queryFn: () => companyId ? base44.entities.ProductionRoute.filter({ company_id: companyId }, '-created_date') : Promise.resolve([]),
+    queryFn: () => companyId ? base44.entities.ProductionRoute.listAll({ company_id: companyId }, '-created_date') : Promise.resolve([]),
     enabled: !!companyId,
   });
 
   const { data: warehouses } = useQuery({
     queryKey: ['warehouses', companyId],
-    queryFn: () => companyId ? base44.entities.Warehouse.filter({ company_id: companyId, active: true }) : Promise.resolve([]),
+    queryFn: () => companyId ? base44.entities.Warehouse.listAll({ company_id: companyId, active: true }) : Promise.resolve([]),
     enabled: !!companyId,
   });
 
   const { data: locations } = useQuery({
     queryKey: ['locations', companyId],
-    queryFn: () => companyId ? base44.entities.Location.filter({ company_id: companyId, active: true }) : Promise.resolve([]),
+    queryFn: () => companyId ? base44.entities.Location.listAll({ company_id: companyId, active: true }) : Promise.resolve([]),
     enabled: !!companyId,
   });
 

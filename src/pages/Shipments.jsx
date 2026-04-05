@@ -280,25 +280,25 @@ export default function Shipments() {
 
   const { data: shipments, isLoading } = useQuery({
     queryKey: ['shipments', companyId],
-    queryFn: () => base44.entities.SalesOrder.filter({ company_id: companyId, is_shipment: true }, '-created_date'),
+    queryFn: () => companyId ? base44.entities.SalesOrder.listAll({ company_id: companyId, is_shipment: true }, '-created_date') : Promise.resolve([]),
     enabled: !!companyId,
   });
 
   const { data: clients } = useQuery({
     queryKey: ['clients', companyId],
-    queryFn: () => base44.entities.Client.filter({ company_id: companyId, active: true }),
+    queryFn: () => companyId ? base44.entities.Client.listAll({ company_id: companyId, active: true }) : Promise.resolve([]),
     enabled: !!companyId,
   });
 
   const { data: products } = useQuery({
     queryKey: ['products', companyId],
-    queryFn: () => base44.entities.Product.filter({ company_id: companyId, active: true }),
+    queryFn: () => companyId ? base44.entities.Product.listAll({ company_id: companyId, active: true }) : Promise.resolve([]),
     enabled: !!companyId,
   });
 
   const { data: editingItems } = useQuery({
     queryKey: ['shipment-items', editingOrder?.id],
-    queryFn: () => base44.entities.SalesOrderItem.filter({ order_id: editingOrder.id }),
+    queryFn: () => editingOrder?.id ? base44.entities.SalesOrderItem.listAll({ order_id: editingOrder.id }) : Promise.resolve([]),
     enabled: !!editingOrder?.id,
   });
 

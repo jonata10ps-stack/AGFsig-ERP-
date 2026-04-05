@@ -189,24 +189,36 @@ export default function Warehouses() {
         throw new Error(result.details);
       }
 
-      let warehouses = Array.isArray(result.output) ? result.output : [];
+      // Buscar armazéns existentes para verificar duplicidade por código
+      const existingWhs = await base44.entities.Warehouse.filter({ company_id: companyId });
+      const existingCodes = new Set(existingWhs.map(w => w.code?.toUpperCase()));
 
-      if (warehouses.length === 0) {
-        throw new Error('Nenhum armazém encontrado no arquivo');
+      const newWhs = warehouses.filter(w => !existingCodes.has(w.code?.toUpperCase()));
+      const skippedCount = warehouses.length - newWhs.length;
+
+      if (newWhs.length === 0) {
+        toast.warning(`Todos os ${warehouses.length} armazém(ns) já existem no cadastro. Nenhum item foi importado.`);
+        setImportDialogOpen(false);
+        setImportFile(null);
+        return;
       }
 
-      await base44.entities.Warehouse.bulkCreate(warehouses.map(w => ({
+      await base44.entities.Warehouse.bulkCreate(newWhs.map(w => ({
         company_id: companyId,
         code: w.code,
         name: w.name,
-        type: w.type || 'MP',
+        type: w.type || 'ESTOQUE',
         active: true
       })));
 
       queryClient.invalidateQueries({ queryKey: ['warehouses', companyId] });
       setImportDialogOpen(false);
       setImportFile(null);
-      toast.success(`${warehouses.length} armazém(ns) importado(s) com sucesso`);
+      
+      const msg = skippedCount > 0
+        ? `${newWhs.length} armazém(ns) importado(s). ${skippedCount} já existiam e foram ignorados para preservar o histórico.`
+        : `${newWhs.length} armazém(ns) importado(s) com sucesso.`;
+      toast.success(msg);
     } catch (error) {
       toast.error('Erro ao importar: ' + error.message);
     } finally {

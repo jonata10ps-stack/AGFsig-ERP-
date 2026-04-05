@@ -265,7 +265,7 @@ export default function Clients() {
 
   const { data: clients, isLoading } = useQuery({
     queryKey: ['clients', companyId],
-    queryFn: () => companyId ? base44.entities.Client.filter({ company_id: companyId }, '-created_date') : Promise.resolve([]),
+    queryFn: () => companyId ? base44.entities.Client.listAll({ company_id: companyId }, '-created_date') : Promise.resolve([]),
     enabled: !!companyId,
   });
 
@@ -369,7 +369,33 @@ export default function Clients() {
         throw new Error('Nenhum cliente encontrado no arquivo. Verifique se a coluna "Nome" existe.');
       }
 
-      await base44.entities.Client.bulkCreate(clients.map(c => ({
+      // Buscar clientes existentes para verificar duplicidade por documento (CNPJ/CPF)
+      const existingClients = await base44.entities.Client.filter({ company_id: companyId }, '-created_date', 9999);
+      const existingDocs = new Set(existingClients.map(c => c.document?.replace(/\D/g, '')).filter(Boolean));
+      const existingCodes = new Set(existingClients.map(c => c.code?.toUpperCase()).filter(Boolean));
+
+      const newClients = clients.filter(c => {
+        const cleanDoc = c.document?.replace(/\D/g, '');
+        const codeUpper = c.code?.toUpperCase();
+        
+        // Se tem documento e já existe, pula
+        if (cleanDoc && existingDocs.has(cleanDoc)) return false;
+        // Se tem código e já existe, pula
+        if (codeUpper && existingCodes.has(codeUpper)) return false;
+        
+        return true;
+      });
+
+      const skippedCount = clients.length - newClients.length;
+
+      if (newClients.length === 0) {
+        toast.warning(`Todos os ${clients.length} cliente(s) já existem no cadastro (pelo CPF/CNPJ ou Código). Nenhum item foi importado.`);
+        setImportDialogOpen(false);
+        setImportFile(null);
+        return;
+      }
+
+      await base44.entities.Client.bulkCreate(newClients.map(c => ({
         company_id: companyId,
         code: c.code || '',
         name: c.name,
@@ -386,7 +412,11 @@ export default function Clients() {
       queryClient.invalidateQueries({ queryKey: ['clients', companyId] });
       setImportDialogOpen(false);
       setImportFile(null);
-      toast.success(`${clients.length} cliente(s) importado(s) com sucesso`);
+      
+      const msg = skippedCount > 0
+        ? `${newClients.length} cliente(s) importado(s). ${skippedCount} já existiam e foram ignorados para preservar o histórico.`
+        : `${newClients.length} cliente(s) importado(s) com sucesso.`;
+      toast.success(msg);
     } catch (error) {
       toast.error('Erro ao importar: ' + error.message);
     } finally {

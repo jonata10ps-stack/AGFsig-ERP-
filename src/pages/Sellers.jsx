@@ -139,11 +139,21 @@ export default function Sellers() {
 
       let sellers = Array.isArray(result.output) ? result.output : [];
 
-      if (sellers.length === 0) {
-        throw new Error('Nenhum vendedor encontrado no arquivo');
+      // Buscar vendedores existentes para verificar duplicidade por código
+      const existingSellers = await base44.entities.Seller.filter({ company_id: companyId });
+      const existingCodes = new Set(existingSellers.map(s => s.code?.toUpperCase()));
+
+      const newSellers = sellers.filter(s => !existingCodes.has(s.code?.toUpperCase()));
+      const skippedCount = sellers.length - newSellers.length;
+
+      if (newSellers.length === 0) {
+        toast.warning(`Todos os ${sellers.length} vendedor(es) já existem no cadastro. Nenhum item foi importado.`);
+        setImportDialogOpen(false);
+        setImportFile(null);
+        return;
       }
 
-      await base44.entities.Seller.bulkCreate(sellers.map(s => ({
+      await base44.entities.Seller.bulkCreate(newSellers.map(s => ({
         company_id: companyId,
         code: s.code,
         name: s.name,
@@ -156,7 +166,11 @@ export default function Sellers() {
       queryClient.invalidateQueries({ queryKey: ['sellers', companyId] });
       setImportDialogOpen(false);
       setImportFile(null);
-      toast.success(`${sellers.length} vendedor(es) importado(s) com sucesso`);
+      
+      const msg = skippedCount > 0
+        ? `${newSellers.length} vendedor(es) importado(s). ${skippedCount} já existiam e foram ignorados para preservar o histórico.`
+        : `${newSellers.length} vendedor(es) importado(s) com sucesso.`;
+      toast.success(msg);
     } catch (error) {
       toast.error('Erro ao importar: ' + error.message);
     } finally {

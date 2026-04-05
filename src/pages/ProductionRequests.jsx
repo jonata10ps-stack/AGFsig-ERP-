@@ -174,35 +174,31 @@ export default function ProductionRequests() {
 
   const { data: requests, isLoading } = useQuery({
     queryKey: ['production-requests', companyId],
-    queryFn: async () => {
-      if (!companyId) return [];
-      const allRequests = await base44.entities.ProductionRequest.filter({ company_id: companyId }, '-created_date');
-      return allRequests;
-    },
+    queryFn: () => companyId ? base44.entities.ProductionRequest.listAll({ company_id: companyId }, '-created_date') : Promise.resolve([]),
     enabled: !!companyId,
   });
 
   const { data: products } = useQuery({
     queryKey: ['products', companyId],
-    queryFn: () => base44.entities.Product.filter({ company_id: companyId, active: true }),
+    queryFn: () => companyId ? base44.entities.Product.listAll({ company_id: companyId, active: true }) : Promise.resolve([]),
     enabled: !!companyId,
   });
 
   const { data: ops } = useQuery({
     queryKey: ['production-orders', companyId],
-    queryFn: () => base44.entities.ProductionOrder.filter({ company_id: companyId }, '-created_date', 500),
+    queryFn: () => companyId ? base44.entities.ProductionOrder.listAll({ company_id: companyId }, '-created_date') : Promise.resolve([]),
     enabled: !!companyId,
   });
 
   const { data: warehouses } = useQuery({
     queryKey: ['warehouses', companyId],
-    queryFn: () => companyId ? base44.entities.Warehouse.filter({ company_id: companyId, active: true }) : Promise.resolve([]),
+    queryFn: () => companyId ? base44.entities.Warehouse.listAll({ company_id: companyId, active: true }) : Promise.resolve([]),
     enabled: !!companyId,
   });
 
   const { data: locations } = useQuery({
     queryKey: ['locations', companyId],
-    queryFn: () => companyId ? base44.entities.Location.filter({ company_id: companyId, active: true }) : Promise.resolve([]),
+    queryFn: () => companyId ? base44.entities.Location.listAll({ company_id: companyId, active: true }) : Promise.resolve([]),
     enabled: !!companyId,
   });
 
