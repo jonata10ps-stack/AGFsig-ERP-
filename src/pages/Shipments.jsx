@@ -309,11 +309,8 @@ export default function Shipments() {
         // Atualizar existente
         order = await base44.entities.SalesOrder.update(editingOrder.id, orderData);
         
-        // Substituir itens (assumindo estado de RASCUNHO onde é seguro deletar e recriar)
-        const oldItems = await base44.entities.SalesOrderItem.filter({ order_id: editingOrder.id });
-        for (const item of oldItems) {
-          await base44.entities.SalesOrderItem.delete(item.id);
-        }
+        // Substituir itens de forma otimizada com única chamada ao banco
+        await base44.entities.SalesOrderItem.deleteBy({ order_id: editingOrder.id });
       } else {
         // Criar novo
         const orderNumber = `REM-${Date.now().toString().slice(-8)}`;
@@ -326,8 +323,9 @@ export default function Shipments() {
       }
       
       // Criar itens
-      for (const item of items) {
-        await base44.entities.SalesOrderItem.create({
+      // Criar itens em lote (bulk) para performance
+      if (items && items.length > 0) {
+        await base44.entities.SalesOrderItem.bulkCreate(items.map(item => ({
           company_id: companyId,
           order_id: order.id,
           product_id: item.product_id,
@@ -337,7 +335,7 @@ export default function Shipments() {
           unit_price: item.unit_price || 0,
           total_price: (item.qty * (item.unit_price || 0)),
           qty_returned: 0
-        });
+        })));
       }
       return order;
     },

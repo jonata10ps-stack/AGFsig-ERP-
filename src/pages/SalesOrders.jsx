@@ -357,9 +357,9 @@ export default function SalesOrders() {
       const orderNumber = `PED-${Date.now().toString().slice(-8)}`;
       const order = await base44.entities.SalesOrder.create({ ...orderData, company_id: companyId, order_number: orderNumber });
       
-      // Criar itens
-      for (const item of items) {
-        await base44.entities.SalesOrderItem.create({
+      // Criar itens em lote (bulk)
+      if (items && items.length > 0) {
+        await base44.entities.SalesOrderItem.bulkCreate(items.map(item => ({
           company_id: companyId,
           order_id: order.id,
           product_id: item.product_id,
@@ -369,28 +369,26 @@ export default function SalesOrders() {
           unit_price: item.unit_price,
           total_price: item.total_price,
           fulfill_mode: 'AUTO'
-        });
+        })));
       }
       
-      // Se pedido criado com status CONFIRMADO, criar ProductionRequests
-      if (orderData.status === 'CONFIRMADO') {
-        for (const item of items) {
-          const requestNumber = `SOL-${Date.now().toString().slice(-8)}`;
-          await base44.entities.ProductionRequest.create({
-            company_id: companyId,
-            request_number: requestNumber,
-            origin_type: 'VENDA',
-            origin_id: order.id,
-            order_id: order.id,
-            order_number: order.order_number,
-            product_id: item.product_id,
-            product_name: item.product_name,
-            qty_requested: item.qty,
-            status: 'PENDENTE',
-            priority: 'NORMAL',
-            due_date: orderData.delivery_date
-          });
-        }
+      // Se pedido criado com status CONFIRMADO, criar ProductionRequests em lote
+      if (orderData.status === 'CONFIRMADO' && items && items.length > 0) {
+        const now = Date.now();
+        await base44.entities.ProductionRequest.bulkCreate(items.map((item, idx) => ({
+          company_id: companyId,
+          request_number: `SOL-${(now + idx).toString().slice(-8)}`,
+          origin_type: 'VENDA',
+          origin_id: order.id,
+          order_id: order.id,
+          order_number: order.order_number,
+          product_id: item.product_id,
+          product_name: item.product_name,
+          qty_requested: item.qty,
+          status: 'PENDENTE',
+          priority: 'NORMAL',
+          due_date: orderData.delivery_date
+        })));
       }
       
       return order;
