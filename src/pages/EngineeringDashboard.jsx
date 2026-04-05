@@ -20,17 +20,17 @@ import { ptBR } from 'date-fns/locale';
 
 const STATUS_CONFIG = {
   PLANEJAMENTO:  { label: 'Planejamento',   color: 'bg-slate-100 text-slate-700',    hex: '#94a3b8' },
-  EM_ANDAMENTO:  { label: 'Em Andamento',   color: 'bg-blue-100 text-blue-700',      hex: '#3b82f6' },
+  EM_ANDAMENTO:  { label: 'Em Andamento',   color: 'bg-primary/10 text-primary',     hex: 'hsl(var(--primary))' },
   REVISAO:       { label: 'Em Revisão',     color: 'bg-amber-100 text-amber-700',    hex: '#f59e0b' },
   APROVADO:      { label: 'Aprovado',       color: 'bg-emerald-100 text-emerald-700',hex: '#10b981' },
-  CONCLUIDO:     { label: 'Concluído',      color: 'bg-purple-100 text-purple-700',  hex: '#8b5cf6' },
+  CONCLUIDO:     { label: 'Concluído',      color: 'bg-indigo-100 text-indigo-700',  hex: '#6366f1' },
   CANCELADO:     { label: 'Cancelado',      color: 'bg-red-100 text-red-700',        hex: '#ef4444' },
 };
 
 const TYPE_CONFIG = {
-  MECANICO:          { label: 'Mecânico',         icon: Cpu,    color: 'text-blue-600',   hex: '#3b82f6' },
+  MECANICO:          { label: 'Mecânico',         icon: Cpu,    color: 'text-primary',    hex: 'hsl(var(--primary))' },
   ELETRICO:          { label: 'Elétrico',         icon: Zap,    color: 'text-amber-600',  hex: '#f59e0b' },
-  MECANICO_ELETRICO: { label: 'Mec. + Elétrico', icon: Layers, color: 'text-purple-600', hex: '#8b5cf6' },
+  MECANICO_ELETRICO: { label: 'Mec. + Elétrico', icon: Layers, color: 'text-indigo-600', hex: '#6366f1' },
 };
 
 const UPDATE_TYPE_COLORS = {
@@ -181,14 +181,13 @@ export default function EngineeringDashboard() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-start justify-between">
+      <div className="flex items-center justify-between bg-white/50 backdrop-blur-sm p-6 rounded-2xl border border-white/20 shadow-sm mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900">Dashboard de Engenharia</h1>
-          <p className="text-slate-500 mt-1">Visão consolidada dos projetos e componentes</p>
+          <h1 className="text-3xl font-extrabold text-primary tracking-tight">Dashboard de Engenharia</h1>
+          <p className="text-slate-500 mt-1 font-medium italic text-sm">Visão consolidada dos projetos e componentes</p>
         </div>
         <Link to={createPageUrl('EngineeringProjects')}>
-          <Button className="bg-indigo-600 hover:bg-indigo-700">
+          <Button className="premium-gradient hover:opacity-90 shadow-lg text-white border-none rounded-xl">
             <Plus className="h-4 w-4 mr-2" />Novo Projeto
           </Button>
         </Link>

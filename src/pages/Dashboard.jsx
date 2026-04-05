@@ -130,10 +130,10 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between bg-white/50 backdrop-blur-sm p-6 rounded-2xl border border-white/20 shadow-sm mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
-          <p className="text-slate-500 mt-1">
+          <h1 className="text-3xl font-extrabold text-primary tracking-tight">Dashboard</h1>
+          <p className="text-slate-500 mt-1 font-medium italic">
             {editMode ? 'Arraste os widgets para reorganizar' : 'Visão geral personalizada'}
           </p>
         </div>
@@ -166,7 +166,7 @@ export default function Dashboard() {
             <div
               {...provided.droppableProps}
               ref={provided.innerRef}
-              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4"
+              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"
             >
               {widgets.map((widget, index) => {
                 const WidgetComponent = WIDGET_COMPONENTS[widget.id];

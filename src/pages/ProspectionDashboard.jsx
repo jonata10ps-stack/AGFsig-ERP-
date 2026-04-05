@@ -19,7 +19,7 @@ import {
 const COLORS = ['#4F46E5', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#06B6D4'];
 
 const statusColors = {
-  PLANEJADA: '#3B82F6',
+  PLANEJADA: 'hsl(var(--primary))',
   REALIZADA: '#10B981',
   CANCELADA: '#6B7280',
 };
@@ -329,60 +329,64 @@ export default function ProspectionDashboard() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Dashboard de Prospecção</h1>
-        <p className="text-slate-500">Análise visual das atividades de prospecção</p>
+      <div className="flex items-center justify-between bg-white/50 backdrop-blur-sm p-6 rounded-2xl border border-white/20 shadow-sm mb-6">
+        <div>
+          <h1 className="text-3xl font-extrabold text-primary tracking-tight">Dashboard de Prospecção</h1>
+          <p className="text-slate-500 mt-1 font-medium italic text-sm">Análise visual das atividades de prospecção</p>
+        </div>
       </div>
 
       {/* Filters */}
-      <Card>
+      <Card className="glass-card border-none shadow-sm overflow-hidden">
         <CardContent className="p-4">
-          <div className="flex flex-wrap gap-2 items-center">
-            <span className="text-sm font-medium text-slate-700">Filtros:</span>
-            <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-              <SelectTrigger className="w-32">
-                <SelectValue placeholder="Mês" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
-                <SelectItem value="01">Janeiro</SelectItem>
-                <SelectItem value="02">Fevereiro</SelectItem>
-                <SelectItem value="03">Março</SelectItem>
-                <SelectItem value="04">Abril</SelectItem>
-                <SelectItem value="05">Maio</SelectItem>
-                <SelectItem value="06">Junho</SelectItem>
-                <SelectItem value="07">Julho</SelectItem>
-                <SelectItem value="08">Agosto</SelectItem>
-                <SelectItem value="09">Setembro</SelectItem>
-                <SelectItem value="10">Outubro</SelectItem>
-                <SelectItem value="11">Novembro</SelectItem>
-                <SelectItem value="12">Dezembro</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={selectedYear} onValueChange={setSelectedYear}>
-              <SelectTrigger className="w-28">
-                <SelectValue placeholder="Ano" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
-                {years.map(year => (
-                  <SelectItem key={year} value={String(year)}>{year}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={selectedSeller} onValueChange={setSelectedSeller}>
-              <SelectTrigger className="w-40">
-                <SelectValue placeholder="Vendedor" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos Vendedores</SelectItem>
-                {sellers.map(seller => (
-                  <SelectItem key={seller.id} value={seller.id}>
-                    {seller.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="flex flex-wrap gap-4 items-center">
+            <span className="text-sm font-bold text-primary uppercase tracking-wider">Filtros Avançados:</span>
+            <div className="flex gap-2">
+              <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                <SelectTrigger className="w-40 rounded-xl bg-white/50">
+                  <SelectValue placeholder="Mês" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os Meses</SelectItem>
+                  <SelectItem value="01">Janeiro</SelectItem>
+                  <SelectItem value="02">Fevereiro</SelectItem>
+                  <SelectItem value="03">Março</SelectItem>
+                  <SelectItem value="04">Abril</SelectItem>
+                  <SelectItem value="05">Maio</SelectItem>
+                  <SelectItem value="06">Junho</SelectItem>
+                  <SelectItem value="07">Julho</SelectItem>
+                  <SelectItem value="08">Agosto</SelectItem>
+                  <SelectItem value="09">Setembro</SelectItem>
+                  <SelectItem value="10">Outubro</SelectItem>
+                  <SelectItem value="11">Novembro</SelectItem>
+                  <SelectItem value="12">Dezembro</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={selectedYear} onValueChange={setSelectedYear}>
+                <SelectTrigger className="w-28 rounded-xl bg-white/50">
+                  <SelectValue placeholder="Ano" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  {years.map(year => (
+                    <SelectItem key={year} value={String(year)}>{year}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={selectedSeller} onValueChange={setSelectedSeller}>
+                <SelectTrigger className="w-48 rounded-xl bg-white/50">
+                  <SelectValue placeholder="Vendedor" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos Vendedores</SelectItem>
+                  {sellers.map(seller => (
+                    <SelectItem key={seller.id} value={seller.id}>
+                      {seller.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </CardContent>
       </Card>

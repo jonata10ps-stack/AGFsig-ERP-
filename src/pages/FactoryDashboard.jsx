@@ -13,10 +13,10 @@ import {
 import { format, isBefore, parseISO } from 'date-fns';
 
 const STATUS_COLORS = {
-  ABERTA: '#6366f1',
-  EM_ANDAMENTO: '#3b82f6',
+  ABERTA: 'hsl(var(--primary))',
+  EM_ANDAMENTO: '#2c5670',
   PAUSADA: '#f59e0b',
-  ENCERRADA: '#22c55e',
+  ENCERRADA: '#10b981',
   CANCELADA: '#ef4444',
 };
 
@@ -98,12 +98,12 @@ export default function FactoryDashboard() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between bg-white/50 backdrop-blur-sm p-6 rounded-2xl border border-white/20 shadow-sm mb-6">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900">Dashboard da Fábrica</h1>
-          <p className="text-slate-500 mt-1">Indicadores de desempenho em tempo real</p>
+          <h1 className="text-3xl font-extrabold text-primary tracking-tight">Dashboard da Fábrica</h1>
+          <p className="text-slate-500 mt-1 font-medium italic text-sm">Indicadores de desempenho em tempo real</p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
+        <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching} className="rounded-xl border-primary/20 hover:bg-primary/5 transition-all">
           <RefreshCw className={`h-4 w-4 mr-2 ${isFetching ? 'animate-spin' : ''}`} />
           Atualizar
         </Button>
@@ -111,29 +111,29 @@ export default function FactoryDashboard() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card>
+        <Card className="glass-card shadow-sm border-none overflow-hidden">
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-indigo-100 flex items-center justify-center">
-                <Factory className="h-5 w-5 text-indigo-600" />
+              <div className="h-10 w-10 rounded-xl bg-primary/20 flex items-center justify-center">
+                <Factory className="h-5 w-5 text-primary" />
               </div>
               <div>
                 <p className="text-sm text-slate-500">OPs Abertas</p>
-                <p className="text-2xl font-bold text-slate-900">{activeOPs.length}</p>
+                <p className="text-2xl font-bold text-primary">{activeOPs.length}</p>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="glass-card shadow-sm border-none overflow-hidden">
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-blue-100 flex items-center justify-center">
-                <TrendingUp className="h-5 w-5 text-blue-600" />
+              <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                <TrendingUp className="h-5 w-5 text-primary" />
               </div>
               <div>
                 <p className="text-sm text-slate-500">Em Andamento</p>
-                <p className="text-2xl font-bold text-blue-700">{inProgressOPs.length}</p>
+                <p className="text-2xl font-bold text-primary">{inProgressOPs.length}</p>
               </div>
             </div>
           </CardContent>
@@ -153,15 +153,15 @@ export default function FactoryDashboard() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="glass-card shadow-sm border-none overflow-hidden hover:shadow-lg transition-all duration-300">
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-green-100 flex items-center justify-center">
-                <CheckCircle2 className="h-5 w-5 text-green-600" />
+              <div className="h-10 w-10 rounded-xl bg-emerald-100 flex items-center justify-center">
+                <CheckCircle2 className="h-5 w-5 text-emerald-600" />
               </div>
               <div>
                 <p className="text-sm text-slate-500">Encerradas</p>
-                <p className="text-2xl font-bold text-green-600">
+                <p className="text-2xl font-bold text-emerald-600">
                   {ops.filter(op => op.status === 'ENCERRADA').length}
                 </p>
               </div>

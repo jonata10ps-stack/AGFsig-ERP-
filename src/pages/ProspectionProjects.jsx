@@ -15,7 +15,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter
 } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -187,9 +187,15 @@ export default function ProspectionProjects() {
 
   const handleOpenDialog = (project = null) => {
     if (project) {
-      setEditingProject(project);
-      setFormData(project);
-      setClientInputMode(project.client_id ? 'select' : 'manual');
+      // Ensure photos and attachments are arrays
+      const sanitizedProject = {
+        ...project,
+        photos: Array.isArray(project.photos) ? project.photos : [],
+        attachments: Array.isArray(project.attachments) ? project.attachments : []
+      };
+      setEditingProject(sanitizedProject);
+      setFormData(sanitizedProject);
+      setClientInputMode(sanitizedProject.client_id ? 'select' : 'manual');
     } else {
       resetForm();
     }
@@ -215,7 +221,7 @@ export default function ProspectionProjects() {
   const handleRemovePhoto = (index) => {
     setFormData(prev => ({
       ...prev,
-      photos: prev.photos.filter((_, i) => i !== index)
+      photos: (Array.isArray(prev.photos) ? prev.photos : []).filter((_, i) => i !== index)
     }));
   };
 
@@ -262,7 +268,7 @@ export default function ProspectionProjects() {
   const handleRemoveAttachment = (index) => {
     setFormData(prev => ({
       ...prev,
-      attachments: prev.attachments.filter((_, i) => i !== index)
+      attachments: (Array.isArray(prev.attachments) ? prev.attachments : []).filter((_, i) => i !== index)
     }));
   };
 
@@ -479,11 +485,14 @@ export default function ProspectionProjects() {
       {/* Form Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              {editingProject ? 'Editar Projeto' : 'Novo Projeto de Prospecção'}
-            </DialogTitle>
-          </DialogHeader>
+            <DialogHeader>
+              <DialogTitle>
+                {editingProject ? 'Editar Projeto' : 'Novo Projeto de Prospecção'}
+              </DialogTitle>
+              <DialogDescription>
+                {editingProject ? 'Atualize as informações do projeto selecionado.' : 'Preencha os dados abaixo para iniciar um novo projeto de prospecção.'}
+              </DialogDescription>
+            </DialogHeader>
 
           <div className="space-y-4">
             {/* Project Name */}
@@ -565,7 +574,7 @@ export default function ProspectionProjects() {
             <div>
               <label className="text-sm font-medium text-slate-700">Descrição</label>
               <textarea
-                value={formData.description}
+                value={formData.description || ''}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 placeholder="Descrição do projeto..."
                 rows="3"
@@ -714,7 +723,7 @@ export default function ProspectionProjects() {
             <div>
               <label className="text-sm font-medium text-slate-700">Fotos do Projeto</label>
               <div className="mt-2 space-y-3">
-                {formData.photos?.length > 0 && (
+                {Array.isArray(formData.photos) && formData.photos.length > 0 && (
                   <div className="grid grid-cols-3 gap-2">
                     {formData.photos.map((photo, index) => (
                       <div key={index} className="relative">
@@ -745,7 +754,7 @@ export default function ProspectionProjects() {
             <div>
               <label className="text-sm font-medium text-slate-700">Arquivos Anexados</label>
               <div className="mt-2 space-y-3">
-                {formData.attachments?.length > 0 && (
+                {Array.isArray(formData.attachments) && formData.attachments.length > 0 && (
                   <div className="space-y-2 bg-slate-50 rounded-lg p-3 border border-slate-200">
                     {formData.attachments.map((attachment, index) => (
                       <div key={index} className="flex items-center justify-between p-2 bg-white rounded border border-slate-200">
@@ -787,7 +796,7 @@ export default function ProspectionProjects() {
             <div>
               <label className="text-sm font-medium text-slate-700">Observações</label>
               <textarea
-                value={formData.notes}
+                value={formData.notes || ''}
                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                 placeholder="Notas adicionais..."
                 rows="2"
