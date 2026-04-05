@@ -455,7 +455,7 @@ export default function Products() {
                 </div>
               ))}
             </div>
-          ) : filteredProducts?.length === 0 ? (
+          ) : totalCount === 0 ? (
             <div className="text-center py-12">
               <Package className="h-12 w-12 mx-auto text-slate-300 mb-4" />
               <p className="text-slate-500">Nenhum produto encontrado</p>
