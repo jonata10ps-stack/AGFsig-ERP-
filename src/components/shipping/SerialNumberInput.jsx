@@ -73,12 +73,22 @@ export default function SerialNumberInput({ item, order, onClose, onSuccess }) {
       for (const serialItem of serialNumbers) {
         if (serialItem.isSavedInDB) continue;
         
-        // Verificar se esse número de série já existe no banco (mesmo que em estoque)
+        // Verificar se esse número de série já existe no banco
         const existing = await base44.entities.SerialNumber.filter({
           company_id: order.company_id,
           serial_number: serialItem.serial,
           product_id: item.product_id
         }).then(res => res?.[0]);
+
+        // Bloqueio de segurança: se já estiver vendido para OUTRO pedido/cliente
+        if (existing && existing.status === 'VENDIDO' && existing.order_id && existing.order_id !== order.id) {
+          setSaving(false);
+          toast.error(
+            `O número de série ${serialItem.serial} já está vinculado ao Cliente: ${existing.client_name || 'Desconhecido'} (Pedido: ${existing.order_number || '-'}). Verifique antes de continuar.`,
+            { duration: 6000 }
+          );
+          return; // Interrompe o salvamento total
+        }
 
         const payload = {
           company_id: order.company_id,
@@ -96,7 +106,7 @@ export default function SerialNumberInput({ item, order, onClose, onSuccess }) {
         };
 
         if (existing) {
-          // Atualizar o registro existente (Realocar/Vender)
+          // Atualizar o registro existente (ex: se estava em 'ESTOQUE')
           await base44.entities.SerialNumber.update(existing.id, payload);
         } else {
           // Criar novo registro
