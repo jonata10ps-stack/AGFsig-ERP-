@@ -5,8 +5,10 @@ import { Link, useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { useCompanyId } from '@/components/useCompanyId';
 import {
-  ArrowLeft, Save, Clock, CheckCircle, XCircle, Pause, Play, Wrench, User, Calendar, DollarSign, UserCog, History, Loader2
+  ArrowLeft, Save, Clock, CheckCircle, XCircle, Pause, Play, Wrench, User, Calendar, DollarSign, UserCog, History, Loader2, Camera, Trash2, FileText, ImageIcon, Clipboard, Printer
 } from 'lucide-react';
+import SignatureCanvas from '@/components/inventory/SignatureCanvas';
+import ServiceOrderReport from '@/components/service/ServiceOrderReport';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -50,6 +52,8 @@ export default function ServiceOrderDetail() {
   const [changeTechDialogOpen, setChangeTechDialogOpen] = useState(false);
   const [selectedTechnicianId, setSelectedTechnicianId] = useState('');
   const [changeReason, setChangeReason] = useState('');
+  const [showReport, setShowReport] = useState(false);
+  const [showSignature, setShowSignature] = useState(false);
 
   const { data: order, isLoading } = useQuery({
     queryKey: ['service-order', orderId],
@@ -135,8 +139,38 @@ export default function ServiceOrderDetail() {
       parts_cost: Number(formData.parts_cost || 0),
       total_cost: Number(formData.labor_cost || 0) + Number(formData.parts_cost || 0),
       scheduled_date: formData.scheduled_date,
+      service_photos: formData.service_photos || [],
+      client_signature: formData.client_signature || null,
     };
     updateMutation.mutate(updates);
+  };
+
+  const handleImageCapture = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('A imagem deve ter no máximo 5MB.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64String = reader.result;
+      setFormData(prev => ({
+        ...prev,
+        service_photos: [...(prev.service_photos || []), base64String]
+      }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removePhoto = (index) => {
+    setFormData(prev => {
+      const newPhotos = [...(prev.service_photos || [])];
+      newPhotos.splice(index, 1);
+      return { ...prev, service_photos: newPhotos };
+    });
   };
    const changeTechnicianMutation = useMutation({
     mutationFn: async () => {
@@ -241,6 +275,10 @@ export default function ServiceOrderDetail() {
           </div>
         </div>
         <div className="flex gap-2">
+          <Button onClick={() => setShowReport(true)} variant="outline" className="border-indigo-200 text-indigo-700">
+            <Clipboard className="h-4 w-4 mr-2" />
+            Gerar Relatório
+          </Button>
           {order.status === 'PENDENTE' && (
             <Button onClick={() => changeStatusMutation.mutate('EM_ANDAMENTO')} className="bg-indigo-600">
               <Play className="h-4 w-4 mr-2" />
@@ -478,40 +516,79 @@ export default function ServiceOrderDetail() {
 
           <Separator />
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div>
-              <label className="text-sm font-medium text-slate-700">Horas Trabalhadas</label>
-              <Input
-                type="number"
-                value={formData.labor_hours || 0}
-                onChange={(e) => setFormData({ ...formData, labor_hours: parseFloat(e.target.value) || 0 })}
-                className="mt-1"
-                disabled={order.status === 'CONCLUIDA' || order.status === 'CANCELADA'}
-              />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
+            {/* Seção de Fotos */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-bold text-slate-700 uppercase tracking-tight flex items-center gap-2">
+                  <ImageIcon className="h-4 w-4 text-indigo-500" /> Relatório Fotográfico
+                </label>
+                {order.status !== 'CONCLUIDA' && (
+                  <Button variant="outline" size="sm" className="relative cursor-pointer">
+                    <Camera className="h-4 w-4 mr-2" />
+                    Adicionar Foto
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      className="absolute inset-0 opacity-0 cursor-pointer"
+                      onChange={handleImageCapture}
+                    />
+                  </Button>
+                )}
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {formData.service_photos?.map((photo, idx) => (
+                  <div key={idx} className="relative group aspect-square rounded-xl border overflow-hidden bg-slate-50 shadow-sm transition-all hover:shadow-md">
+                    <img src={photo} alt={`Serviço ${idx + 1}`} className="w-full h-full object-cover" />
+                    {order.status !== 'CONCLUIDA' && (
+                      <button
+                        onClick={() => removePhoto(idx)}
+                        className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+                {(!formData.service_photos || formData.service_photos.length === 0) && (
+                  <div className="col-span-full py-8 border-2 border-dashed border-slate-200 rounded-xl flex flex-col items-center justify-center text-slate-400">
+                    <ImageIcon className="h-8 w-8 mb-2 opacity-20" />
+                    <p className="text-xs font-medium">Nenhuma foto anexada</p>
+                  </div>
+                )}
+              </div>
             </div>
-            <div>
-              <label className="text-sm font-medium text-slate-700">Custo Mão de Obra</label>
-              <Input
-                type="number"
-                value={formData.labor_cost || 0}
-                onChange={(e) => setFormData({ ...formData, labor_cost: parseFloat(e.target.value) || 0 })}
-                className="mt-1"
-                disabled={order.status === 'CONCLUIDA' || order.status === 'CANCELADA'}
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium text-slate-700">Custo Peças</label>
-              <Input
-                type="number"
-                value={formData.parts_cost || 0}
-                onChange={(e) => setFormData({ ...formData, parts_cost: parseFloat(e.target.value) || 0 })}
-                className="mt-1"
-                disabled={order.status === 'CONCLUIDA' || order.status === 'CANCELADA'}
-              />
+
+            {/* Seção de Assinatura */}
+            <div className="space-y-4">
+              <label className="text-sm font-bold text-slate-700 uppercase tracking-tight flex items-center gap-2">
+                <User className="h-4 w-4 text-indigo-500" /> Assinatura do Cliente
+              </label>
+              <div className="bg-white rounded-xl border shadow-sm min-h-[200px] flex flex-col items-center justify-center p-4 relative group">
+                {formData.client_signature ? (
+                  <img src={formData.client_signature} alt="Assinatura" className="max-h-[150px] object-contain" />
+                ) : (
+                  <div className="text-center text-slate-300">
+                    <User className="h-12 w-12 mx-auto mb-2 opacity-10" />
+                    <p className="text-xs">Aguardando assinatura</p>
+                  </div>
+                )}
+                {order.status !== 'CONCLUIDA' && (
+                  <Button 
+                    variant="secondary" 
+                    size="sm" 
+                    className="mt-4"
+                    onClick={() => setShowSignature(true)}
+                  >
+                    {formData.client_signature ? 'Refazer Assinatura' : 'Coletar Assinatura'}
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
 
-          <div className="flex justify-between items-center pt-4">
+          <div className="flex justify-between items-center pt-6 border-t mt-6">
             <div>
               <p className="text-sm text-slate-500">Custo Total</p>
               <p className="text-2xl font-bold text-indigo-600">
@@ -519,7 +596,11 @@ export default function ServiceOrderDetail() {
               </p>
             </div>
             {order.status !== 'CONCLUIDA' && order.status !== 'CANCELADA' && (
-              <Button onClick={handleSave} disabled={updateMutation.isPending}>
+              <Button 
+                onClick={handleSave} 
+                disabled={updateMutation.isPending}
+                className="bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-100"
+              >
                 <Save className="h-4 w-4 mr-2" />
                 Salvar Alterações
               </Button>
@@ -527,6 +608,33 @@ export default function ServiceOrderDetail() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Signature Dialog */}
+      <Dialog open={showSignature} onOpenChange={setShowSignature}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Coletar Assinatura do Cliente</DialogTitle>
+          </DialogHeader>
+          <div className="p-4 bg-slate-50 rounded-xl border-2 border-dashed border-slate-200">
+            <SignatureCanvas 
+              onSave={(sig) => {
+                setFormData({ ...formData, client_signature: sig });
+                setShowSignature(false);
+              }}
+              initialSignature={formData.client_signature}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Report Modal */}
+      {showReport && (
+        <ServiceOrderReport 
+          order={order}
+          history={techHistory}
+          onClose={() => setShowReport(false)}
+        />
+      )}
 
       {/* Change Technician Dialog */}
       <Dialog open={changeTechDialogOpen} onOpenChange={setChangeTechDialogOpen}>

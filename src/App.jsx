@@ -10,6 +10,7 @@ import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import FactoryDashboard from './pages/FactoryDashboard';
 import DeduplicateProducts from './pages/DeduplicateProducts';
 import Login from './pages/Login';
+import PublicServiceOrderReport from './pages/PublicServiceOrderReport';
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -80,7 +81,10 @@ function App() {
       <QueryClientProvider client={queryClientInstance}>
         <Router>
           <NavigationTracker />
-          <AuthenticatedApp />
+          <Routes>
+            <Route path="/public/os/:id" element={<PublicServiceOrderReport />} />
+            <Route path="*" element={<AuthenticatedApp />} />
+          </Routes>
         </Router>
         <Toaster />
       </QueryClientProvider>

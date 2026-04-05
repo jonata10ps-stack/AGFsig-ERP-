@@ -144,10 +144,12 @@ import SystemConfiguration from './pages/SystemConfiguration';
 import Technicians from './pages/Technicians';
 import UserManagement from './pages/UserManagement';
 import Warehouses from './pages/Warehouses';
+import PublicServiceOrderReport from './pages/PublicServiceOrderReport';
 import __Layout from './Layout.jsx';
 
 
 export const PAGES = {
+    "PublicServiceOrderReport": PublicServiceOrderReport,
     "AfterSales": AfterSales,
     "BOMDeliveryPicking": BOMDeliveryPicking,
     "BOMDeliveryPickingList": BOMDeliveryPickingList,
