@@ -5,6 +5,7 @@ import { useCompanyId } from '@/components/useCompanyId';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import ProspectionProjectsDashboard from '@/components/ProspectionProjectsDashboard';
+import ClientSearchSelect from '@/components/clients/ClientSearchSelect';
 import {
   Plus, Search, Filter, MapPin, Image, Zap, Eye, Trash2, Edit,
   ArrowLeft, X, Clock, CheckCircle2, AlertCircle, Share2, FileText, Download
@@ -76,14 +77,6 @@ export default function ProspectionProjects() {
     refetchInterval: 60000, // Atualizar a cada 60 segundos
   });
 
-  const { data: clients = [] } = useQuery({
-    queryKey: ['clients', companyId],
-    queryFn: async () => {
-      if (!companyId) return [];
-      return base44.entities.Client.filter({ company_id: companyId });
-    },
-    enabled: !!companyId,
-  });
 
   const { data: user } = useQuery({
     queryKey: ['current-user'],
@@ -534,21 +527,17 @@ export default function ProspectionProjects() {
                 </div>
 
                 {clientInputMode === 'select' ? (
-                  <Select value={formData.client_id} onValueChange={(value) => {
-                    const client = clients.find(c => c.id === value);
-                    if (client) handleSelectClient(client);
-                  }}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione um cliente cadastrado" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {clients.map(client => (
-                        <SelectItem key={client.id} value={client.id}>
-                          {client.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <ClientSearchSelect
+                    value={formData.client_id}
+                    onSelect={(id, client) => {
+                      if (!id || !client) {
+                        setFormData(prev => ({ ...prev, client_id: '', client_name: '' }));
+                        return;
+                      }
+                      handleSelectClient(client);
+                    }}
+                    placeholder="Selecione um cliente cadastrado"
+                  />
                 ) : (
                   <Input
                     value={formData.client_name}

@@ -39,17 +39,29 @@ export default function ClientSearchSelect({ value, onSelect, label, placeholder
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const filteredClients = clients?.filter(c =>
-    search === '' ||
-    c.name?.toLowerCase().includes(search.toLowerCase()) ||
-    c.code?.toLowerCase().includes(search.toLowerCase()) ||
-    c.document?.toLowerCase().includes(search.toLowerCase()) ||
-    c.email?.toLowerCase().includes(search.toLowerCase())
-  ).slice(0, 8);
+  const normalize = (str) => str?.toString().toLowerCase().replace(/[^a-z0-9]/g, '') || '';
+
+  const filteredClients = clients?.filter(c => {
+    if (search === '') return true;
+    
+    const term = search.toLowerCase();
+    const normalizedTerm = normalize(search);
+    
+    return (
+      c.name?.toLowerCase().includes(term) ||
+      c.client_name?.toLowerCase().includes(term) ||
+      c.social_name?.toLowerCase().includes(term) ||
+      c.razao_social?.toLowerCase().includes(term) ||
+      c.code?.toLowerCase().includes(term) ||
+      c.email?.toLowerCase().includes(term) ||
+      (c.document && normalize(c.document).includes(normalizedTerm)) ||
+      (c.client_document && normalize(c.client_document).includes(normalizedTerm))
+    );
+  }).slice(0, 10);
 
   const handleSelect = (client) => {
     setSelectedClient(client);
-    onSelect(client.id);
+    onSelect(client.id, client);
     setSearch('');
     setIsOpen(false);
   };
@@ -57,7 +69,7 @@ export default function ClientSearchSelect({ value, onSelect, label, placeholder
   const handleClear = (e) => {
     e.stopPropagation();
     setSelectedClient(null);
-    onSelect('');
+    onSelect('', null);
     setSearch('');
   };
 
