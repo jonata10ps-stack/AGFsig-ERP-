@@ -70,9 +70,9 @@ export default function SerialNumberControl() {
       const order = data.order_id ?
         await base44.entities.SalesOrder.filter({ id: data.order_id }).then(o => o?.[0]) : null;
 
-      const warrantyStartDate = data.sale_date ? new Date(data.sale_date) : new Date();
+      const warrantyStartDate = data.sale_date ? new Date(data.sale_date + 'T12:00:00') : new Date();
       const warrantyExpires = new Date(warrantyStartDate);
-      warrantyExpires.setMonth(warrantyExpires.getMonth() + data.warranty_months);
+      warrantyExpires.setMonth(warrantyExpires.getMonth() + Number(data.warranty_months || 0));
 
       return await base44.entities.SerialNumber.create({
         ...data,
@@ -96,9 +96,9 @@ export default function SerialNumberControl() {
 
   const updateMutation = useMutation({
     mutationFn: async (data) => {
-      const warrantyStartDate = data.sale_date ? new Date(data.sale_date) : new Date();
+      const warrantyStartDate = data.sale_date ? new Date(data.sale_date + 'T12:00:00') : new Date();
       const warrantyExpires = new Date(warrantyStartDate);
-      warrantyExpires.setMonth(warrantyExpires.getMonth() + data.warranty_months);
+      warrantyExpires.setMonth(warrantyExpires.getMonth() + Number(data.warranty_months || 0));
 
       return await base44.entities.SerialNumber.update(editingId, {
         status: data.status,
