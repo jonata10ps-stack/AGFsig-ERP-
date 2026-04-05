@@ -143,11 +143,11 @@ export default function ProspectionVisitDetail() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <p className="text-sm text-slate-500">KM Inicial</p>
-                <p className="font-medium">{visit.vehicle_km_start?.toFixed(1) || '-'}</p>
+                <p className="font-medium">{Number(visit.vehicle_km_start || 0).toFixed(1)}</p>
               </div>
               <div>
                 <p className="text-sm text-slate-500">KM Final</p>
-                <p className="font-medium">{visit.vehicle_km_end?.toFixed(1) || '-'}</p>
+                <p className="font-medium">{Number(visit.vehicle_km_end || 0).toFixed(1)}</p>
               </div>
             </div>
             {kmPercorridos > 0 && (
@@ -156,7 +156,7 @@ export default function ProspectionVisitDetail() {
                   <Car className="h-5 w-5 text-indigo-600" />
                   <div>
                     <p className="text-sm text-slate-500">Distância Percorrida</p>
-                    <p className="text-lg font-bold text-indigo-600">{kmPercorridos.toFixed(1)} km</p>
+                    <p className="text-lg font-bold text-indigo-600">{Number(kmPercorridos || 0).toFixed(1)} km</p>
                   </div>
                 </div>
               </div>

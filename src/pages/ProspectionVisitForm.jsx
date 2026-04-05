@@ -23,9 +23,10 @@ export default function ProspectionVisitForm() {
 
   const [formData, setFormData] = useState({
     visit_date: new Date().toISOString().split('T')[0],
-    start_time: '',
-    end_time: '',
-    client_id: '',
+    seller_id: null,
+    start_time: null,
+    end_time: null,
+    client_id: null,
     client_name: '',
     prospective_client_name: '',
     city: '',
@@ -40,7 +41,7 @@ export default function ProspectionVisitForm() {
     proposal_sent: false,
     result: '',
     next_action: '',
-    next_visit_date: '',
+    next_visit_date: null,
     status: 'PLANEJADA',
     notes: '',
   });
@@ -62,19 +63,21 @@ export default function ProspectionVisitForm() {
     queryFn: () => base44.entities.Product.filter({ active: true }),
   });
 
-  const { data: visit } = useQuery({
+  const { data: visit, isLoading: isVisitLoading } = useQuery({
     queryKey: ['prospection-visit', visitId],
     queryFn: async () => {
       const data = await base44.entities.ProspectionVisit.filter({ id: visitId });
-      const visitData = data?.[0];
-      if (visitData) {
-        setFormData(visitData);
-        setSelectedProducts(visitData.interested_products || []);
-      }
-      return visitData;
+      return data?.[0];
     },
     enabled: !!visitId,
   });
+
+  useEffect(() => {
+    if (visit) {
+      setFormData(visit);
+      setSelectedProducts(Array.isArray(visit.interested_products) ? visit.interested_products : []);
+    }
+  }, [visit]);
 
   const createMutation = useMutation({
     mutationFn: async (data) => {
@@ -85,16 +88,29 @@ export default function ProspectionVisitForm() {
         throw new Error('Empresa não identificada');
       }
       
-      return await base44.entities.ProspectionVisit.create({
+      console.log('Criando visita com dados:', {
         ...data,
         company_id: user.company_id,
         visit_number: visitNumber,
         seller_name: seller?.name,
         interested_products: selectedProducts,
-        interested_products_names: selectedProducts.map(id => 
-          products?.find(p => p.id === id)?.name
-        ).join(', '),
       });
+
+      try {
+        return await base44.entities.ProspectionVisit.create({
+          ...data,
+          company_id: user.company_id,
+          visit_number: visitNumber,
+          seller_name: seller?.name,
+          interested_products: Array.isArray(selectedProducts) ? selectedProducts : [],
+          interested_products_names: Array.isArray(selectedProducts) ? selectedProducts.map(id => 
+            products?.find(p => p.id === id)?.name
+          ).filter(Boolean).join(', ') : '',
+        });
+      } catch (err) {
+        console.error('Erro detalhado da API Supabase:', err);
+        throw err;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['prospection-visits'] });
@@ -113,10 +129,10 @@ export default function ProspectionVisitForm() {
       return await base44.entities.ProspectionVisit.update(visitId, {
         ...data,
         seller_name: seller?.name,
-        interested_products: selectedProducts,
-        interested_products_names: selectedProducts.map(id => 
+        interested_products: Array.isArray(selectedProducts) ? selectedProducts : [],
+        interested_products_names: Array.isArray(selectedProducts) ? selectedProducts.map(id => 
           products?.find(p => p.id === id)?.name
-        ).join(', '),
+        ).filter(Boolean).join(', ') : '',
       });
     },
     onSuccess: () => {
@@ -207,7 +223,7 @@ export default function ProspectionVisitForm() {
               <div>
                 <label className="text-sm font-medium">Vendedor</label>
                 <Select
-                  value={formData.seller_id}
+                  value={formData.seller_id || undefined}
                   onValueChange={(value) => setFormData({ ...formData, seller_id: value })}
                   required
                 >
@@ -227,7 +243,7 @@ export default function ProspectionVisitForm() {
                 <label className="text-sm font-medium">Data da Visita</label>
                 <Input
                   type="date"
-                  value={formData.visit_date}
+                  value={formData.visit_date || ''}
                   onChange={(e) => setFormData({ ...formData, visit_date: e.target.value })}
                   className="mt-1"
                   required
@@ -240,8 +256,8 @@ export default function ProspectionVisitForm() {
                 <label className="text-sm font-medium">Horário Início</label>
                 <Input
                   type="time"
-                  value={formData.start_time}
-                  onChange={(e) => setFormData({ ...formData, start_time: e.target.value })}
+                  value={formData.start_time || ''}
+                  onChange={(e) => setFormData({ ...formData, start_time: e.target.value || null })}
                   className="mt-1"
                 />
               </div>
@@ -249,8 +265,8 @@ export default function ProspectionVisitForm() {
                 <label className="text-sm font-medium">Horário Término</label>
                 <Input
                   type="time"
-                  value={formData.end_time}
-                  onChange={(e) => setFormData({ ...formData, end_time: e.target.value })}
+                  value={formData.end_time || ''}
+                  onChange={(e) => setFormData({ ...formData, end_time: e.target.value || null })}
                   className="mt-1"
                 />
               </div>
@@ -259,7 +275,7 @@ export default function ProspectionVisitForm() {
             <div>
               <label className="text-sm font-medium">Tipo de Visita</label>
               <Select
-                value={formData.visit_type}
+                value={formData.visit_type || 'PROSPECCAO'}
                 onValueChange={(value) => setFormData({ ...formData, visit_type: value })}
               >
                 <SelectTrigger className="mt-1">
@@ -277,7 +293,7 @@ export default function ProspectionVisitForm() {
             <div>
               <label className="text-sm font-medium">Status</label>
               <Select
-                value={formData.status}
+                value={formData.status || 'PLANEJADA'}
                 onValueChange={(value) => setFormData({ ...formData, status: value })}
               >
                 <SelectTrigger className="mt-1">
@@ -304,12 +320,14 @@ export default function ProspectionVisitForm() {
             <div>
               <label className="text-sm font-medium">Cliente Cadastrado (Opcional)</label>
               <ClientSearchSelect
-                value={formData.client_id}
-                onChange={(clientId, clientName) => {
+                value={formData.client_id || null}
+                onSelect={(clientId, client) => {
                   setFormData({ 
                     ...formData, 
-                    client_id: clientId || '', 
-                    client_name: clientName || '',
+                    client_id: clientId || null, 
+                    client_name: client?.name || '',
+                    city: client?.city || formData.city,
+                    state: client?.state || formData.state,
                     prospective_client_name: ''
                   });
                 }}
@@ -319,11 +337,11 @@ export default function ProspectionVisitForm() {
             <div>
               <label className="text-sm font-medium">Ou Cliente em Prospecção</label>
               <Input
-                value={formData.prospective_client_name}
+                value={formData.prospective_client_name || ''}
                 onChange={(e) => setFormData({ 
                   ...formData, 
                   prospective_client_name: e.target.value,
-                  client_id: '',
+                  client_id: null,
                   client_name: ''
                 })}
                 placeholder="Nome do cliente potencial"
@@ -335,7 +353,7 @@ export default function ProspectionVisitForm() {
               <div>
                 <label className="text-sm font-medium">Cidade</label>
                 <Input
-                  value={formData.city}
+                  value={formData.city || ''}
                   onChange={(e) => setFormData({ ...formData, city: e.target.value })}
                   className="mt-1"
                   required
@@ -344,7 +362,7 @@ export default function ProspectionVisitForm() {
               <div>
                 <label className="text-sm font-medium">Estado</label>
                 <Input
-                  value={formData.state}
+                  value={formData.state || ''}
                   onChange={(e) => setFormData({ ...formData, state: e.target.value })}
                   className="mt-1"
                   maxLength={2}
@@ -374,7 +392,7 @@ export default function ProspectionVisitForm() {
             <div className="flex items-center gap-2">
               <input
                 type="checkbox"
-                checked={formData.is_company_vehicle}
+                checked={!!formData.is_company_vehicle}
                 onChange={(e) => setFormData({ 
                   ...formData, 
                   is_company_vehicle: e.target.checked
@@ -397,7 +415,7 @@ export default function ProspectionVisitForm() {
             <div>
               <label className="text-sm font-medium">Relatório Detalhado</label>
               <Textarea
-                value={formData.visit_report}
+                value={formData.visit_report || ''}
                 onChange={(e) => setFormData({ ...formData, visit_report: e.target.value })}
                 placeholder="Descreva como foi a visita, pontos discutidos, necessidades do cliente..."
                 className="mt-1"
@@ -412,7 +430,7 @@ export default function ProspectionVisitForm() {
                 onChange={addProduct}
               />
               <div className="flex flex-wrap gap-2 mt-2">
-                {selectedProducts.map((productId) => {
+                {Array.isArray(selectedProducts) && selectedProducts.map((productId) => {
                   const product = products?.find(p => p.id === productId);
                   return (
                     <div
@@ -446,7 +464,7 @@ export default function ProspectionVisitForm() {
             <div>
               <label className="text-sm font-medium">Resultado da Visita</label>
               <Select
-                value={formData.result}
+                value={formData.result || ''}
                 onValueChange={(value) => setFormData({ ...formData, result: value })}
               >
                 <SelectTrigger className="mt-1">
@@ -464,7 +482,7 @@ export default function ProspectionVisitForm() {
             <div>
               <label className="text-sm font-medium">Próxima Ação</label>
               <Textarea
-                value={formData.next_action}
+                value={formData.next_action || ''}
                 onChange={(e) => setFormData({ ...formData, next_action: e.target.value })}
                 placeholder="O que deve ser feito em seguida?"
                 className="mt-1"
@@ -476,8 +494,8 @@ export default function ProspectionVisitForm() {
               <label className="text-sm font-medium">Data da Próxima Visita</label>
               <Input
                 type="date"
-                value={formData.next_visit_date}
-                onChange={(e) => setFormData({ ...formData, next_visit_date: e.target.value })}
+                value={formData.next_visit_date || ''}
+                onChange={(e) => setFormData({ ...formData, next_visit_date: e.target.value || null })}
                 className="mt-1"
               />
             </div>
@@ -485,7 +503,7 @@ export default function ProspectionVisitForm() {
             <div>
               <label className="text-sm font-medium">Observações Adicionais</label>
               <Textarea
-                value={formData.notes}
+                value={formData.notes || ''}
                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                 placeholder="Outras informações relevantes..."
                 className="mt-1"

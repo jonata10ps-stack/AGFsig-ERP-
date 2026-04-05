@@ -99,7 +99,6 @@ export default function SalesAppointments() {
           company_id: companyId
         }, '-visit_date');
         console.log(`✓ Encontradas ${result.length} visitas`);
-        toast.info(`📋 Carregadas ${result.length} visitas`);
         return result;
       }
 
@@ -111,7 +110,6 @@ export default function SalesAppointments() {
           seller_id: currentSeller.id
         }, '-visit_date');
         console.log(`✓ Encontradas ${result.length} visitas`);
-        toast.info(`📋 Carregadas ${result.length} visitas`);
         return result;
       }
 
@@ -169,9 +167,10 @@ export default function SalesAppointments() {
       const now = new Date();
       
       for (const visit of visits) {
-        if (visit.status !== 'PLANEJADA') continue;
+        if (visit.status !== 'PLANEJADA' || !visit.visit_date) continue;
         
-        const visitDateTime = new Date(`${visit.visit_date}T${visit.start_time || '00:00'}`);
+        // Fix: Use T00:00:00 to avoid timezone shift
+        const visitDateTime = new Date(`${visit.visit_date}T${visit.start_time || '00:00:00'}`);
         const minutesUntilVisit = (visitDateTime - now) / (1000 * 60);
         
         // Notificar 15 minutos antes
@@ -370,7 +369,7 @@ export default function SalesAppointments() {
 
   const handleEdit = (visit) => {
     setFormData(visit);
-    setSelectedProducts(visit.interested_products || []);
+    setSelectedProducts(Array.isArray(visit.interested_products) ? visit.interested_products : []);
     setEditingVisit(visit);
     setShowForm(true);
   };
@@ -396,7 +395,9 @@ export default function SalesAppointments() {
     let matchDate = true;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const visitDate = new Date(visit.visit_date);
+    // Fix: Use T00:00:00 to avoid timezone shift
+    const visitDateString = visit.visit_date?.includes('T') ? visit.visit_date : `${visit.visit_date}T12:00:00`;
+    const visitDate = new Date(visitDateString);
     visitDate.setHours(0, 0, 0, 0);
     
     if (dateFilter === 'upcoming') {
@@ -475,7 +476,7 @@ export default function SalesAppointments() {
                   <Label>Data da Visita *</Label>
                   <Input
                     type="date"
-                    value={formData.visit_date}
+                    value={formData.visit_date || ''}
                     onChange={(e) => setFormData({ ...formData, visit_date: e.target.value })}
                     className="mt-1"
                     required
@@ -484,7 +485,7 @@ export default function SalesAppointments() {
                 <div>
                   <Label>Tipo de Visita</Label>
                   <Select
-                    value={formData.visit_type}
+                    value={formData.visit_type || 'PROSPECCAO'}
                     onValueChange={(value) => setFormData({ ...formData, visit_type: value })}
                   >
                     <SelectTrigger className="mt-1">
@@ -505,7 +506,7 @@ export default function SalesAppointments() {
                   <Label>Horário Início</Label>
                   <Input
                     type="time"
-                    value={formData.start_time}
+                    value={formData.start_time || ''}
                     onChange={(e) => setFormData({ ...formData, start_time: e.target.value })}
                     className="mt-1"
                   />
@@ -514,7 +515,7 @@ export default function SalesAppointments() {
                   <Label>Horário Término</Label>
                   <Input
                     type="time"
-                    value={formData.end_time}
+                    value={formData.end_time || ''}
                     onChange={(e) => setFormData({ ...formData, end_time: e.target.value })}
                     className="mt-1"
                   />
@@ -524,7 +525,7 @@ export default function SalesAppointments() {
               <div>
                 <Label>Cliente Cadastrado *</Label>
                 <ClientSearchSelect
-                  value={formData.client_id}
+                  value={formData.client_id || ''}
                   onChange={(clientId, clientName) => {
                     setFormData({ 
                       ...formData, 
@@ -540,7 +541,7 @@ export default function SalesAppointments() {
               <div>
                 <Label>Ou Cliente em Prospecção *</Label>
                 <Input
-                  value={formData.prospective_client_name}
+                  value={formData.prospective_client_name || ''}
                   onChange={(e) => setFormData({ 
                     ...formData, 
                     prospective_client_name: e.target.value,
@@ -557,7 +558,7 @@ export default function SalesAppointments() {
                 <div>
                   <Label>Cidade *</Label>
                   <Input
-                    value={formData.city}
+                    value={formData.city || ''}
                     onChange={(e) => setFormData({ ...formData, city: e.target.value })}
                     className="mt-1"
                     required
@@ -566,7 +567,7 @@ export default function SalesAppointments() {
                 <div>
                   <Label>Estado *</Label>
                   <Input
-                    value={formData.state}
+                    value={formData.state || ''}
                     onChange={(e) => setFormData({ ...formData, state: e.target.value })}
                     className="mt-1"
                     maxLength={2}
@@ -586,7 +587,7 @@ export default function SalesAppointments() {
                   <div>
                     <Label>Relatório da Visita *</Label>
                     <Textarea
-                      value={formData.visit_report}
+                      value={formData.visit_report || ''}
                       onChange={(e) => setFormData({ ...formData, visit_report: e.target.value })}
                       placeholder="Descreva como foi a visita, pontos discutidos, necessidades do cliente..."
                       className="mt-1"
@@ -602,7 +603,7 @@ export default function SalesAppointments() {
                       onChange={addProduct}
                     />
                     <div className="flex flex-wrap gap-2 mt-2">
-                      {selectedProducts.map((productId) => {
+                      {Array.isArray(selectedProducts) && selectedProducts.map((productId) => {
                         const product = products?.find(p => p.id === productId);
                         return (
                           <div
@@ -626,7 +627,7 @@ export default function SalesAppointments() {
                   <div>
                     <Label>Resultado da Visita *</Label>
                     <Select
-                      value={formData.result}
+                      value={formData.result || ''}
                       onValueChange={(value) => setFormData({ ...formData, result: value })}
                     >
                       <SelectTrigger className="mt-1">
@@ -644,7 +645,7 @@ export default function SalesAppointments() {
                   <div className="flex items-center gap-2">
                     <input
                       type="checkbox"
-                      checked={formData.proposal_sent}
+                      checked={!!formData.proposal_sent}
                       onChange={(e) => setFormData({ ...formData, proposal_sent: e.target.checked })}
                       className="w-4 h-4"
                     />
@@ -654,7 +655,7 @@ export default function SalesAppointments() {
                   <div>
                     <Label>Próxima Ação</Label>
                     <Textarea
-                      value={formData.next_action}
+                      value={formData.next_action || ''}
                       onChange={(e) => setFormData({ ...formData, next_action: e.target.value })}
                       placeholder="O que deve ser feito em seguida?"
                       className="mt-1"
@@ -666,7 +667,7 @@ export default function SalesAppointments() {
                     <Label>Data da Próxima Visita</Label>
                     <Input
                       type="date"
-                      value={formData.next_visit_date}
+                      value={formData.next_visit_date || ''}
                       onChange={(e) => setFormData({ ...formData, next_visit_date: e.target.value })}
                       className="mt-1"
                     />
@@ -677,7 +678,7 @@ export default function SalesAppointments() {
               <div>
                 <Label>Status da Visita</Label>
                 <Select
-                  value={formData.status}
+                  value={formData.status || 'PLANEJADA'}
                   onValueChange={(value) => setFormData({ ...formData, status: value })}
                 >
                   <SelectTrigger className="mt-1">
@@ -699,7 +700,7 @@ export default function SalesAppointments() {
               <div>
                 <Label>Observações</Label>
                 <Textarea
-                  value={formData.notes}
+                  value={formData.notes || ''}
                   onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                   placeholder="Outras informações relevantes..."
                   className="mt-1"

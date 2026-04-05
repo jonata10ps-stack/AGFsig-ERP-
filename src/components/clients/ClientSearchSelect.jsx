@@ -7,7 +7,14 @@ import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { useCompanyId } from '@/components/useCompanyId';
 
-export default function ClientSearchSelect({ value, onSelect, label, placeholder, required }) {
+export default function ClientSearchSelect({ 
+  value, 
+  onSelect = () => {}, 
+  onChange = () => {}, 
+  label = '', 
+  placeholder = 'Buscar cliente...', 
+  required = false 
+}) {
   const { companyId } = useCompanyId();
   const [search, setSearch] = useState('');
   const [isOpen, setIsOpen] = useState(false);
@@ -61,7 +68,8 @@ export default function ClientSearchSelect({ value, onSelect, label, placeholder
 
   const handleSelect = (client) => {
     setSelectedClient(client);
-    onSelect(client.id, client);
+    if (typeof onSelect === 'function') onSelect(client.id, client);
+    if (typeof onChange === 'function') onChange(client.id, client.name || client.client_name || '');
     setSearch('');
     setIsOpen(false);
   };
@@ -69,7 +77,8 @@ export default function ClientSearchSelect({ value, onSelect, label, placeholder
   const handleClear = (e) => {
     e.stopPropagation();
     setSelectedClient(null);
-    onSelect('', null);
+    if (typeof onSelect === 'function') onSelect(null, null);
+    if (typeof onChange === 'function') onChange(null, '');
     setSearch('');
   };
 

@@ -30,7 +30,8 @@ const sanitizeData = (data, entityName) => {
   });
 
   // REMOVER company_id de tabelas que sabidamente não o possuem no schema
-  if (entityName === 'BOMDeliveryControl' || entityName === 'BOMItem' || entityName === 'BOMVersion') {
+  const entitiesWithoutCompanyId = ['BOMDeliveryControl', 'BOMItem', 'BOMVersion'];
+  if (entitiesWithoutCompanyId.includes(entityName)) {
     delete sanitized.company_id;
   }
   
@@ -49,7 +50,7 @@ const createEntityHandler = (entityName) => {
         const isDesc = sort.startsWith('-');
         const column = isDesc ? sort.substring(1) : sort;
         // Fallback para created_at se o campo for de auditoria padrão
-        const sortColumn = (column === 'created_date' || column === 'registered_date') ? 'created_at' : column;
+        const sortColumn = (column === 'created_date' || column === 'registered_date' || column === 'created_at') ? 'created_at' : column;
         query = query.order(sortColumn, { ascending: !isDesc });
       }
       
@@ -80,7 +81,7 @@ const createEntityHandler = (entityName) => {
         const isDesc = sort.startsWith('-');
         const column = isDesc ? sort.substring(1) : sort;
         // Fallback para created_at se o campo for de auditoria padrão
-        const sortColumn = (column === 'created_date' || column === 'registered_date') ? 'created_at' : column;
+        const sortColumn = (column === 'created_date' || column === 'registered_date' || column === 'created_at') ? 'created_at' : column;
         query = query.order(sortColumn, { ascending: !isDesc });
       }
 
@@ -93,7 +94,11 @@ const createEntityHandler = (entityName) => {
       const sanitized = sanitizeData(data, entityName);
       
       // Adicionar data de criação se não existir (para consistência com legado)
-      if (!sanitized.created_date && !['BOMDeliveryControl', 'BOMItem', 'BOMVersion'].includes(entityName)) {
+      const entitiesToSkipCreatedDate = [
+        'BOMDeliveryControl', 'BOMItem', 'BOMVersion', 
+        'ProspectionVisit', 'Notification', 'DailyVehicleLog'
+      ];
+      if (!sanitized.created_date && !entitiesToSkipCreatedDate.includes(entityName)) {
         sanitized.created_date = new Date().toISOString();
       }
 
@@ -127,7 +132,11 @@ const createEntityHandler = (entityName) => {
     async bulkCreate(dataArray) {
       const sanitizedArray = (dataArray || []).map(item => {
         const s = sanitizeData(item, entityName);
-        if (!s.created_date && !['BOMDeliveryControl', 'BOMItem', 'BOMVersion'].includes(entityName)) {
+        const entitiesToSkipCreatedDate = [
+          'BOMDeliveryControl', 'BOMItem', 'BOMVersion', 
+          'ProspectionVisit', 'Notification', 'DailyVehicleLog'
+        ];
+        if (!s.created_date && !entitiesToSkipCreatedDate.includes(entityName)) {
           s.created_date = new Date().toISOString();
         }
         return s;

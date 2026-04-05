@@ -7,7 +7,14 @@ import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { useCompanyId } from '@/components/useCompanyId';
 
-export default function ProductSearchSelect({ value, onSelect, label, placeholder, required }) {
+export default function ProductSearchSelect({ 
+  value, 
+  onSelect = () => {}, 
+  onChange = () => {}, 
+  label = '', 
+  placeholder = 'Buscar produto...', 
+  required = false 
+}) {
   const { companyId } = useCompanyId();
   const [search, setSearch] = useState('');
   const [isOpen, setIsOpen] = useState(false);
@@ -72,9 +79,8 @@ export default function ProductSearchSelect({ value, onSelect, label, placeholde
 
   const handleSelect = (product) => {
     setSelectedProduct(product);
-    if (onSelect) {
-      onSelect(product.id, product);
-    }
+    if (typeof onSelect === 'function') onSelect(product.id, product);
+    if (typeof onChange === 'function') onChange(product.id, product);
     setSearch('');
     setIsOpen(false);
     setPage(0);
@@ -89,9 +95,8 @@ export default function ProductSearchSelect({ value, onSelect, label, placeholde
   const handleClear = (e) => {
     e.stopPropagation();
     setSelectedProduct(null);
-    if (onSelect) {
-      onSelect('', null);
-    }
+    if (typeof onSelect === 'function') onSelect(null, null);
+    if (typeof onChange === 'function') onChange(null, null);
     setSearch('');
   };
 

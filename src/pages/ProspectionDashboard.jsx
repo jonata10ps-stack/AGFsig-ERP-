@@ -65,7 +65,8 @@ export default function ProspectionDashboard() {
     if (!visits || !dailyLogs) return null;
 
     const filteredVisits = visits.filter(v => {
-      const date = new Date(v.visit_date);
+      if (!v.visit_date) return false;
+      const date = new Date(`${v.visit_date}T12:00:00`);
       const month = String(date.getMonth() + 1).padStart(2, '0');
       const year = String(date.getFullYear());
       
@@ -77,7 +78,8 @@ export default function ProspectionDashboard() {
     });
 
     const filteredLogs = dailyLogs.filter(log => {
-      const date = new Date(log.log_date);
+      if (!log.log_date) return false;
+      const date = new Date(`${log.log_date}T12:00:00`);
       const month = String(date.getMonth() + 1).padStart(2, '0');
       const year = String(date.getFullYear());
       
@@ -140,7 +142,8 @@ export default function ProspectionDashboard() {
     if (!quotes) return null;
 
     const filteredQuotes = quotes.filter(q => {
-      const date = new Date(q.created_date);
+      if (!q.created_date) return false;
+      const date = new Date(q.created_date); // created_date is ISO with T
       const month = String(date.getMonth() + 1).padStart(2, '0');
       const year = String(date.getFullYear());
       
@@ -226,11 +229,10 @@ export default function ProspectionDashboard() {
       return acc;
     }, {});
 
-    // Propostas por mês
     const proposalsByMonth = visits
       .filter(v => v.proposal_sent && v.visit_date)
       .reduce((acc, v) => {
-        const date = new Date(v.visit_date);
+        const date = new Date(`${v.visit_date}T12:00:00`);
         const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
         acc[monthKey] = (acc[monthKey] || 0) + 1;
         return acc;
@@ -257,7 +259,9 @@ export default function ProspectionDashboard() {
       productInterest,
       total: visits.length,
       withProposals: visits.filter(v => v.proposal_sent).length,
-      avgKm: visits.reduce((sum, v) => sum + (v.vehicle_km_end - v.vehicle_km_start || 0), 0) / visits.length,
+      avgKm: visits.length > 0 
+        ? visits.reduce((sum, v) => sum + (Number(v.vehicle_km_end || 0) - Number(v.vehicle_km_start || 0)), 0) / visits.length 
+        : 0,
     };
   }, [visits]);
 
@@ -279,7 +283,10 @@ export default function ProspectionDashboard() {
   const sellers = [...new Set(visits?.map(v => ({ id: v.seller_id, name: v.seller_name })))];
   
   // Get years from visits
-  const years = [...new Set(visits?.map(v => new Date(v.visit_date).getFullYear()))].sort((a, b) => b - a);
+  const years = [...new Set(visits?.map(v => {
+    if (!v.visit_date) return null;
+    return new Date(`${v.visit_date}T12:00:00`).getFullYear();
+  }).filter(Boolean))].sort((a, b) => b - a);
 
   const statusData = Object.entries(stats.byStatus).map(([name, value]) => ({ name, value }));
   const sellerData = Object.entries(stats.bySeller)
@@ -574,7 +581,7 @@ export default function ProspectionDashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-slate-500">Média KM/Visita</p>
-                <p className="text-2xl font-bold text-blue-600">{stats.avgKm.toFixed(1)}</p>
+                <p className="text-2xl font-bold text-blue-600">{Number(stats.avgKm || 0).toFixed(1)}</p>
               </div>
               <TrendingUp className="h-10 w-10 text-blue-600" />
             </div>
@@ -702,7 +709,7 @@ export default function ProspectionDashboard() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
                 <p className="text-sm text-slate-500">Total KM</p>
-                <p className="text-2xl font-bold text-indigo-600">{kmReport.totalKm.toFixed(1)}</p>
+                <p className="text-2xl font-bold text-indigo-600">{Number(kmReport.totalKm || 0).toFixed(1)}</p>
               </div>
               <div>
                 <p className="text-sm text-slate-500">Visitas</p>
@@ -741,8 +748,8 @@ export default function ProspectionDashboard() {
                     <TableCell className="text-right">{seller.visits}</TableCell>
                     <TableCell className="text-right">{seller.companyVehicleVisits}</TableCell>
                     <TableCell className="text-right">{seller.days}</TableCell>
-                    <TableCell className="text-right font-medium">{seller.km.toFixed(1)} km</TableCell>
-                    <TableCell className="text-right">{seller.avgKmPerDay.toFixed(1)} km</TableCell>
+                    <TableCell className="text-right font-medium">{Number(seller.km || 0).toFixed(1)} km</TableCell>
+                    <TableCell className="text-right">{Number(seller.avgKmPerDay || 0).toFixed(1)} km</TableCell>
                   </TableRow>
                 ))
               )}

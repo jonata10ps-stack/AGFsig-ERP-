@@ -50,7 +50,10 @@ export default function DailyVehicleLog() {
 
   const currentSeller = useMemo(() => {
     if (!user || !sellers) return null;
-    return sellers.find(s => s.email === user.email);
+    return sellers.find(s => 
+      s.email?.toLowerCase() === user.email?.toLowerCase() || 
+      s.name?.toLowerCase() === user.full_name?.toLowerCase()
+    );
   }, [user, sellers]);
 
   const todayLog = useMemo(() => {
@@ -490,7 +493,10 @@ export default function DailyVehicleLog() {
               ) : (
                 userLogs.map((log) => (
                   <TableRow key={log.id}>
-                    <TableCell>{new Date(log.log_date).toLocaleDateString('pt-BR')}</TableCell>
+                    <TableCell>
+                      {/* Fix: Use T12:00:00 to avoid timezone shift in display */}
+                      {new Date(`${log.log_date}T12:00:00`).toLocaleDateString('pt-BR')}
+                    </TableCell>
                     <TableCell>{log.seller_name}</TableCell>
                     <TableCell>
                       {log.is_company_vehicle ? (

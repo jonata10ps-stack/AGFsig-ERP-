@@ -60,7 +60,9 @@ export default function ProspectionVisits() {
     const matchResult = resultFilter === 'all' || visit.result === resultFilter;
 
     // Se não é admin, mostrar apenas suas visitas
-    const matchUser = user?.role === 'admin' || visit.created_by === user?.email;
+    const matchUser = user?.role === 'admin' || 
+                      visit.created_by?.toLowerCase() === user?.email?.toLowerCase() ||
+                      visit.seller_id === user?.id;
 
     return matchSearch && matchStatus && matchResult && matchUser;
   });
@@ -206,7 +208,8 @@ export default function ProspectionVisits() {
                   filteredVisits?.map((visit) => (
                     <TableRow key={visit.id}>
                       <TableCell className="font-medium">
-                        {format(new Date(visit.visit_date), 'dd/MM/yyyy', { locale: ptBR })}
+                        {/* Fix: Use T12:00:00 to avoid timezone shift in display */}
+                        {format(new Date(`${visit.visit_date}T12:00:00`), 'dd/MM/yyyy', { locale: ptBR })}
                       </TableCell>
                       <TableCell>
                         {visit.client_name || visit.prospective_client_name || '-'}
