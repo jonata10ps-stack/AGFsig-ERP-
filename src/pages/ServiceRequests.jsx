@@ -302,7 +302,7 @@ export default function ServiceRequests() {
                           </Badge>
                         </TableCell>
                         <TableCell className="text-sm">
-                          {format(new Date(req.created_date), 'dd/MM/yyyy')}
+                          {req.created_date || req.created_at ? format(new Date(req.created_date || req.created_at), 'dd/MM/yyyy') : '-'}
                         </TableCell>
                         <TableCell className="text-right">
                           <DropdownMenu>
@@ -363,7 +363,7 @@ export default function ServiceRequests() {
                           <div>
                             <p className="text-slate-500">Data</p>
                             <p className="font-medium text-slate-900">
-                              {format(new Date(req.created_date), 'dd/MM')}
+                              {req.created_date || req.created_at ? format(new Date(req.created_date || req.created_at), 'dd/MM') : '-'}
                             </p>
                           </div>
                         </div>

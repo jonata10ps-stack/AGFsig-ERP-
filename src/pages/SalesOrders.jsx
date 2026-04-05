@@ -627,10 +627,10 @@ export default function SalesOrders() {
                     </TableCell>
                     <TableCell className="font-medium">{order.client_name}</TableCell>
                     <TableCell className="text-slate-500">
-                      {order.created_date ? format(new Date(order.created_date), 'dd/MM/yyyy', { locale: ptBR }) : '-'}
+                      {order.created_date ? format(new Date(order.created_date), 'dd/MM/yyyy', { locale: ptBR }) : 'N/A'}
                     </TableCell>
                     <TableCell className="text-slate-500">
-                      {order.delivery_date ? format(new Date(order.delivery_date), 'dd/MM/yyyy', { locale: ptBR }) : '-'}
+                      {order.delivery_date ? format(new Date(order.delivery_date), 'dd/MM/yyyy', { locale: ptBR }) : 'Não informada'}
                     </TableCell>
                     <TableCell className="text-right font-medium">
                       {formatCurrency(order.total_amount)}

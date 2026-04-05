@@ -26,6 +26,9 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import ProductSearchSelect from '@/components/products/ProductSearchSelect';
+import WarehouseSearchSelect from '@/components/warehouses/WarehouseSearchSelect';
+import { executeInventoryTransaction } from '@/utils/inventoryTransactionUtils';
+import { Edit2, X, RefreshCw, Warehouse } from 'lucide-react';
 
 const STATUS_CONFIG = {
   ABERTA: { color: 'bg-blue-100 text-blue-700', label: 'Aberta' },
@@ -51,6 +54,7 @@ function AddItemDialog({ open, onOpenChange, products, onAdd, loading }) {
     qty: 1,
     unit_price: 0,
     condition: 'BOM',
+    serial_number: '',
     item_notes: ''
   });
 
@@ -79,6 +83,7 @@ function AddItemDialog({ open, onOpenChange, products, onAdd, loading }) {
       qty: 1,
       unit_price: 0,
       condition: 'BOM',
+      serial_number: '',
       item_notes: ''
     });
   };
@@ -137,6 +142,15 @@ function AddItemDialog({ open, onOpenChange, products, onAdd, loading }) {
           </div>
 
           <div className="space-y-2">
+            <Label>Número de Série (Se houver)</Label>
+            <Input
+              value={form.serial_number}
+              onChange={(e) => setForm({ ...form, serial_number: e.target.value })}
+              placeholder="Digite o número de série..."
+            />
+          </div>
+
+          <div className="space-y-2">
             <Label>Notas do Item</Label>
             <Input
               value={form.item_notes}
@@ -166,11 +180,27 @@ export default function ReturnDetail() {
 
   const [itemDialogOpen, setItemDialogOpen] = useState(false);
   const [deleteItemConfirm, setDeleteItemConfirm] = useState(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [formData, setFormData] = useState({});
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState('');
 
   const { data: returnData, isLoading: loadingReturn } = useQuery({
     queryKey: ['return', returnId],
     queryFn: () => base44.entities.Return.filter({ id: returnId }),
-    select: (data) => data?.[0],
+    select: (data) => {
+      const resp = data?.[0];
+      if (resp && Object.keys(formData).length === 0) {
+        setFormData({
+          reason: resp.reason || '',
+          reason_description: resp.reason_description || '',
+          return_date: resp.return_date || '',
+          notes: resp.notes || '',
+          warehouse_id: resp.warehouse_id || ''
+        });
+        setSelectedWarehouseId(resp.warehouse_id || '');
+      }
+      return resp;
+    },
     enabled: !!returnId,
   });
 
@@ -205,14 +235,60 @@ export default function ReturnDetail() {
     },
   });
 
+  const updateReturnMutation = useMutation({
+    mutationFn: (data) => base44.entities.Return.update(returnId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['return', returnId] });
+      setIsEditing(false);
+      toast.success('Devolução atualizada');
+    },
+  });
+
   const updateStatusMutation = useMutation({
     mutationFn: async (status) => {
       const updates = { status };
       if (status === 'RECEBIDA') {
+        if (!selectedWarehouseId) {
+          throw new Error('Selecione um armazém para o recebimento.');
+        }
+
         updates.received_at = new Date().toISOString();
+        updates.warehouse_id = selectedWarehouseId;
+
+        // Processar Entrada de Estoque para cada item
+        for (const item of items || []) {
+          await executeInventoryTransaction({
+            type: 'ENTRADA',
+            product_id: item.product_id,
+            qty: item.qty,
+            to_warehouse_id: selectedWarehouseId,
+            related_type: 'DEVOLUCAO',
+            related_id: returnId,
+            reason: `Recebimento de Devolução ${returnData.return_number}`,
+            notes: item.serial_number ? `Série: ${item.serial_number}` : ''
+          }, returnData.company_id);
+
+          // Se tiver número de série, atualizar status do item
+          if (item.serial_number) {
+            const serials = await base44.entities.SerialNumber.filter({ 
+              serial_number: item.serial_number,
+              product_id: item.product_id
+            });
+            if (serials?.[0]) {
+              await base44.entities.SerialNumber.update(serials[0].id, {
+                status: 'EM_ESTOQUE',
+                client_id: null,
+                client_name: null,
+                order_id: null,
+                order_number: null
+              });
+            }
+          }
+        }
       } else if (status === 'ANALISADA') {
         updates.analyzed_at = new Date().toISOString();
-        updates.analyzed_by = (await base44.auth.me()).email;
+        const me = await base44.auth.me();
+        updates.analyzed_by = me?.email || 'sistema';
       } else if (status === 'FECHADA') {
         updates.closed_at = new Date().toISOString();
       }
@@ -220,8 +296,11 @@ export default function ReturnDetail() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['return', returnId] });
-      toast.success('Status atualizado');
+      toast.success('Status atualizado e estoque processado');
     },
+    onError: (err) => {
+      toast.error('Erro ao atualizar: ' + err.message);
+    }
   });
 
   const updateResolutionMutation = useMutation({
@@ -268,22 +347,43 @@ export default function ReturnDetail() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <Link to={createPageUrl('Returns')}>
-            <Button variant="ghost" size="icon">
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-          </Link>
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">
-              Devolução {returnData.return_number || `#${returnData.id.slice(0, 8)}`}
-            </h1>
-            <Badge className={STATUS_CONFIG[returnData.status]?.color}>
-              {STATUS_CONFIG[returnData.status]?.label || returnData.status}
-            </Badge>
+          <div className="flex items-center gap-4">
+            <Link to={createPageUrl('Returns')}>
+              <Button variant="ghost" size="icon">
+                <ArrowLeft className="h-5 w-5" />
+              </Button>
+            </Link>
+            <div>
+              <h1 className="text-2xl font-bold text-slate-900">
+                Devolução {returnData.return_number || `#${returnData.id.slice(0, 8)}`}
+              </h1>
+              <Badge className={STATUS_CONFIG[returnData.status]?.color}>
+                {STATUS_CONFIG[returnData.status]?.label || returnData.status}
+              </Badge>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {!isEditing ? (
+              canEdit && (
+                <Button onClick={() => setIsEditing(true)} variant="outline" size="sm">
+                  <Edit2 className="h-4 w-4 mr-2" />
+                  Editar Devolução
+                </Button>
+              )
+            ) : (
+              <>
+                <Button onClick={() => setIsEditing(false)} variant="ghost" size="sm">
+                  <X className="h-4 w-4 mr-2" />
+                  Cancelar
+                </Button>
+                <Button onClick={() => updateReturnMutation.mutate(formData)} size="sm" className="bg-indigo-600">
+                  <Save className="h-4 w-4 mr-2" />
+                  Salvar Alterações
+                </Button>
+              </>
+            )}
           </div>
         </div>
-      </div>
 
       {/* Info */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -292,27 +392,81 @@ export default function ReturnDetail() {
             <CardTitle>Informações da Devolução</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm text-slate-500">Cliente</p>
-                <p className="font-medium">{returnData.client_name}</p>
-              </div>
-              <div>
-                <p className="text-sm text-slate-500">Motivo</p>
-                <p className="font-medium">{returnData.reason}</p>
-              </div>
-              <div>
-                <p className="text-sm text-slate-500">Data da Devolução</p>
-                <p className="font-medium">
-                  {returnData.return_date ? format(new Date(returnData.return_date), 'dd/MM/yyyy', { locale: ptBR }) : '-'}
-                </p>
-              </div>
-              {returnData.reason_description && (
-                <div className="col-span-2">
-                  <p className="text-sm text-slate-500">Descrição</p>
-                  <p className="font-medium">{returnData.reason_description}</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-4">
+                <div>
+                  <Label className="text-slate-500">Cliente</Label>
+                  <p className="font-semibold text-lg">{returnData.client_name}</p>
                 </div>
-              )}
+                
+                <div className="space-y-2">
+                  <Label>Motivo da Devolução</Label>
+                  {isEditing ? (
+                    <Select value={formData.reason} onValueChange={(v) => setFormData({ ...formData, reason: v })}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="DEFEITO">Defeito</SelectItem>
+                        <SelectItem value="NAO_CONFORMIDADE">Não Conformidade</SelectItem>
+                        <SelectItem value="ARREPENDIMENTO">Arrependimento</SelectItem>
+                        <SelectItem value="DANO_TRANSPORTE">Dano no Transporte</SelectItem>
+                        <SelectItem value="OUTRO">Outro</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <p className="font-medium p-2 bg-slate-50 rounded border">{returnData.reason}</p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Data da Devolução</Label>
+                  {isEditing ? (
+                    <Input
+                      type="date"
+                      value={formData.return_date}
+                      onChange={(e) => setFormData({ ...formData, return_date: e.target.value })}
+                    />
+                  ) : (
+                    <p className="font-medium p-2 bg-slate-50 rounded border">
+                      {returnData.return_date ? format(new Date(returnData.return_date), 'dd/MM/yyyy', { locale: ptBR }) : '-'}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>Descrição / Problema</Label>
+                  {isEditing ? (
+                    <textarea
+                      className="w-full min-h-[100px] p-2 rounded-md border border-input bg-background text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                      value={formData.reason_description}
+                      onChange={(e) => setFormData({ ...formData, reason_description: e.target.value })}
+                      placeholder="Descreva o motivo detalhado..."
+                    />
+                  ) : (
+                    <p className="font-medium p-2 bg-slate-50 rounded border min-h-[45px]">
+                      {returnData.reason_description || 'Sem descrição'}
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Observações Internas</Label>
+                  {isEditing ? (
+                    <Input
+                      value={formData.notes}
+                      onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                      placeholder="Notas para controle interno..."
+                    />
+                  ) : (
+                    <p className="font-medium p-2 bg-slate-50 rounded border">
+                      {returnData.notes || '-'}
+                    </p>
+                  )}
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -330,7 +484,7 @@ export default function ReturnDetail() {
             <div className="flex justify-between text-lg">
               <span className="font-medium">Total</span>
               <span className="font-bold text-indigo-600">
-                R$ {totalValue.toFixed(2)}
+                R$ {Number(totalValue).toFixed(2)}
               </span>
             </div>
           </CardContent>
@@ -343,24 +497,52 @@ export default function ReturnDetail() {
           <CardHeader>
             <CardTitle className="text-base">Atualizar Status</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <Select 
-              value={returnData.status} 
-              onValueChange={(status) => updateStatusMutation.mutate(status)}
-              disabled={updateStatusMutation.isPending}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ABERTA">Aberta</SelectItem>
-                <SelectItem value="RECEBIDA">Recebida</SelectItem>
-                <SelectItem value="ANALISADA">Analisada</SelectItem>
-                <SelectItem value="APROVADA">Aprovada</SelectItem>
-                <SelectItem value="REJEITADA">Rejeitada</SelectItem>
-                <SelectItem value="FECHADA">Fechada</SelectItem>
-              </SelectContent>
-            </Select>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label>Alterar Status</Label>
+              <Select 
+                value={returnData.status} 
+                onValueChange={(status) => updateStatusMutation.mutate(status)}
+                disabled={updateStatusMutation.isPending}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ABERTA">Aberta</SelectItem>
+                  <SelectItem value="RECEBIDA">Recebida</SelectItem>
+                  <SelectItem value="ANALISADA">Analisada</SelectItem>
+                  <SelectItem value="APROVADA">Aprovada</SelectItem>
+                  <SelectItem value="REJEITADA">Rejeitada</SelectItem>
+                  <SelectItem value="FECHADA">Fechada</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {returnData.status === 'ABERTA' && (
+              <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-lg space-y-3">
+                <p className="text-sm font-semibold text-indigo-900 flex items-center gap-2">
+                  <Warehouse className="h-4 w-4" />
+                  Configuração de Recebimento
+                </p>
+                <WarehouseSearchSelect
+                  label="Armazém de Destino"
+                  placeholder="Selecione onde o estoque será creditado..."
+                  value={selectedWarehouseId}
+                  onSelect={setSelectedWarehouseId}
+                />
+                <p className="text-[11px] text-indigo-600 italic">
+                  Ao mudar para "Recebida", o estoque será creditado neste armazém.
+                </p>
+              </div>
+            )}
+
+            {returnData.warehouse_id && (
+              <div className="flex items-center gap-2 text-sm text-slate-600 bg-slate-50 p-2 rounded border border-dashed">
+                <CheckCircle className="h-4 w-4 text-emerald-500" />
+                Estoque destinado ao Armazém ID: <span className="font-mono text-xs">{returnData.warehouse_id.slice(0,8)}</span>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -378,7 +560,7 @@ export default function ReturnDetail() {
                 </Badge>
                 {returnData.credit_amount && (
                   <p className="text-sm text-slate-600">
-                    Crédito: <span className="font-semibold">R$ {returnData.credit_amount.toFixed(2)}</span>
+                    Crédito: <span className="font-semibold">R$ {Number(returnData.credit_amount).toFixed(2)}</span>
                   </p>
                 )}
               </div>
@@ -439,6 +621,7 @@ export default function ReturnDetail() {
                 <TableRow>
                   <TableHead>SKU</TableHead>
                   <TableHead>Produto</TableHead>
+                  <TableHead>Nº Série</TableHead>
                   <TableHead className="text-right">Qtd</TableHead>
                   <TableHead className="text-right">Preço Unit.</TableHead>
                   <TableHead className="text-right">Total</TableHead>
@@ -451,10 +634,19 @@ export default function ReturnDetail() {
                   <TableRow key={item.id}>
                     <TableCell className="font-mono text-indigo-600">{item.product_sku}</TableCell>
                     <TableCell className="font-medium">{item.product_name}</TableCell>
+                    <TableCell>
+                      {item.serial_number ? (
+                        <Badge variant="secondary" className="font-mono text-[10px]">
+                          {item.serial_number}
+                        </Badge>
+                      ) : (
+                        <span className="text-slate-400">-</span>
+                      )}
+                    </TableCell>
                     <TableCell className="text-right">{item.qty}</TableCell>
-                    <TableCell className="text-right">R$ {item.unit_price?.toFixed(2)}</TableCell>
+                    <TableCell className="text-right">R$ {Number(item.unit_price || 0).toFixed(2)}</TableCell>
                     <TableCell className="text-right font-medium">
-                      R$ {((item.qty || 0) * (item.unit_price || 0)).toFixed(2)}
+                      R$ {(Number(item.qty || 0) * Number(item.unit_price || 0)).toFixed(2)}
                     </TableCell>
                     <TableCell>
                       <Badge className={CONDITION_CONFIG[item.condition]?.color}>

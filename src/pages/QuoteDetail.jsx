@@ -800,9 +800,9 @@ export default function QuoteDetail() {
                 </div>
                 <div>
                   <p className="text-sm text-slate-500">Data do Orçamento</p>
-                  <p className="font-medium">
-                    {quote.created_date ? format(new Date(quote.created_date), 'dd/MM/yyyy HH:mm', { locale: ptBR }) : '-'}
-                  </p>
+                    <p className="text-sm font-medium text-slate-900">
+                      {quote.created_date ? format(new Date(quote.created_date), 'dd/MM/yyyy HH:mm', { locale: ptBR }) : 'Não informada'}
+                    </p>
                 </div>
                 <div>
                   <p className="text-sm text-slate-500">Vendedor</p>
@@ -820,9 +820,9 @@ export default function QuoteDetail() {
                 </div>
                 <div>
                   <p className="text-sm text-slate-500">Data de Entrega</p>
-                  <p className="font-medium">
-                    {quote.delivery_date ? format(new Date(quote.delivery_date), 'dd/MM/yyyy', { locale: ptBR }) : '-'}
-                  </p>
+                    <p className="text-sm font-medium text-slate-900">
+                      {quote.delivery_date ? format(new Date(quote.delivery_date), 'dd/MM/yyyy', { locale: ptBR }) : 'Não informada'}
+                    </p>
                 </div>
               </div>
               

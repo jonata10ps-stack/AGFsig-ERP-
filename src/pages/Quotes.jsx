@@ -322,10 +322,10 @@ export default function Quotes() {
                     </TableCell>
                     <TableCell className="font-medium">{quote.client_name}</TableCell>
                     <TableCell className="text-slate-500">
-                      {quote.created_date ? format(new Date(quote.created_date), 'dd/MM/yyyy', { locale: ptBR }) : '-'}
+                      {quote.created_date ? format(new Date(quote.created_date), 'dd/MM/yyyy', { locale: ptBR }) : 'N/A'}
                     </TableCell>
                     <TableCell className="text-slate-500">
-                      {quote.delivery_date ? format(new Date(quote.delivery_date), 'dd/MM/yyyy', { locale: ptBR }) : '-'}
+                      {quote.delivery_date ? format(new Date(quote.delivery_date), 'dd/MM/yyyy', { locale: ptBR }) : 'Não informada'}
                     </TableCell>
                     <TableCell className="text-right font-medium">
                       {formatCurrency(quote.total_amount)}

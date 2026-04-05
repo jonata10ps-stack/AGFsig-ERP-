@@ -81,7 +81,8 @@ export async function executeInventoryTransaction(moveData, companyId) {
       related_type,
       related_id,
       reason,
-      notes
+      notes,
+      created_date: new Date().toISOString()
     });
 
     // --- 3. ATUALIZAR SALDOS (StockBalance) ---

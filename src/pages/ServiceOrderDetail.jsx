@@ -3,8 +3,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { Link, useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
+import { useCompanyId } from '@/components/useCompanyId';
 import {
-  ArrowLeft, Save, Clock, CheckCircle, XCircle, Pause, Play, Wrench, User, Calendar, DollarSign, UserCog, History
+  ArrowLeft, Save, Clock, CheckCircle, XCircle, Pause, Play, Wrench, User, Calendar, DollarSign, UserCog, History, Loader2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -41,6 +42,7 @@ const priorityColors = {
 export default function ServiceOrderDetail() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { companyId } = useCompanyId();
   const urlParams = new URLSearchParams(window.location.search);
   const orderId = urlParams.get('id');
 
@@ -74,32 +76,53 @@ export default function ServiceOrderDetail() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: (data) => base44.entities.ServiceOrder.update(orderId, data),
+    mutationFn: async (data) => {
+      try {
+        console.log('Enviando atualização de OS:', data);
+        const result = await base44.entities.ServiceOrder.update(orderId, data);
+        if (!result) throw new Error('Não foi possível atualizar o registro no banco.');
+        return result;
+      } catch (err) {
+        console.error('Erro detalhado no updateMutation:', err);
+        throw err;
+      }
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['service-order', orderId] });
       queryClient.invalidateQueries({ queryKey: ['service-orders'] });
-      toast.success('Ordem de serviço atualizada');
+      toast.success('Ordem de serviço atualizada com sucesso');
       navigate(createPageUrl('ServiceOrders'));
     },
+    onError: (error) => {
+      toast.error(`Falha ao salvar: ${error.message}`);
+    }
   });
 
   const changeStatusMutation = useMutation({
-    mutationFn: (newStatus) => {
-      const updates = { status: newStatus };
-      if (newStatus === 'EM_ANDAMENTO' && !order.started_at) {
-        updates.started_at = new Date().toISOString();
+    mutationFn: async (newStatus) => {
+      try {
+        const updates = { status: newStatus };
+        if (newStatus === 'EM_ANDAMENTO' && !order.started_at) {
+          updates.started_at = new Date().toISOString();
+        }
+        if (newStatus === 'CONCLUIDA') {
+          updates.completed_at = new Date().toISOString();
+          updates.total_cost = Number(formData.labor_cost || 0) + Number(formData.parts_cost || 0);
+        }
+        return await base44.entities.ServiceOrder.update(orderId, updates);
+      } catch (err) {
+        console.error('Erro ao mudar status:', err);
+        throw err;
       }
-      if (newStatus === 'CONCLUIDA') {
-        updates.completed_at = new Date().toISOString();
-        updates.total_cost = (formData.labor_cost || 0) + (formData.parts_cost || 0);
-      }
-      return base44.entities.ServiceOrder.update(orderId, updates);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['service-order', orderId] });
       queryClient.invalidateQueries({ queryKey: ['service-orders'] });
       toast.success('Status atualizado');
     },
+    onError: (error) => {
+      toast.error(`Erro ao mudar status: ${error.message}`);
+    }
   });
 
   const handleSave = () => {
@@ -107,45 +130,72 @@ export default function ServiceOrderDetail() {
       diagnosis: formData.diagnosis,
       solution: formData.solution,
       parts_used: formData.parts_used,
-      labor_hours: formData.labor_hours || 0,
-      labor_cost: formData.labor_cost || 0,
-      parts_cost: formData.parts_cost || 0,
-      total_cost: (formData.labor_cost || 0) + (formData.parts_cost || 0),
+      labor_hours: formData.labor_hours || "0",
+      labor_cost: Number(formData.labor_cost || 0),
+      parts_cost: Number(formData.parts_cost || 0),
+      total_cost: Number(formData.labor_cost || 0) + Number(formData.parts_cost || 0),
       scheduled_date: formData.scheduled_date,
     };
     updateMutation.mutate(updates);
   };
-
-  const changeTechnicianMutation = useMutation({
+   const changeTechnicianMutation = useMutation({
     mutationFn: async () => {
-      const user = await base44.auth.me();
-      const newTech = technicians?.find(t => t.id === selectedTechnicianId);
-      
-      // Registrar histórico
-      await base44.entities.TechnicianHistory.create({
-        service_order_id: orderId,
-        from_technician_id: order.technician_id,
-        from_technician_name: order.technician_name,
-        to_technician_id: selectedTechnicianId,
-        to_technician_name: newTech?.name,
-        reason: changeReason,
-        changed_by: user.email
-      });
+      try {
+        if (!selectedTechnicianId) {
+          toast.error('Por favor, selecione um técnico');
+          return;
+        }
 
-      // Atualizar OS
-      await base44.entities.ServiceOrder.update(orderId, {
-        technician_id: selectedTechnicianId,
-        technician_name: newTech?.name
-      });
+        // 1. Obter usuário e dados necessários
+        const user = await base44.auth.me().catch(() => ({ email: 'Sistema' }));
+        const newTech = technicians?.find(t => t.id === selectedTechnicianId);
+        
+        console.log('Iniciando troca de técnico...', { orderId, selectedTechnicianId });
+
+        // 2. ATUALIZAR OS PRIMEIRO (Ação principal)
+        // Isso garante que o técnico mude mesmo que o histórico falhe
+        const updateResult = await base44.entities.ServiceOrder.update(orderId, {
+          technician_id: selectedTechnicianId,
+          technician_name: newTech?.name || 'Técnico'
+        });
+
+        if (!updateResult) throw new Error('Falha ao atualizar a Ordem de Serviço no banco de dados');
+
+        // 3. REGISTRAR HISTÓRICO (Ação secundária)
+        try {
+          await base44.entities.TechnicianHistory.create({
+            company_id: companyId,
+            service_order_id: orderId,
+            from_technician_id: order?.technician_id || null,
+            from_technician_name: order?.technician_name || 'Não atribuído',
+            to_technician_id: selectedTechnicianId,
+            to_technician_name: newTech?.name || 'Técnico',
+            reason: changeReason || 'Alteração manual pelo usuário',
+            changed_by: user?.email || 'Usuário'
+          });
+        } catch (historyErr) {
+          // Apenas log de aviso, não interrompe o sucesso da OS
+          console.warn('Erro ao salvar histórico (ignorado):', historyErr);
+        }
+
+        return true;
+      } catch (err) {
+        console.error('Erro crítico na troca de técnico:', err);
+        throw new Error(err.message || 'Erro desconhecido ao atualizar técnico');
+      }
     },
     onSuccess: () => {
+      toast.success('Alteração realizada com sucesso!');
+      // Atualizar cache e fechar modal
       queryClient.invalidateQueries({ queryKey: ['service-order', orderId] });
       queryClient.invalidateQueries({ queryKey: ['technician-history', orderId] });
       setChangeTechDialogOpen(false);
       setSelectedTechnicianId('');
       setChangeReason('');
-      toast.success('Técnico atualizado');
     },
+    onError: (error) => {
+      toast.error(`Falha: ${error.message}`);
+    }
   });
 
   if (isLoading) {
@@ -263,7 +313,7 @@ export default function ServiceOrderDetail() {
               <div>
                 <p className="text-sm text-slate-500">Data Criação</p>
                 <p className="font-medium">
-                  {format(new Date(order.created_date), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
+                  {order.created_date || order.created_at ? format(new Date(order.created_date || order.created_at), 'dd/MM/yyyy HH:mm', { locale: ptBR }) : '-'}
                 </p>
               </div>
               <div>
@@ -306,7 +356,7 @@ export default function ServiceOrderDetail() {
                 <div>
                   <p className="text-sm font-medium">Criada</p>
                   <p className="text-xs text-slate-500">
-                    {format(new Date(order.created_date), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
+                    {order.created_date || order.created_at ? format(new Date(order.created_date || order.created_at), 'dd/MM/yyyy HH:mm', { locale: ptBR }) : '-'}
                   </p>
                 </div>
               </div>
@@ -320,8 +370,8 @@ export default function ServiceOrderDetail() {
                   </div>
                   <div>
                     <p className="text-sm font-medium">Iniciada</p>
-                    <p className="text-xs text-slate-500">
-                      {format(new Date(order.started_at), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
+                    <p className="text-sm font-medium text-slate-900">
+                      {order.created_date ? format(new Date(order.created_date), 'dd/MM/yyyy HH:mm', { locale: ptBR }) : 'Não informada'}
                     </p>
                   </div>
                 </div>
@@ -337,7 +387,7 @@ export default function ServiceOrderDetail() {
                   <div>
                     <p className="text-sm font-medium">Concluída</p>
                     <p className="text-xs text-slate-500">
-                      {format(new Date(order.completed_at), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
+                      {order.completed_at ? format(new Date(order.completed_at), 'dd/MM/yyyy HH:mm', { locale: ptBR }) : '-'}
                     </p>
                   </div>
                 </div>
@@ -368,7 +418,7 @@ export default function ServiceOrderDetail() {
                           <p className="text-xs text-slate-500 mt-1">{change.reason}</p>
                         )}
                         <p className="text-xs text-slate-400 mt-1">
-                          {format(new Date(change.created_date), 'dd/MM/yyyy HH:mm', { locale: ptBR })} • {change.changed_by}
+                          {change.created_date || change.created_at ? format(new Date(change.created_date || change.created_at), 'dd/MM/yyyy HH:mm', { locale: ptBR }) : '-'} • {change.changed_by}
                         </p>
                       </div>
                     </div>
@@ -465,7 +515,7 @@ export default function ServiceOrderDetail() {
             <div>
               <p className="text-sm text-slate-500">Custo Total</p>
               <p className="text-2xl font-bold text-indigo-600">
-                R$ {((formData.labor_cost || 0) + (formData.parts_cost || 0)).toFixed(2)}
+                R$ {(Number(formData.labor_cost || 0) + Number(formData.parts_cost || 0)).toFixed(2)}
               </p>
             </div>
             {order.status !== 'CONCLUIDA' && order.status !== 'CANCELADA' && (
@@ -524,8 +574,14 @@ export default function ServiceOrderDetail() {
               <Button
                 onClick={() => changeTechnicianMutation.mutate()}
                 disabled={!selectedTechnicianId || changeTechnicianMutation.isPending}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white min-w-[120px]"
               >
-                Confirmar
+                {changeTechnicianMutation.isPending ? (
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Salvando...
+                  </div>
+                ) : 'Confirmar'}
               </Button>
             </div>
           </div>

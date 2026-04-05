@@ -121,7 +121,7 @@ export default function ServiceOrders() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-sm">
-                        {format(new Date(order.created_date), 'dd/MM/yyyy')}
+                        {order.created_date || order.created_at ? format(new Date(order.created_date || order.created_at), 'dd/MM/yyyy') : '-'}
                       </TableCell>
                       <TableCell className="text-right">
                         <Link to={createPageUrl(`ServiceOrderDetail?id=${order.id}`)}>

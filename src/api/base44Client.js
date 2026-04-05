@@ -33,7 +33,7 @@ const sanitizeData = (data, entityName) => {
   if (entityName === 'BOMDeliveryControl' || entityName === 'BOMItem' || entityName === 'BOMVersion') {
     delete sanitized.company_id;
   }
-
+  
   return sanitized;
 };
 
@@ -48,11 +48,9 @@ const createEntityHandler = (entityName) => {
       if (typeof sort === 'string') {
         const isDesc = sort.startsWith('-');
         const column = isDesc ? sort.substring(1) : sort;
-        if (column === 'created_date') {
-            query = query.order('created_at', { ascending: !isDesc });
-        } else {
-            query = query.order(column, { ascending: !isDesc });
-        }
+        // Fallback para created_at se o campo for de auditoria padrão
+        const sortColumn = (column === 'created_date' || column === 'registered_date') ? 'created_at' : column;
+        query = query.order(sortColumn, { ascending: !isDesc });
       }
       
       const { data, error } = await query;
@@ -81,11 +79,9 @@ const createEntityHandler = (entityName) => {
       if (typeof sort === 'string') {
         const isDesc = sort.startsWith('-');
         const column = isDesc ? sort.substring(1) : sort;
-        if (column === 'created_date') {
-            query = query.order('created_at', { ascending: !isDesc });
-        } else {
-            query = query.order(column, { ascending: !isDesc });
-        }
+        // Fallback para created_at se o campo for de auditoria padrão
+        const sortColumn = (column === 'created_date' || column === 'registered_date') ? 'created_at' : column;
+        query = query.order(sortColumn, { ascending: !isDesc });
       }
 
       const { data, error } = await query;
@@ -95,6 +91,12 @@ const createEntityHandler = (entityName) => {
     
     async create(data) {
       const sanitized = sanitizeData(data, entityName);
+      
+      // Adicionar data de criação se não existir (para consistência com legado)
+      if (!sanitized.created_date && !['BOMDeliveryControl', 'BOMItem', 'BOMVersion'].includes(entityName)) {
+        sanitized.created_date = new Date().toISOString();
+      }
+
       // Usar fetch direto para evitar o bug do postgrest-js que adiciona
       // aspas duplas nos nomes de colunas no parâmetro "columns" da URL,
       // causando erro 400 no PostgREST.
@@ -123,7 +125,13 @@ const createEntityHandler = (entityName) => {
     },
     
     async bulkCreate(dataArray) {
-      const sanitizedArray = (dataArray || []).map(item => sanitizeData(item, entityName));
+      const sanitizedArray = (dataArray || []).map(item => {
+        const s = sanitizeData(item, entityName);
+        if (!s.created_date && !['BOMDeliveryControl', 'BOMItem', 'BOMVersion'].includes(entityName)) {
+          s.created_date = new Date().toISOString();
+        }
+        return s;
+      });
       const session = (await supabase.auth.getSession()).data?.session;
       const token = session?.access_token || supabaseKey;
       

@@ -101,7 +101,8 @@ export default function NotificationsPanel({ open, onClose }) {
           base44.entities.SalesOrder.filter({ company_id: cid }, '-created_date', 50),
           base44.entities.Notification.filter({ user_email: user.email, company_id: cid, is_read: false }, '-created_date', 50),
           base44.functions.invoke('generateProductionAlerts', {}).then(r => r.data?.alerts || []).catch(e => {
-            console.warn('Edge Function generateProductionAlerts falhou (CORS ou inexistente):', e);
+            // Silencia erro de CORS/inexistência no console para evitar poluição
+            console.debug('Edge Function generateProductionAlerts não disponível:', e.message);
             return [];
           }),
           base44.entities.ProductionOrder.filter({ company_id: cid }, '-created_date', 100),

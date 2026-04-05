@@ -641,8 +641,8 @@ export default function SalesOrderDetail() {
               </div>
               <div>
                 <p className="text-sm text-slate-500">Data do Pedido</p>
-                <p className="font-medium">
-                  {order.created_date ? format(new Date(order.created_date), 'dd/MM/yyyy HH:mm', { locale: ptBR }) : '-'}
+                <p className="text-sm font-medium text-slate-900">
+                  {order.created_date ? format(new Date(order.created_date), 'dd/MM/yyyy HH:mm', { locale: ptBR }) : 'Não informada'}
                 </p>
               </div>
               <div>
@@ -652,7 +652,7 @@ export default function SalesOrderDetail() {
               <div>
                 <p className="text-sm text-slate-500">Data de Entrega</p>
                 <p className="font-medium">
-                  {order.delivery_date ? format(new Date(order.delivery_date), 'dd/MM/yyyy', { locale: ptBR }) : '-'}
+                  {order.delivery_date ? format(new Date(order.delivery_date), 'dd/MM/yyyy', { locale: ptBR }) : 'Não informada'}
                 </p>
               </div>
               {order.is_shipment && (
