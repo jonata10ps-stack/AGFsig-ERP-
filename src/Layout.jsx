@@ -29,6 +29,7 @@ import {
   CheckCircle2,
   AlertCircle,
   Calendar,
+  RotateCcw,
   Book,
   Cpu
 } from 'lucide-react';
@@ -83,6 +84,8 @@ const navigation = [
     children: [
       { name: 'Orçamentos', icon: FileText, page: 'Quotes' },
       { name: 'Pedidos', icon: ClipboardList, page: 'SalesOrders' },
+      { name: 'Remessas', icon: Package, page: 'Shipments' },
+      { name: 'Retornos', icon: RotateCcw, page: 'ShipmentReturns' },
       { name: 'Separação', icon: PackageCheck, page: 'Separation' },
       { name: 'Expedição', icon: Truck, page: 'Shipping' },
       { name: 'Reservas', icon: Package, page: 'Reservations' },
@@ -155,6 +158,7 @@ const navigation = [
     children: [
       { name: 'Geral', icon: BarChart3, page: 'Reports' },
       { name: 'Estoque', icon: Package, page: 'StockReports' },
+      { name: 'Itens Pendentes', icon: PackageCheck, page: 'PendingItemsReport' },
     ]
   },
   { name: 'Gestão de Usuários', icon: Users, page: 'UserManagement', adminOnly: true },

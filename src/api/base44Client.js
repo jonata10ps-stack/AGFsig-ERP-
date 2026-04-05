@@ -66,8 +66,10 @@ const createEntityHandler = (entityName) => {
       
       // Apply exact matches or IN matches for arrays
       for (const [key, value] of Object.entries(sanitizedFilters)) {
-        if (value !== undefined && value !== null) {
-          if (Array.isArray(value)) {
+        if (value !== undefined) {
+          if (value === null) {
+            query = query.is(key, null);
+          } else if (Array.isArray(value)) {
             query = query.in(key, value);
           } else {
             query = query.eq(key, value);

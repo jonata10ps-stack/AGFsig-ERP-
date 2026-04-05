@@ -20,11 +20,15 @@ import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
 import ProductSearchSelect from '@/components/products/ProductSearchSelect';
 import QRScanner from '@/components/scanner/QRScanner';
+import { cn } from '@/lib/utils';
 
 export default function InventoryReceive() {
   const queryClient = useQueryClient();
-  const urlParams = new URLSearchParams(window.location.search);
-  const requestId = urlParams.get('request');
+  
+  // Memoize urlParams to avoid recreation on every render (prevents infinite loops)
+  const urlParams = React.useMemo(() => new URLSearchParams(window.location.search), [window.location.search]);
+  const requestId = React.useMemo(() => urlParams.get('request'), [urlParams]);
+  
   const [selectedRequestId, setSelectedRequestId] = useState(requestId || 'none');
   const lastPopulatedRequestId = React.useRef(null);
   const [items, setItems] = useState([]);
@@ -75,10 +79,25 @@ export default function InventoryReceive() {
     queryFn: () => base44.entities.Location.filter({ active: true }),
   });
 
-  const productMap = products?.reduce((acc, p) => ({ ...acc, [p.id]: p }), {}) || {};
-  const warehouseMap = warehouses?.reduce((acc, w) => ({ ...acc, [w.id]: w }), {}) || {};
+  // Optimized mapping: Avoid object spreading in reduce for performance (mutation is faster for large maps)
+  const productMap = React.useMemo(() => {
+    if (!products) return {};
+    const map = {};
+    for (const p of products) map[p.id] = p;
+    return map;
+  }, [products]);
 
-  const filteredLocations = locations?.filter(l => !currentItem.warehouse_id || l.warehouse_id === currentItem.warehouse_id);
+  const warehouseMap = React.useMemo(() => {
+    if (!warehouses) return {};
+    const map = {};
+    for (const w of warehouses) map[w.id] = w;
+    return map;
+  }, [warehouses]);
+
+  const filteredLocations = React.useMemo(() => {
+    if (!locations) return [];
+    return locations.filter(l => !currentItem.warehouse_id || l.warehouse_id === currentItem.warehouse_id);
+  }, [locations, currentItem.warehouse_id]);
 
   const receiveMutation = useMutation({
     mutationFn: async () => {
@@ -247,7 +266,8 @@ export default function InventoryReceive() {
     const isNewRequest = lastPopulatedRequestId.current !== selectedRequestId;
 
     if (isReady && isNewRequest) {
-      const selectedIds = urlParams.get('items')?.split(',') || [];
+      const itemsParam = urlParams.get('items');
+      const selectedIds = itemsParam?.split(',') || [];
       const pendingItems = requestItems.filter(ri => {
         const isPending = (ri.qty_pending ?? ri.qty_requested) > 0;
         if (selectedIds.length > 0 && selectedIds[0] !== '') {
@@ -258,7 +278,7 @@ export default function InventoryReceive() {
       
       if (pendingItems.length > 0) {
         setItems(pendingItems.map(ri => ({
-          id: ri.id, // ID original do item da solicitação
+          id: ri.id,
           product_id: ri.product_id,
           product_sku: ri.product_sku,
           product_name: ri.product_name,
@@ -273,13 +293,23 @@ export default function InventoryReceive() {
         lastPopulatedRequestId.current = selectedRequestId;
       }
     }
-  }, [requestItems, warehouses, selectedRequestId, urlParams]);
+    // Clean dependency array: itemsParam is extracted inside, warehouses is not used here
+  }, [requestItems, selectedRequestId, urlParams]);
 
   const formatCurrency = (value) => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);
   };
 
   const totalValue = items.reduce((sum, item) => sum + (item.qty * item.unit_cost), 0);
+
+  if (!user && !warehouses) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+        <span className="ml-3 text-slate-600">Carregando ambiente de recebimento...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -441,38 +471,131 @@ export default function InventoryReceive() {
                 <p className="text-slate-500">Adicione itens para receber</p>
               </div>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Produto / Ref</TableHead>
-                    <TableHead>Armazém</TableHead>
-                    <TableHead>Local</TableHead>
-                    <TableHead className="text-right">Qtd Rec.</TableHead>
-                    <TableHead className="text-right">Total</TableHead>
-                    <TableHead className="w-12"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {items.map((item, index) => {
-                    const rowLocations = locations?.filter(l => l.warehouse_id === item.warehouse_id);
-                    return (
-                      <TableRow key={index} className={(!item.warehouse_id || !item.location_id) ? 'bg-amber-50/30' : ''}>
-                        <TableCell>
-                          <div>
-                            <span className="font-mono text-indigo-600 text-xs">{item.product_sku}</span>
-                            <p className="font-medium text-xs truncate max-w-[200px]">{item.product_name}</p>
-                            {item.pending_reference && (
-                              <p className="text-[10px] text-slate-400 mt-0.5">Saldo na Sol.: {item.pending_reference}</p>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell className="w-[180px]">
+            <div className="overflow-x-auto">
+              {/* Desktop Table */}
+              <div className="hidden md:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Produto / Ref</TableHead>
+                      <TableHead>Armazém</TableHead>
+                      <TableHead>Local</TableHead>
+                      <TableHead className="text-right">Qtd Rec.</TableHead>
+                      <TableHead className="text-right">Total</TableHead>
+                      <TableHead className="w-12"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {items.map((item, index) => {
+                      const rowLocations = locations?.filter(l => l.warehouse_id === item.warehouse_id);
+                      return (
+                        <TableRow key={index} className={(!item.warehouse_id || !item.location_id) ? 'bg-amber-50/30' : ''}>
+                          <TableCell>
+                            <div>
+                              <span className="font-mono text-indigo-600 text-xs">{item.product_sku}</span>
+                              <p className="font-medium text-xs truncate max-w-[200px]">{item.product_name}</p>
+                              {item.pending_reference && (
+                                <p className="text-[10px] text-slate-400 mt-0.5">Saldo na Sol.: {item.pending_reference}</p>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="w-[180px]">
+                            <Select 
+                              value={item.warehouse_id} 
+                              onValueChange={(val) => updateItem(index, 'warehouse_id', val)}
+                            >
+                              <SelectTrigger className="h-8 text-xs">
+                                <SelectValue placeholder="Armazém..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {warehouses?.map(w => (
+                                  <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                          <TableCell className="w-[180px]">
+                            <Select 
+                              value={item.location_id} 
+                              onValueChange={(val) => updateItem(index, 'location_id', val)}
+                              disabled={!item.warehouse_id}
+                            >
+                              <SelectTrigger className="h-8 text-xs">
+                                <SelectValue placeholder={item.warehouse_id ? "Local..." : "---"} />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {rowLocations?.map(l => (
+                                  <SelectItem key={l.id} value={l.id}>{l.barcode} ({l.name})</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                          <TableCell className="w-24">
+                            <Input
+                              type="number"
+                              value={item.qty}
+                              onChange={(e) => updateItem(index, 'qty', parseFloat(e.target.value) || 0)}
+                              className="h-8 text-xs text-right font-medium"
+                            />
+                          </TableCell>
+                          <TableCell className="text-right text-xs">
+                            {formatCurrency(item.unit_cost * item.qty)}
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleRemoveItem(index)}
+                              className="h-8 w-8 text-red-500 hover:text-red-700"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Mobile Card List */}
+              <div className="md:hidden divide-y divide-slate-100">
+                {items.map((item, index) => {
+                  const rowLocations = locations?.filter(l => l.warehouse_id === item.warehouse_id);
+                  return (
+                    <div key={index} className={cn(
+                      "p-4 space-y-4",
+                      (!item.warehouse_id || !item.location_id) ? 'bg-amber-50/50' : ''
+                    )}>
+                      {/* Card Header: Product & Remove Action */}
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1 min-w-0">
+                          <span className="font-mono text-indigo-600 text-[10px] block">{item.product_sku}</span>
+                          <p className="font-bold text-sm text-slate-800 line-clamp-2">{item.product_name}</p>
+                          {item.pending_reference && (
+                            <p className="text-[10px] text-slate-500 mt-1">Pendente na Solicit.: {item.pending_reference}</p>
+                          )}
+                        </div>
+                        <Button
+                          variant="ghost" 
+                          size="icon"
+                          onClick={() => handleRemoveItem(index)}
+                          className="h-8 w-8 text-red-500 -mt-1 -mr-1"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+
+                      {/* Selects Grid */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <Label className="text-[10px] uppercase text-slate-400">Armazém</Label>
                           <Select 
                             value={item.warehouse_id} 
                             onValueChange={(val) => updateItem(index, 'warehouse_id', val)}
                           >
-                            <SelectTrigger className="h-8 text-xs">
-                              <SelectValue placeholder="Armazém..." />
+                            <SelectTrigger className="h-10 text-xs">
+                              <SelectValue placeholder="Escolha..." />
                             </SelectTrigger>
                             <SelectContent>
                               {warehouses?.map(w => (
@@ -480,49 +603,49 @@ export default function InventoryReceive() {
                               ))}
                             </SelectContent>
                           </Select>
-                        </TableCell>
-                        <TableCell className="w-[180px]">
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-[10px] uppercase text-slate-400">Local</Label>
                           <Select 
                             value={item.location_id} 
                             onValueChange={(val) => updateItem(index, 'location_id', val)}
                             disabled={!item.warehouse_id}
                           >
-                            <SelectTrigger className="h-8 text-xs">
-                              <SelectValue placeholder={item.warehouse_id ? "Local..." : "---"} />
+                            <SelectTrigger className="h-10 text-xs">
+                              <SelectValue placeholder={item.warehouse_id ? "Escolha..." : "---"} />
                             </SelectTrigger>
                             <SelectContent>
                               {rowLocations?.map(l => (
-                                <SelectItem key={l.id} value={l.id}>{l.barcode} ({l.name})</SelectItem>
+                                <SelectItem key={l.id} value={l.id}>{l.barcode}</SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
-                        </TableCell>
-                        <TableCell className="w-24">
+                        </div>
+                      </div>
+
+                      {/* Qty & Total Grid */}
+                      <div className="grid grid-cols-2 gap-3 items-end">
+                        <div className="space-y-1">
+                          <Label className="text-[10px] uppercase text-slate-400 font-bold">Quantidade Recebida</Label>
                           <Input
                             type="number"
                             value={item.qty}
                             onChange={(e) => updateItem(index, 'qty', parseFloat(e.target.value) || 0)}
-                            className="h-8 text-xs text-right font-medium"
+                            className="h-10 text-base font-bold text-indigo-700 bg-indigo-50 border-indigo-200"
                           />
-                        </TableCell>
-                        <TableCell className="text-right text-xs">
-                          {formatCurrency(item.unit_cost * item.qty)}
-                        </TableCell>
-                        <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleRemoveItem(index)}
-                            className="h-8 w-8 text-red-500 hover:text-red-700"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+                        </div>
+                        <div className="text-right pb-2">
+                          <p className="text-[10px] uppercase text-slate-400">Total Item</p>
+                          <p className="text-lg font-bold text-slate-900">
+                            {formatCurrency(item.unit_cost * item.qty)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
             )}
           </CardContent>
           {items.length > 0 && (

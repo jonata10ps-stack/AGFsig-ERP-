@@ -30,6 +30,7 @@ import { ptBR } from 'date-fns/locale';
 import ProductSearchSelect from '@/components/products/ProductSearchSelect';
 import CancelOrderDialog from '@/components/sales/CancelOrderDialog';
 import ReservationDialog from '@/components/sales/ReservationDialog';
+import { Progress } from "@/components/ui/progress";
 
 const STATUS_CONFIG = {
   RASCUNHO: { color: 'bg-slate-100 text-slate-700', label: 'Rascunho' },
@@ -40,6 +41,14 @@ const STATUS_CONFIG = {
   FATURADO: { color: 'bg-purple-100 text-purple-700', label: 'Faturado' },
   EXPEDIDO: { color: 'bg-teal-100 text-teal-700', label: 'Expedido' },
   CANCELADO: { color: 'bg-rose-100 text-rose-700', label: 'Cancelado' },
+};
+
+const SHIPMENT_TYPES = {
+  DEMONSTRACAO: 'Demonstração',
+  MOSTRUARIO: 'Mostruário',
+  GARANTIA: 'Garantia',
+  CONSERTO: 'Remessa para Conserto',
+  OUTROS: 'Outros',
 };
 
 function ItemForm({ item, products, onSave, onCancel, loading }) {
@@ -489,6 +498,11 @@ export default function SalesOrderDetail() {
             <Badge className={STATUS_CONFIG[order.status]?.color}>
               {STATUS_CONFIG[order.status]?.label || order.status}
             </Badge>
+            {order.is_shipment && (
+              <Badge variant="outline" className="ml-2 border-indigo-200 text-indigo-700 bg-indigo-50 font-bold uppercase text-[10px]">
+                Remessa
+              </Badge>
+            )}
           </div>
         </div>
         <div className="flex gap-2">
@@ -641,6 +655,27 @@ export default function SalesOrderDetail() {
                   {order.delivery_date ? format(new Date(order.delivery_date), 'dd/MM/yyyy', { locale: ptBR }) : '-'}
                 </p>
               </div>
+              {order.is_shipment && (
+                <>
+                  <div>
+                    <p className="text-sm text-slate-500">Tipo de Remessa</p>
+                    <p className="font-medium text-indigo-600">{SHIPMENT_TYPES[order.shipment_type] || order.shipment_type}</p>
+                  </div>
+                  <div>
+                     <p className="text-sm text-slate-500">Configurações</p>
+                     <div className="flex gap-2 mt-1">
+                        <Badge variant="outline" className={order.moves_stock ? 'bg-indigo-50 text-indigo-600 border-indigo-100' : 'bg-slate-50 text-slate-400'}>
+                           {order.moves_stock ? 'Movimenta Estoque' : 'Apenas Administrativo'}
+                        </Badge>
+                        {order.requires_return && (
+                           <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-100">
+                              Exige Retorno
+                           </Badge>
+                        )}
+                     </div>
+                  </div>
+                </>
+              )}
               <div>
                 <p className="text-sm text-slate-500">Vendedor</p>
                 <p className="font-medium">{order.seller_name || '-'}</p>
@@ -715,6 +750,9 @@ export default function SalesOrderDetail() {
                   <TableHead className="text-right">Preço Unit.</TableHead>
                   <TableHead className="text-right">Total</TableHead>
                   <TableHead>Status</TableHead>
+                  {order.is_shipment && order.requires_return && (
+                    <TableHead className="w-32">Retorno</TableHead>
+                  )}
                   {canEdit && <TableHead className="w-12"></TableHead>}
                 </TableRow>
               </TableHeader>
@@ -763,6 +801,17 @@ export default function SalesOrderDetail() {
                           <Badge variant="outline">Pendente</Badge>
                         )}
                       </TableCell>
+                      {order.is_shipment && order.requires_return && (
+                        <TableCell>
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-[10px] font-bold">
+                              <span className="text-slate-400">{Math.round(( (parseFloat(item.qty_returned) || 0) / item.qty ) * 100)}%</span>
+                              <span className="text-indigo-600">{item.qty_returned || 0} / {item.qty}</span>
+                            </div>
+                            <Progress value={( (parseFloat(item.qty_returned) || 0) / item.qty ) * 100} className="h-1" />
+                          </div>
+                        </TableCell>
+                      )}
                       {canEdit && (
                         <TableCell>
                           <Button

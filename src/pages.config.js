@@ -104,6 +104,7 @@ import QuoteDetail from './pages/QuoteDetail';
 import Quotes from './pages/Quotes';
 import RecalculateProductBalance from './pages/RecalculateProductBalance';
 import RecalculateStockBalance from './pages/RecalculateStockBalance';
+import PendingItemsReport from './pages/PendingItemsReport';
 import ReceivingConference from './pages/ReceivingConference';
 import ReceivingConferenceList from './pages/ReceivingConferenceList';
 import ReceivingList from './pages/ReceivingList';
@@ -129,6 +130,8 @@ import ServiceOrders from './pages/ServiceOrders';
 import ServiceReports from './pages/ServiceReports';
 import ServiceRequests from './pages/ServiceRequests';
 import ServiceSchedule from './pages/ServiceSchedule';
+import ShipmentReturns from './pages/ShipmentReturns';
+import Shipments from './pages/Shipments';
 import Shipping from './pages/Shipping';
 import StockBalances from './pages/StockBalances';
 import StockConsistencyCheck from './pages/StockConsistencyCheck';
@@ -182,6 +185,7 @@ export const PAGES = {
     "NonConformityReports": NonConformityReports,
     "OPConsumptionControl": OPConsumptionControl,
     "PaymentConditions": PaymentConditions,
+    "PendingItemsReport": PendingItemsReport,
     "PickingOptimized": PickingOptimized,
     "ProductionDashboard": ProductionDashboard,
     "ProductionOrderDetail": ProductionOrderDetail,
@@ -227,6 +231,8 @@ export const PAGES = {
     "ServiceReports": ServiceReports,
     "ServiceRequests": ServiceRequests,
     "ServiceSchedule": ServiceSchedule,
+    "ShipmentReturns": ShipmentReturns,
+    "Shipments": Shipments,
     "Shipping": Shipping,
     "StockBalances": StockBalances,
     "StockConsistencyCheck": StockConsistencyCheck,

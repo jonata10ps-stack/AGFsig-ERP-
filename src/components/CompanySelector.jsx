@@ -52,15 +52,15 @@ export default function CompanySelector() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" className="gap-2">
-          <Building2 className="h-4 w-4 text-indigo-600" />
-          <div className="flex flex-col items-start">
-            <span className="text-xs text-slate-500">Empresa</span>
-            <span className="text-sm font-semibold text-slate-900">
+        <Button variant="outline" className="gap-1 sm:gap-2 px-2 sm:px-4 max-w-[140px] sm:max-w-none justify-start overflow-hidden">
+          <Building2 className="h-4 w-4 text-indigo-600 shrink-0" />
+          <div className="flex flex-col items-start min-w-0">
+            <span className="text-[10px] text-slate-500 uppercase font-bold">Empresa</span>
+            <span className="text-xs sm:text-sm font-semibold text-slate-900 truncate w-full text-left">
               {currentCompany?.name || currentCompany?.code || 'AGF'}
             </span>
           </div>
-          <ChevronDown className="h-4 w-4 opacity-50 ml-2" />
+          <ChevronDown className="h-4 w-4 opacity-50 shrink-0 hidden sm:block" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-64">

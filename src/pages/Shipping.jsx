@@ -138,7 +138,9 @@ export default function Shipping() {
       }
 
       // 4. Efetuar a baixa real do estoque disponível (SAIDA) usando histórico de separação
-      for (const item of orderItems) {
+      // APENAS se a remessa/pedido movimentar estoque!
+      if (order.moves_stock !== false) {
+        for (const item of orderItems) {
         const itemQty = parseFloat(item.qty) || 0;
         if (!item.product_id || itemQty <= 0) continue;
 
@@ -196,6 +198,14 @@ export default function Shipping() {
           qty_separated: itemQty
         });
       }
+    } else {
+      // Se NÃO movimenta estoque, apenas marcamos os itens como "separados" para histórico visual
+      for (const item of orderItems) {
+        await base44.entities.SalesOrderItem.update(item.id, {
+          qty_separated: parseFloat(item.qty) || 0
+        });
+      }
+    }
 
       // 3. Atualizar status do pedido
       await base44.entities.SalesOrder.update(order.id, { 
@@ -482,11 +492,18 @@ export default function Shipping() {
                         }`}>
                           {order.status}
                         </Badge>
-                        {order.delivery_date && (
-                          <span className="text-xs text-slate-500">
-                            {format(new Date(order.delivery_date), 'dd/MM', { locale: ptBR })}
-                          </span>
-                        )}
+                        <div className="flex gap-1">
+                          {order.is_shipment && (
+                            <Badge variant="outline" className="text-[9px] border-indigo-200 text-indigo-700 bg-indigo-50 font-bold uppercase">
+                              Remessa
+                            </Badge>
+                          )}
+                          {order.delivery_date && (
+                            <span className="text-xs text-slate-500">
+                              {format(new Date(order.delivery_date), 'dd/MM', { locale: ptBR })}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </button>
                   ))}
@@ -676,6 +693,11 @@ export default function Shipping() {
                   ? `Etiquetas - ${selectedOrder.order_number || `#${selectedOrder.id.slice(0, 8)}`}`
                   : 'Selecione um pedido'
                 }
+                {selectedOrder?.is_shipment && (
+                  <Badge variant="outline" className="ml-2 border-indigo-200 text-indigo-700 bg-indigo-50 font-bold uppercase text-[10px]">
+                    Remessa
+                  </Badge>
+                )}
               </CardTitle>
               <div className="flex gap-2">
                 {selectedOrder?.status === 'EXPEDIDO' && (

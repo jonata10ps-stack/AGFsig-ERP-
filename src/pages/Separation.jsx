@@ -137,18 +137,21 @@ export default function Separation() {
     mutationFn: async ({ item, qty, from_warehouse_id, from_location_id, to_warehouse_id, to_location_id }) => {
       const newSeparated = (item.qty_separated || 0) + qty;
       
-      await executeInventoryTransaction({
-        type: 'SEPARACAO',
-        product_id: item.product_id,
-        qty: qty,
-        from_warehouse_id,
-        from_location_id,
-        to_warehouse_id,
-        to_location_id,
-        related_type: 'PEDIDO',
-        related_id: item.order_id,
-        reason: `Picking: ${from_location_id || 'Interno'} -> ${to_location_id || 'Doca'} p/ pedido ${item.order_id}`
-      }, companyId);
+      // APENAS se a remessa/pedido movimentar estoque!
+      if (selectedOrder.moves_stock !== false) {
+        await executeInventoryTransaction({
+          type: 'SEPARACAO',
+          product_id: item.product_id,
+          qty: qty,
+          from_warehouse_id,
+          from_location_id,
+          to_warehouse_id,
+          to_location_id,
+          related_type: 'PEDIDO',
+          related_id: item.order_id,
+          reason: `Picking: ${from_location_id || 'Interno'} -> ${to_location_id || 'Doca'} p/ pedido ${item.order_id}`
+        }, companyId);
+      }
 
       await base44.entities.SalesOrderItem.update(item.id, { 
         qty_separated: newSeparated 
@@ -181,18 +184,21 @@ export default function Separation() {
   });
 
   const undoSeparationMutation = useMutation({
-    mutationFn: async (move) => {
-       // 1. Processar no inventário (no destino) para garantir saldo disponível
-       await executeInventoryTransaction({
-         type: 'DESFAZER_SEPARACAO',
-         product_id: move.product_id,
-         qty: move.qty,
-         from_warehouse_id: move.to_warehouse_id,
-         from_location_id: move.to_location_id,
-         related_type: 'PEDIDO',
-         related_id: move.related_id,
-         reason: `Estorno de Picking: ${move.to_location_id}`
-       }, companyId);
+     mutationFn: async (move) => {
+        // 1. Processar no inventário (no destino) para garantir saldo disponível
+        // APENAS se a remessa/pedido movimentar estoque!
+        if (selectedOrder.moves_stock !== false) {
+           await executeInventoryTransaction({
+             type: 'DESFAZER_SEPARACAO',
+             product_id: move.product_id,
+             qty: move.qty,
+             from_warehouse_id: move.to_warehouse_id,
+             from_location_id: move.to_location_id,
+             related_type: 'PEDIDO',
+             related_id: move.related_id,
+             reason: `Estorno de Picking: ${move.to_location_id}`
+           }, companyId);
+        }
 
        // 2. Apagar a move original de SEPARACAO para limpar a UI
        await base44.entities.InventoryMove.delete(move.id);
