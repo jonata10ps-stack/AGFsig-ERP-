@@ -278,23 +278,33 @@ export default function Shipments() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingOrder, setEditingOrder] = useState(null);
 
-  const { data: shipments, isLoading } = useQuery({
-    queryKey: ['shipments', companyId],
-    queryFn: () => companyId ? base44.entities.SalesOrder.listAll({ company_id: companyId, is_shipment: true }, '-created_date') : Promise.resolve([]),
+  const [tablePage, setTablePage] = useState(0);
+  const TABLE_PAGE_SIZE = 50;
+
+  const { data: result, isLoading } = useQuery({
+    queryKey: ['shipments', companyId, tablePage, search],
+    queryFn: async () => {
+      if (!companyId) return { data: [], count: 0 };
+      
+      const conditions = { company_id: companyId, is_shipment: true };
+      const searchFields = search ? ['order_number', 'client_name'] : [];
+      
+      return base44.entities.SalesOrder.queryPaginated(
+        conditions, 
+        '-created_date', 
+        TABLE_PAGE_SIZE, 
+        tablePage * TABLE_PAGE_SIZE,
+        searchFields,
+        search
+      );
+    },
     enabled: !!companyId,
   });
 
-  const { data: clients } = useQuery({
-    queryKey: ['clients', companyId],
-    queryFn: () => companyId ? base44.entities.Client.listAll({ company_id: companyId, active: true }) : Promise.resolve([]),
-    enabled: !!companyId,
-  });
+  const shipments = result?.data || [];
+  const totalCount = result?.count || 0;
 
-  const { data: products } = useQuery({
-    queryKey: ['products', companyId],
-    queryFn: () => companyId ? base44.entities.Product.listAll({ company_id: companyId, active: true }) : Promise.resolve([]),
-    enabled: !!companyId,
-  });
+
 
   const { data: editingItems } = useQuery({
     queryKey: ['shipment-items', editingOrder?.id],
@@ -362,15 +372,12 @@ export default function Shipments() {
     saveMutation.mutate({ orderData: data, items });
   };
 
-  const handleEdit = (shipment) => {
-    setEditingOrder(shipment);
-    setDialogOpen(true);
-  };
+  const totalTablePages = Math.ceil(totalCount / TABLE_PAGE_SIZE);
 
-  const filtered = shipments?.filter(s => 
-    s.order_number?.toLowerCase().includes(search.toLowerCase()) ||
-    s.client_name?.toLowerCase().includes(search.toLowerCase())
-  );
+  const handleSearchChange = (e) => {
+    setSearch(e.target.value);
+    setTablePage(0);
+  };
 
   return (
     <div className="space-y-6">
@@ -395,7 +402,7 @@ export default function Shipments() {
             <Input
               placeholder="Buscar por número ou destinatário..."
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={handleSearchChange}
               className="pl-10 text-sm border-slate-200 focus:ring-indigo-500"
             />
           </div>
@@ -408,110 +415,128 @@ export default function Shipments() {
             <div className="p-6 space-y-4">
               {[1, 2, 3].map(i => <Skeleton key={i} className="h-14 w-full" />)}
             </div>
-          ) : filtered?.length === 0 ? (
+          ) : totalCount === 0 ? (
             <div className="text-center py-16 bg-slate-50/50">
               <Truck className="h-12 w-12 mx-auto text-slate-200 mb-4" />
               <p className="text-slate-500 font-medium">Nenhuma remessa encontrada</p>
             </div>
           ) : (
-            <Table>
-              <TableHeader className="bg-slate-50">
-                <TableRow>
-                  <TableHead className="py-4 px-6 text-xs font-bold uppercase tracking-wider">Número / Tipo</TableHead>
-                  <TableHead className="py-4 px-6 text-xs font-bold uppercase tracking-wider">Destinatário</TableHead>
-                  <TableHead className="py-4 px-6 text-xs font-bold uppercase tracking-wider text-center">Configurações</TableHead>
-                  <TableHead className="py-4 px-6 text-xs font-bold uppercase tracking-wider text-center">Status</TableHead>
-                  <TableHead className="py-4 px-6 text-xs font-bold uppercase tracking-wider text-right w-12"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filtered?.map((shipment) => (
-                  <TableRow key={shipment.id} className="hover:bg-indigo-50/30 transition-colors">
-                    <TableCell className="px-6">
-                      <div className="flex flex-col">
-                        <span className="font-mono text-indigo-600 font-bold text-sm tracking-tight">
-                          {shipment.order_number}
-                        </span>
-                        <Badge variant="secondary" className="w-fit text-[9px] mt-1.5 uppercase font-extrabold tracking-widest px-1.5 py-0">
-                          {SHIPMENT_TYPES.find(t => t.value === shipment.shipment_type)?.label || shipment.shipment_type}
-                        </Badge>
-                      </div>
-                    </TableCell>
-                    <TableCell className="px-6">
-                       <span className="font-bold text-slate-800 text-sm">{shipment.client_name}</span>
-                       {shipment.numero_pedido_externo && (
-                          <div className="text-[10px] text-slate-400 mt-1 flex items-center gap-1">
-                             <History className="h-3 w-3" /> {shipment.numero_pedido_externo}
-                          </div>
-                       )}
-                    </TableCell>
-                    <TableCell className="px-6">
-                      <div className="flex justify-center gap-1.5">
-                        <Badge variant="outline" className={cn(
-                          "text-[10px] px-2 py-0",
-                          shipment.moves_stock ? "border-indigo-200 text-indigo-700 bg-indigo-50" : "border-slate-200 text-slate-400 bg-slate-50"
-                        )}>
-                          {shipment.moves_stock ? "Estoque" : "Admin"}
-                        </Badge>
-                        {shipment.requires_return && (
-                          <Badge variant="outline" className="text-[10px] border-amber-200 text-amber-700 bg-amber-50">
-                            Exige Retorno
+            <>
+              <Table>
+                <TableHeader className="bg-slate-50">
+                  <TableRow>
+                    <TableHead className="py-4 px-6 text-xs font-bold uppercase tracking-wider">Número / Tipo</TableHead>
+                    <TableHead className="py-4 px-6 text-xs font-bold uppercase tracking-wider">Destinatário</TableHead>
+                    <TableHead className="py-4 px-6 text-xs font-bold uppercase tracking-wider text-center">Configurações</TableHead>
+                    <TableHead className="py-4 px-6 text-xs font-bold uppercase tracking-wider text-center">Status</TableHead>
+                    <TableHead className="py-4 px-6 text-xs font-bold uppercase tracking-wider text-right w-12"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {shipments.map((shipment) => (
+                    <TableRow key={shipment.id} className="hover:bg-indigo-50/30 transition-colors">
+                      <TableCell className="px-6">
+                        <div className="flex flex-col">
+                          <span className="font-mono text-indigo-600 font-bold text-sm tracking-tight">
+                            {shipment.order_number}
+                          </span>
+                          <Badge variant="secondary" className="w-fit text-[9px] mt-1.5 uppercase font-extrabold tracking-widest px-1.5 py-0">
+                            {SHIPMENT_TYPES.find(t => t.value === shipment.shipment_type)?.label || shipment.shipment_type}
                           </Badge>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="px-6 text-center">
-                      <Badge className={cn("text-[10px] font-bold uppercase px-2", STATUS_CONFIG[shipment.status]?.color)}>
-                        {STATUS_CONFIG[shipment.status]?.label}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="px-6 text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="hover:bg-slate-100 rounded-full">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-52">
-                          <DropdownMenuItem asChild>
-                            <Link to={createPageUrl(`SalesOrderDetail?id=${shipment.id}`)}>
-                              <Eye className="h-4 w-4 mr-2 text-slate-400" />
-                              Ver Detalhes
-                            </Link>
-                          </DropdownMenuItem>
-                          
-                          {shipment.status === 'RASCUNHO' && (
-                            <>
-                              <DropdownMenuItem onClick={() => handleEdit(shipment)}>
-                                <Edit2 className="h-4 w-4 mr-2 text-indigo-400" />
-                                Editar Rascunho
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem 
-                                className="text-indigo-600 font-semibold"
-                                onClick={() => updateStatusMutation.mutate({ id: shipment.id, status: 'CONFIRMADO' })}
-                              >
-                                <CheckCircle className="h-4 w-4 mr-2" />
-                                Confirmar Pedido
-                              </DropdownMenuItem>
-                            </>
+                        </div>
+                      </TableCell>
+                      <TableCell className="px-6">
+                         <span className="font-bold text-slate-800 text-sm">{shipment.client_name}</span>
+                         {shipment.numero_pedido_externo && (
+                            <div className="text-[10px] text-slate-400 mt-1 flex items-center gap-1">
+                               <History className="h-3 w-3" /> {shipment.numero_pedido_externo}
+                            </div>
+                         )}
+                      </TableCell>
+                      <TableCell className="px-6">
+                        <div className="flex justify-center gap-1.5">
+                          <Badge variant="outline" className={cn(
+                            "text-[10px] px-2 py-0",
+                            shipment.moves_stock ? "border-indigo-200 text-indigo-700 bg-indigo-50" : "border-slate-200 text-slate-400 bg-slate-50"
+                          )}>
+                            {shipment.moves_stock ? "Estoque" : "Admin"}
+                          </Badge>
+                          {shipment.requires_return && (
+                            <Badge variant="outline" className="text-[10px] border-amber-200 text-amber-700 bg-amber-50">
+                              Exige Retorno
+                            </Badge>
                           )}
-                          
-                          {(shipment.status === 'SEPARADO' || shipment.status === 'CONFIRMADO') && (
+                        </div>
+                      </TableCell>
+                      <TableCell className="px-6 text-center">
+                        <Badge className={cn("text-[10px] font-bold uppercase px-2", STATUS_CONFIG[shipment.status]?.color)}>
+                          {STATUS_CONFIG[shipment.status]?.label}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="px-6 text-right">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="hover:bg-slate-100 rounded-full">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-52">
                             <DropdownMenuItem asChild>
-                              <Link to={createPageUrl(`Shipping?order=${shipment.id}`)} className="text-emerald-600 font-semibold">
-                                <Truck className="h-4 w-4 mr-2" />
-                                Ir para Expedição
+                              <Link to={createPageUrl(`SalesOrderDetail?id=${shipment.id}`)}>
+                                <Eye className="h-4 w-4 mr-2 text-slate-400" />
+                                Ver Detalhes
                               </Link>
                             </DropdownMenuItem>
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                            
+                            {shipment.status === 'RASCUNHO' && (
+                              <>
+                                <DropdownMenuItem onClick={() => handleEdit(shipment)}>
+                                  <Edit2 className="h-4 w-4 mr-2 text-indigo-400" />
+                                  Editar Rascunho
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem 
+                                  className="text-indigo-600 font-semibold"
+                                  onClick={() => updateStatusMutation.mutate({ id: shipment.id, status: 'CONFIRMADO' })}
+                                >
+                                  <CheckCircle className="h-4 w-4 mr-2" />
+                                  Confirmar Pedido
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                            
+                            {(shipment.status === 'SEPARADO' || shipment.status === 'CONFIRMADO') && (
+                              <DropdownMenuItem asChild>
+                                <Link to={createPageUrl(`Shipping?order=${shipment.id}`)} className="text-emerald-600 font-semibold">
+                                  <Truck className="h-4 w-4 mr-2" />
+                                  Ir para Expedição
+                                </Link>
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              {totalTablePages > 1 && (
+                <div className="flex items-center justify-between px-4 py-3 border-t bg-slate-50">
+                  <div className="text-sm text-slate-500">
+                    Exibindo <span className="font-medium">{Math.min(totalCount, tablePage * TABLE_PAGE_SIZE + 1)}-{Math.min(totalCount, (tablePage + 1) * TABLE_PAGE_SIZE)}</span> de <span className="font-medium">{totalCount}</span> remessas 
+                    {totalCount > 0 && ` · Pág. ${tablePage + 1}/${totalTablePages}`}
+                  </div>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={() => setTablePage(p => Math.max(0, p - 1))} disabled={tablePage === 0}>
+                      ← Anterior
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => setTablePage(p => Math.min(totalTablePages - 1, p + 1))} disabled={tablePage >= totalTablePages - 1}>
+                      Próxima →
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>
@@ -531,8 +556,6 @@ export default function Shipments() {
             <ShipmentForm
               order={editingOrder}
               initialItems={editingItems}
-              clients={clients}
-              products={products}
               onSave={handleSave}
               onCancel={() => { setDialogOpen(false); setEditingOrder(null); }}
               loading={saveMutation.isPending}

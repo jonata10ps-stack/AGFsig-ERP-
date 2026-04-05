@@ -2,14 +2,15 @@ import { createClient } from '@supabase/supabase-js';
 
 /**
  * @typedef {Object} Base44Handler
- * @property {function} list
- * @property {function} filter
- * @property {function} create
- * @property {function} bulkCreate
- * @property {function} update
- * @property {function} delete
- * @property {function} deleteBy
- * @property {function} subscribe
+ * @property {(sort?: string, limit?: number, skip?: number) => Promise<any[]>} list
+ * @property {(conditions?: Object, sort?: string, limit?: number, skip?: number) => Promise<any[]>} filter
+ * @property {(data: Object) => Promise<any>} create
+ * @property {(items: any[]) => Promise<any>} bulkCreate
+ * @property {(id: string, data: Object) => Promise<any>} update
+ * @property {(id: string) => Promise<any>} delete
+ * @property {(conditions: Object) => Promise<any>} deleteBy
+ * @property {(conditions: Object, sort?: string, limit?: number, skip?: number, searchFields?: string[], searchString?: string) => Promise<{data: any[], count: number}>} queryPaginated
+ * @property {(callback: function) => function} subscribe
  */
 
 /**

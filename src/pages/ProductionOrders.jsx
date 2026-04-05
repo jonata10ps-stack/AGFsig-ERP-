@@ -28,7 +28,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Progress } from '@/components/ui/progress';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
-import ptBR from 'date-fns/locale/pt-BR';
+import { ptBR } from 'date-fns/locale';
 import ProductSearchSelect from '@/components/products/ProductSearchSelect';
 import ClientSearchSelect from '@/components/clients/ClientSearchSelect';
 import {
@@ -302,17 +302,38 @@ export default function ProductionOrders() {
   const [pendingCloseOPId, setPendingCloseOPId] = useState(null);
   const [pendingCloseOPData, setPendingCloseOPData] = useState(null);
 
-  const { data: orders, isLoading } = useQuery({
-    queryKey: ['production-orders', companyId],
-    queryFn: () => companyId ? base44.entities.ProductionOrder.listAll({ company_id: companyId }, '-created_date') : Promise.resolve([]),
+  const [tablePage, setTablePage] = useState(0);
+  const TABLE_PAGE_SIZE = 50;
+
+  const { data: result, isLoading } = useQuery({
+    queryKey: ['production-orders', companyId, tablePage, search, filterStatus],
+    queryFn: async () => {
+      if (!companyId) return { data: [], count: 0 };
+      
+      const conditions = { company_id: companyId };
+      if (filterStatus !== 'all') {
+        conditions.status = filterStatus;
+      }
+
+      const searchFields = search ? ['op_number', 'numero_op_externo', 'product_name', 'product_sku'] : [];
+      
+      return base44.entities.ProductionOrder.queryPaginated(
+        conditions, 
+        '-created_date', 
+        TABLE_PAGE_SIZE, 
+        tablePage * TABLE_PAGE_SIZE,
+        searchFields,
+        search
+      );
+    },
     enabled: !!companyId,
   });
 
-  const { data: products } = useQuery({
-    queryKey: ['products-all', companyId],
-    queryFn: () => companyId ? base44.entities.Product.listAll({ company_id: companyId }) : Promise.resolve([]),
-    enabled: !!companyId,
-  });
+  const orders = result?.data || [];
+  const totalCount = result?.count || 0;
+
+  // Products are now handled by ProductSearchSelect
+  const products = []; 
 
   const { data: routes } = useQuery({
     queryKey: ['production-routes', companyId],
@@ -574,34 +595,17 @@ export default function ProductionOrders() {
     },
   });
 
-  const linkMutation = useMutation({
-    mutationFn: ({ childId, parentId }) => 
-      base44.entities.ProductionOrder.update(childId, { parent_op_id: parentId || '' }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['production-orders', companyId] });
-      toast.success('Vínculo atualizado');
-    },
-    onError: () => {
-      toast.error('Erro ao atualizar vínculo');
-    },
-  });
+  const totalTablePages = Math.ceil(totalCount / TABLE_PAGE_SIZE);
 
-  const productSkuMap = useMemo(() => {
-    const map = {};
-    products?.forEach(p => { map[p.id] = p.sku; });
-    return map;
-  }, [products]);
+  const handleSearchChange = (e) => {
+    setSearch(e.target.value);
+    setTablePage(0);
+  };
 
-  const filtered = orders?.filter(o => {
-    const sku = o.product_sku || productSkuMap[o.product_id] || '';
-    const matchesSearch = !search ||
-      o.op_number?.toLowerCase().includes(search.toLowerCase()) ||
-      o.numero_op_externo?.toLowerCase().includes(search.toLowerCase()) ||
-      o.product_name?.toLowerCase().includes(search.toLowerCase()) ||
-      sku.toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = filterStatus === 'all' || o.status === filterStatus;
-    return matchesSearch && matchesStatus;
-  });
+  const handleStatusChange = (val) => {
+    setFilterStatus(val);
+    setTablePage(0);
+  };
 
   return (
     <div className="space-y-6">
@@ -624,11 +628,11 @@ export default function ProductionOrders() {
               <Input
                 placeholder="Buscar por OP TOTVS, número interno, SKU ou produto..."
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={handleSearchChange}
                 className="pl-10"
               />
             </div>
-            <Select value={filterStatus} onValueChange={setFilterStatus}>
+            <Select value={filterStatus} onValueChange={handleStatusChange}>
               <SelectTrigger className="w-40">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
@@ -651,13 +655,14 @@ export default function ProductionOrders() {
                 <Skeleton key={i} className="h-14 w-full" />
               ))}
             </div>
-          ) : filtered?.length === 0 ? (
+          ) : totalCount === 0 ? (
             <div className="text-center py-12">
               <Factory className="h-12 w-12 mx-auto text-slate-300 mb-4" />
               <p className="text-slate-500">Nenhuma OP encontrada</p>
             </div>
           ) : (
-            <Table>
+            <>
+              <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>OP</TableHead>
@@ -670,7 +675,7 @@ export default function ProductionOrders() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered?.map((op) => {
+                {orders.map((op) => {
                   const progress = op.qty_planned > 0 ? Math.round((op.qty_produced || 0) / op.qty_planned * 100) : 0;
                   
                   return (
@@ -691,8 +696,8 @@ export default function ProductionOrders() {
                       </TableCell>
                       <TableCell>
                         <div>
-                          {(op.product_sku || productSkuMap[op.product_id]) && (
-                            <p className="font-mono text-xs text-indigo-600 font-semibold">{op.product_sku || productSkuMap[op.product_id]}</p>
+                          {op.product_sku && (
+                            <p className="font-mono text-xs text-indigo-600 font-semibold">{op.product_sku}</p>
                           )}
                           <p className="font-medium">{op.product_name}</p>
                         </div>
@@ -831,6 +836,23 @@ export default function ProductionOrders() {
                 })}
               </TableBody>
             </Table>
+              {totalTablePages > 1 && (
+                <div className="flex items-center justify-between px-4 py-3 border-t bg-slate-50">
+                  <div className="text-sm text-slate-500">
+                    Exibindo <span className="font-medium">{Math.min(totalCount, tablePage * TABLE_PAGE_SIZE + 1)}-{Math.min(totalCount, (tablePage + 1) * TABLE_PAGE_SIZE)}</span> de <span className="font-medium">{totalCount}</span> OPs 
+                    {totalCount > 0 && ` · Pág. ${tablePage + 1}/${totalTablePages}`}
+                  </div>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={() => setTablePage(p => Math.max(0, p - 1))} disabled={tablePage === 0}>
+                      ← Anterior
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => setTablePage(p => Math.min(totalTablePages - 1, p + 1))} disabled={tablePage >= totalTablePages - 1}>
+                      Próxima →
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>
