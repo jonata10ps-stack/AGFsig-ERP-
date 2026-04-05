@@ -325,19 +325,34 @@ export default function ProductionRequests() {
           });
 
           if (bomItems && bomItems.length > 0) {
+            // Otimização: Coletar todos os IDs de roteiro de uma vez para evitar N chamadas ao banco
+            const allRouteIds = new Set();
+            bomItems.forEach(item => {
+              if (item.route_id) allRouteIds.add(item.route_id);
+              if (item.routes?.length) item.routes.forEach(r => { if (r.route_id) allRouteIds.add(r.route_id); });
+            });
+
+            // Carregar todos os passos de uma vez (bulk fetch)
+            const routeIdsArray = Array.from(allRouteIds);
+            let allRouteSteps = [];
+            if (routeIdsArray.length > 0) {
+              allRouteSteps = await base44.entities.ProductionRouteStep.filter({
+                company_id: companyId,
+                route_id: routeIdsArray // O filter do base44Client já suporta o operador 'in' para arrays
+              });
+            }
+
             const stepsToCreate = [];
             let globalSequence = 1;
 
             for (const bomItem of bomItems) {
-              const routeIds = [];
-              if (bomItem.route_id) routeIds.push(bomItem.route_id);
+              const currentItemRouteIds = [];
+              if (bomItem.route_id) currentItemRouteIds.push(bomItem.route_id);
               if (bomItem.routes?.length) {
-                bomItem.routes.forEach(r => {
-                  if (r.route_id) routeIds.push(r.route_id);
-                });
+                bomItem.routes.forEach(r => { if (r.route_id) currentItemRouteIds.push(r.route_id); });
               }
 
-              if (routeIds.length === 0) {
+              if (currentItemRouteIds.length === 0) {
                 stepsToCreate.push({
                   company_id: companyId,
                   op_id: newOP.id,
@@ -347,13 +362,9 @@ export default function ProductionRequests() {
                   status: 'PENDENTE'
                 });
               } else {
-                for (const routeId of routeIds) {
-                  const routeSteps = await base44.entities.ProductionRouteStep.filter({
-                    company_id: companyId,
-                    route_id: routeId
-                  });
-
-                  for (const routeStep of routeSteps) {
+                for (const rId of currentItemRouteIds) {
+                  const relevantSteps = allRouteSteps.filter(rs => rs.route_id === rId);
+                  for (const routeStep of relevantSteps) {
                     stepsToCreate.push({
                       company_id: companyId,
                       op_id: newOP.id,

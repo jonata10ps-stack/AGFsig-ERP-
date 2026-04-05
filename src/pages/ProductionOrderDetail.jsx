@@ -148,19 +148,39 @@ export default function ProductionOrderDetail() {
 
         if (!bomItems.length) throw new Error('BOM não possui componentes');
 
+        // Otimização: Coletar todos os IDs de roteiro de uma vez para evitar N chamadas sequenciais
+        const allRouteIds = new Set();
+        bomItems.forEach(item => {
+          if (item.routes?.length > 0) {
+            item.routes.forEach(r => { if (r.route_id) allRouteIds.add(r.route_id); });
+          } else if (item.route_id) {
+            allRouteIds.add(item.route_id);
+          }
+        });
+
+        // Carregar todos os passos de uma vez (bulk fetch)
+        const routeIdsArray = Array.from(allRouteIds);
+        let allRouteSteps = [];
+        if (routeIdsArray.length > 0) {
+          allRouteSteps = await base44.entities.ProductionRouteStep.filter({
+            company_id: companyId,
+            route_id: routeIdsArray
+          });
+        }
+
         const stepsToCreate = [];
         let globalSequence = 1;
 
         for (const bomItem of bomItems) {
-          let routeId = null;
+          let itemRouteId = null;
           if (bomItem.routes?.length > 0) {
             const sorted = [...bomItem.routes].sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
-            routeId = sorted[0].route_id;
+            itemRouteId = sorted[0].route_id;
           } else if (bomItem.route_id) {
-            routeId = bomItem.route_id;
+            itemRouteId = bomItem.route_id;
           }
 
-          if (!routeId) {
+          if (!itemRouteId) {
             stepsToCreate.push({
               company_id: companyId,
               op_id: opId,
@@ -172,12 +192,9 @@ export default function ProductionOrderDetail() {
               status: 'PENDENTE'
             });
           } else {
-            const routeSteps = await base44.entities.ProductionRouteStep.filter({
-              company_id: companyId,
-              route_id: routeId
-            });
+            const relevantRouteSteps = allRouteSteps.filter(rs => rs.route_id === itemRouteId);
 
-            for (const routeStep of routeSteps) {
+            for (const routeStep of relevantRouteSteps) {
               stepsToCreate.push({
                 company_id: companyId,
                 op_id: opId,
