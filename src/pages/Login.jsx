@@ -88,6 +88,9 @@ export default function Login() {
                   placeholder="Seu nome"
                   className="bg-slate-950 border-slate-800 text-white placeholder:text-slate-600 focus-visible:ring-indigo-500 h-11"
                   required
+                  autoCapitalize="words"
+                  autoComplete="name"
+                  spellCheck="false"
                 />
               </div>
             </div>
@@ -104,6 +107,10 @@ export default function Login() {
                 placeholder="seu@email.com"
                 className="pl-10 bg-slate-950 border-slate-800 text-white placeholder:text-slate-600 focus-visible:ring-indigo-500 h-11"
                 required
+                autoCapitalize="none"
+                autoComplete="email"
+                inputMode="email"
+                spellCheck="false"
               />
             </div>
           </div>
