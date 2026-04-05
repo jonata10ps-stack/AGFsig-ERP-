@@ -69,13 +69,20 @@ export default function SerialNumberInput({ item, order, onClose, onSuccess }) {
 
     setSaving(true);
     try {
-      // Criar registro de SerialNumber para cada série (apenas as novas)
-      for (const serial of serialNumbers) {
-        if (serial.isSavedInDB) continue;
+      // Processar cada número de série capturado
+      for (const serialItem of serialNumbers) {
+        if (serialItem.isSavedInDB) continue;
         
-        await base44.entities.SerialNumber.create({
+        // Verificar se esse número de série já existe no banco (mesmo que em estoque)
+        const existing = await base44.entities.SerialNumber.filter({
           company_id: order.company_id,
-          serial_number: serial.serial,
+          serial_number: serialItem.serial,
+          product_id: item.product_id
+        }).then(res => res?.[0]);
+
+        const payload = {
+          company_id: order.company_id,
+          serial_number: serialItem.serial,
           product_id: item.product_id,
           product_sku: item.product_sku,
           product_name: item.product_name,
@@ -86,7 +93,15 @@ export default function SerialNumberInput({ item, order, onClose, onSuccess }) {
           sale_date: new Date().toISOString().split('T')[0],
           warranty_months: 12,
           status: 'VENDIDO',
-        });
+        };
+
+        if (existing) {
+          // Atualizar o registro existente (Realocar/Vender)
+          await base44.entities.SerialNumber.update(existing.id, payload);
+        } else {
+          // Criar novo registro
+          await base44.entities.SerialNumber.create(payload);
+        }
       }
 
       // Os seriais (tabela SerialNumber) já garantem o lastro histórico, não há necessidade

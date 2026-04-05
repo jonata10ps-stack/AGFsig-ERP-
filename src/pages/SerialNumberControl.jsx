@@ -64,6 +64,13 @@ export default function SerialNumberControl() {
 
   const createMutation = useMutation({
     mutationFn: async (data) => {
+      // Verificar se o número de série já existe para este produto na empresa
+      const existing = await base44.entities.SerialNumber.filter({ 
+        company_id: companyId,
+        serial_number: data.serial_number,
+        product_id: data.product_id
+      }).then(res => res?.[0]);
+
       const product = await base44.entities.Product.filter({ id: data.product_id }).then(p => p?.[0]);
       const client = data.client_id ? 
         await base44.entities.Client.filter({ id: data.client_id }).then(c => c?.[0]) : null;
@@ -74,7 +81,7 @@ export default function SerialNumberControl() {
       const warrantyExpires = new Date(warrantyStartDate);
       warrantyExpires.setMonth(warrantyExpires.getMonth() + Number(data.warranty_months || 0));
 
-      return await base44.entities.SerialNumber.create({
+      const payload = {
         ...data,
         company_id: companyId,
         product_sku: product?.sku,
@@ -84,7 +91,15 @@ export default function SerialNumberControl() {
         sale_date: data.sale_date || new Date().toISOString().split('T')[0],
         status: data.status,
         warranty_expires: warrantyExpires.toISOString().split('T')[0]
-      });
+      };
+
+      if (existing) {
+        // Inteligência: Realocar em vez de duplicar
+        return await base44.entities.SerialNumber.update(existing.id, payload);
+      } else {
+        // Novo registro
+        return await base44.entities.SerialNumber.create(payload);
+      }
     },
     onSuccess: () => {
        queryClient.invalidateQueries({ queryKey: ['serial-numbers', companyId] });
