@@ -56,7 +56,12 @@ const createEntityHandler = (entityName) => {
       
       const { data, error } = await query;
       if (error) throw error;
-      return data;
+      
+      // Mapear created_at para created_date para compatibilidade com o legado da UI
+      return (data || []).map(item => ({
+        ...item,
+        created_date: item.created_date || item.created_at || item.registered_date
+      }));
     },
     
     async filter(conditions = {}, sort) {
@@ -87,20 +92,20 @@ const createEntityHandler = (entityName) => {
 
       const { data, error } = await query;
       if (error) throw error;
-      return data;
+      
+      // Mapear created_at para created_date para compatibilidade com o legado da UI
+      return (data || []).map(item => ({
+        ...item,
+        created_date: item.created_date || item.created_at || item.registered_date
+      }));
     },
     
     async create(data) {
       const sanitized = sanitizeData(data, entityName);
       
-      // Adicionar data de criação se não existir (para consistência com legado)
-      const entitiesToSkipCreatedDate = [
-        'BOMDeliveryControl', 'BOMItem', 'BOMVersion', 
-        'ProspectionVisit', 'Notification', 'DailyVehicleLog'
-      ];
-      if (!sanitized.created_date && !entitiesToSkipCreatedDate.includes(entityName)) {
-        sanitized.created_date = new Date().toISOString();
-      }
+      // REMOVER created_date da inserção se o campo gerará erro no schema.
+      // Manteremos apenas created_at gerenciado pelo DB.
+      delete sanitized.created_date;
 
       // Usar fetch direto para evitar o bug do postgrest-js que adiciona
       // aspas duplas nos nomes de colunas no parâmetro "columns" da URL,
@@ -126,19 +131,19 @@ const createEntityHandler = (entityName) => {
       }
       
       const result = await response.json();
-      return Array.isArray(result) ? result[0] : result;
+      const createdItem = Array.isArray(result) ? result[0] : result;
+      
+      // Retornar com created_date injetado para a UI
+      return {
+        ...createdItem,
+        created_date: createdItem?.created_date || createdItem?.created_at || new Date().toISOString()
+      };
     },
     
     async bulkCreate(dataArray) {
       const sanitizedArray = (dataArray || []).map(item => {
         const s = sanitizeData(item, entityName);
-        const entitiesToSkipCreatedDate = [
-          'BOMDeliveryControl', 'BOMItem', 'BOMVersion', 
-          'ProspectionVisit', 'Notification', 'DailyVehicleLog'
-        ];
-        if (!s.created_date && !entitiesToSkipCreatedDate.includes(entityName)) {
-          s.created_date = new Date().toISOString();
-        }
+        delete s.created_date; // Evitar erros de schema no Supabase
         return s;
       });
       const session = (await supabase.auth.getSession()).data?.session;
@@ -161,7 +166,11 @@ const createEntityHandler = (entityName) => {
         throw errorBody;
       }
       
-      return await response.json();
+      const result = await response.json();
+      return (result || []).map(item => ({
+        ...item,
+        created_date: item.created_date || item.created_at || new Date().toISOString()
+      }));
     },
     
     async update(id, data) {
@@ -171,7 +180,10 @@ const createEntityHandler = (entityName) => {
         console.error(`Error updating ${entityName} with id ${id}:`, error);
         throw error;
       }
-      return result;
+      return {
+        ...result,
+        created_date: result?.created_date || result?.created_at || new Date().toISOString()
+      };
     },
     
     async delete(id) {
