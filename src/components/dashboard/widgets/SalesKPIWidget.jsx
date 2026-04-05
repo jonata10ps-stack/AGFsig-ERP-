@@ -13,12 +13,15 @@ export default function SalesKPIWidget() {
   const { companyId, loading: companyLoading } = useCompanyId();
   const { data: orders, isLoading } = useQuery({
     queryKey: ['sales-orders-kpi', companyId],
-    queryFn: () => base44.entities.SalesOrder.filter({ company_id: companyId }, '-created_date', 50),
+    queryFn: () => base44.entities.SalesOrder.filter({ 
+      company_id: companyId,
+      is_shipment: false, // Filtrar apenas pedidos de venda reais
+    }, '-created_at', 200), // Limitar a 200 para evitar timeout e focar no recente
     enabled: !!companyId,
   });
 
-  const validOrders = orders?.filter(o => o.status !== 'CANCELADO') || [];
-  const totalSales = validOrders.reduce((sum, o) => sum + (o.total_amount || 0), 0) || 0;
+  const validOrders = orders?.filter(o => o.status !== 'CANCELADO' && !o.is_shipment) || [];
+  const totalSales = validOrders.reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0) || 0;
   const confirmados = validOrders.filter(o => o.status === 'CONFIRMADO').length || 0;
 
   if (isLoading || companyLoading) {

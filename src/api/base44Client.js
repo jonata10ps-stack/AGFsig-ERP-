@@ -67,9 +67,11 @@ const createEntityHandler = (entityName) => {
       if (error) throw error;
       return mapAuditFields(data) || [];
     },
-    async filter(conditions = {}, sort) {
+    
+    async filter(conditions = {}, sort, limit = 1000) {
       const sanitizedFilters = sanitizeData(conditions, entityName);
-      let query = supabase.from(entityName).select('*');
+      let query = supabase.from(entityName).select('*').limit(limit);
+      
       for (const [key, value] of Object.entries(sanitizedFilters)) {
         if (value !== undefined) {
           if (value === null) query = query.is(key, null);
@@ -87,6 +89,7 @@ const createEntityHandler = (entityName) => {
       if (error) throw error;
       return mapAuditFields(data) || [];
     },
+    
     async create(data) {
       const sanitized = sanitizeData(data, entityName);
       const session = (await supabase.auth.getSession()).data?.session;
