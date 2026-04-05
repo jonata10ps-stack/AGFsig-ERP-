@@ -21,35 +21,47 @@ export default function ProductSearchSelect({
   const [selectedProduct, setSelectedProduct] = useState(null);
   const wrapperRef = useRef(null);
 
-  const { data: products } = useQuery({
-    queryKey: ['products-all', companyId],
-    queryFn: async () => {
-      if (!companyId) return [];
-      // Busca paginada para garantir todos os registros (API limita 5000 por chamada)
-      const PAGE = 5000;
-      let all = [];
-      let skip = 0;
-      while (true) {
-        const page = await base44.entities.Product.filter({ company_id: companyId }, 'sku', PAGE, skip);
-        if (!page || page.length === 0) break;
-        all = all.concat(page);
-        if (page.length < PAGE) break;
-        skip += PAGE;
-      }
-      return all;
-    },
-    enabled: !!companyId,
-    staleTime: 0,
+  const PAGE_SIZE = 50;
+  const [page, setPage] = useState(0);
+
+  // Fetch selected product details if not already in local search results
+  const { data: valueProduct } = useQuery({
+    queryKey: ['product-single', value],
+    queryFn: () => value && companyId ? base44.entities.Product.filter({ id: value }).then(r => r[0]) : null,
+    enabled: !!value && !!companyId,
   });
 
+  const { data: result, isLoading } = useQuery({
+    queryKey: ['products-search', companyId, search, page],
+    queryFn: async () => {
+      if (!companyId) return { data: [], count: 0 };
+      
+      const conditions = { company_id: companyId };
+      const searchFields = search ? ['sku', 'name', 'category'] : [];
+      
+      return base44.entities.Product.queryPaginated(
+        conditions, 
+        'sku', 
+        PAGE_SIZE, 
+        page * PAGE_SIZE,
+        searchFields,
+        search
+      );
+    },
+    enabled: !!companyId && isOpen,
+    staleTime: 30000,
+  });
+
+  const products = result?.data || [];
+  const totalCount = result?.count || 0;
+
   useEffect(() => {
-    if (value && products) {
-      const product = products.find(p => p.id === value);
-      setSelectedProduct(product);
-    } else {
+    if (valueProduct) {
+      setSelectedProduct(valueProduct);
+    } else if (!value) {
       setSelectedProduct(null);
     }
-  }, [value, products]);
+  }, [value, valueProduct]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -61,21 +73,32 @@ export default function ProductSearchSelect({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const PAGE_SIZE = 50;
-  const [page, setPage] = useState(0);
-
   const isSearching = search.trim() !== '';
 
-  const filteredProducts = products?.filter(p =>
-    !isSearching ||
-    p.sku?.toLowerCase().includes(search.toLowerCase()) ||
-    p.name?.toLowerCase().includes(search.toLowerCase())
-  );
+  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
-  const totalPages = filteredProducts ? Math.ceil(filteredProducts.length / PAGE_SIZE) : 0;
-  const pagedProducts = isSearching
-    ? filteredProducts?.slice(0, 99999)
-    : filteredProducts?.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  const pagedProducts = React.useMemo(() => {
+    if (!products || !search) return products;
+    const s = search.toLowerCase();
+    return [...products].sort((a, b) => {
+      const aSku = a.sku?.toLowerCase() || '';
+      const bSku = b.sku?.toLowerCase() || '';
+      const aName = a.name?.toLowerCase() || '';
+      const bName = b.name?.toLowerCase() || '';
+
+      const aExact = aSku === s || aName === s;
+      const bExact = bSku === s || bName === s;
+      if (aExact && !bExact) return -1;
+      if (bExact && !aExact) return 1;
+
+      const aStarts = aSku.startsWith(s) || aName.startsWith(s);
+      const bStarts = bSku.startsWith(s) || bName.startsWith(s);
+      if (aStarts && !bStarts) return -1;
+      if (bStarts && !aStarts) return 1;
+
+      return 0;
+    });
+  }, [products, search]);
 
   const handleSelect = (product) => {
     setSelectedProduct(product);
@@ -155,7 +178,7 @@ export default function ProductSearchSelect({
                 </div>
               </button>
             ))}
-            {!isSearching && totalPages > 1 && (
+            {(isSearching || totalPages > 1) && (
               <div className="flex items-center justify-between px-3 py-2 border-t bg-slate-50 sticky bottom-0">
                 <button
                   type="button"
@@ -166,7 +189,7 @@ export default function ProductSearchSelect({
                   ← Anterior
                 </button>
                 <span className="text-xs text-slate-500">
-                  Pág. {page + 1}/{totalPages} · {filteredProducts?.length} produtos
+                  {isSearching ? `Filtro: ${totalCount} itens` : `Pág. ${page + 1}/${totalPages}`}
                 </span>
                 <button
                   type="button"
@@ -176,11 +199,6 @@ export default function ProductSearchSelect({
                 >
                   Próxima →
                 </button>
-              </div>
-            )}
-            {isSearching && filteredProducts && (
-              <div className="px-3 py-1.5 border-t bg-slate-50 text-xs text-slate-500 text-center">
-                {filteredProducts.length} resultado(s)
               </div>
             )}
           </div>

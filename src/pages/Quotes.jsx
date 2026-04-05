@@ -160,11 +160,35 @@ export default function Quotes() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
 
-  const { data: quotes, isLoading } = useQuery({
-    queryKey: ['quotes', companyId],
-    queryFn: () => companyId ? base44.entities.Quote.filter({ company_id: companyId }, '-created_date') : Promise.resolve([]),
+  const [tablePage, setTablePage] = useState(0);
+  const TABLE_PAGE_SIZE = 50;
+
+  const { data: result, isLoading } = useQuery({
+    queryKey: ['quotes', companyId, tablePage, search, filterStatus],
+    queryFn: async () => {
+      if (!companyId) return { data: [], count: 0 };
+      
+      const conditions = { company_id: companyId };
+      if (filterStatus !== 'all') {
+        conditions.status = filterStatus;
+      }
+
+      const searchFields = search ? ['quote_number', 'client_name', 'client_document'] : [];
+      
+      return base44.entities.Quote.queryPaginated(
+        conditions, 
+        '-created_date', 
+        TABLE_PAGE_SIZE, 
+        tablePage * TABLE_PAGE_SIZE,
+        searchFields,
+        search
+      );
+    },
     enabled: !!companyId,
   });
+
+  const quotes = result?.data || [];
+  const totalCount = result?.count || 0;
 
   const { data: clients } = useQuery({
     queryKey: ['clients', companyId],
@@ -235,12 +259,42 @@ export default function Quotes() {
     },
   });
 
-  const filtered = quotes?.filter(q => {
-    const matchesSearch = q.quote_number?.toLowerCase().includes(search.toLowerCase()) ||
-      q.client_name?.toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = filterStatus === 'all' || q.status === filterStatus;
-    return matchesSearch && matchesStatus;
-  });
+  const totalTablePages = Math.ceil(totalCount / TABLE_PAGE_SIZE);
+
+  const pagedQuotes = React.useMemo(() => {
+    if (!quotes || !search) return quotes;
+    const s = search.toLowerCase();
+    return [...quotes].sort((a, b) => {
+      const aNum = a.quote_number?.toLowerCase() || '';
+      const bNum = b.quote_number?.toLowerCase() || '';
+      const aClient = a.client_name?.toLowerCase() || '';
+      const bClient = b.client_name?.toLowerCase() || '';
+
+      // 1. Exact match
+      const aExact = aNum === s || aClient === s;
+      const bExact = bNum === s || bClient === s;
+      if (aExact && !bExact) return -1;
+      if (bExact && !aExact) return 1;
+
+      // 2. Starts with search string
+      const aStarts = aNum.startsWith(s) || aClient.startsWith(s);
+      const bStarts = bNum.startsWith(s) || bClient.startsWith(s);
+      if (aStarts && !bStarts) return -1;
+      if (bStarts && !aStarts) return 1;
+
+      return 0;
+    });
+  }, [quotes, search]);
+
+  const handleSearchChange = (e) => {
+    setSearch(e.target.value);
+    setTablePage(0);
+  };
+
+  const handleStatusChange = (val) => {
+    setFilterStatus(val);
+    setTablePage(0);
+  };
 
   const formatCurrency = (value) => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);
@@ -267,11 +321,11 @@ export default function Quotes() {
               <Input
                 placeholder="Buscar por número ou cliente..."
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={handleSearchChange}
                 className="pl-10"
               />
             </div>
-            <Select value={filterStatus} onValueChange={setFilterStatus}>
+            <Select value={filterStatus} onValueChange={handleStatusChange}>
               <SelectTrigger className="w-40">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
@@ -294,26 +348,27 @@ export default function Quotes() {
                 <Skeleton key={i} className="h-14 w-full" />
               ))}
             </div>
-          ) : filtered?.length === 0 ? (
+          ) : totalCount === 0 ? (
             <div className="text-center py-12">
               <FileText className="h-12 w-12 mx-auto text-slate-300 mb-4" />
               <p className="text-slate-500">Nenhum orçamento encontrado</p>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Número</TableHead>
-                  <TableHead>Cliente</TableHead>
-                  <TableHead>Data</TableHead>
-                  <TableHead>Entrega</TableHead>
-                  <TableHead className="text-right">Total</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="w-12"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filtered?.map((quote) => (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Número</TableHead>
+                    <TableHead>Cliente</TableHead>
+                    <TableHead>Data</TableHead>
+                    <TableHead>Entrega</TableHead>
+                    <TableHead className="text-right">Total</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="w-12"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {pagedQuotes?.map((quote) => (
                   <TableRow key={quote.id}>
                     <TableCell>
                       <span className="font-mono text-indigo-600 font-medium">
@@ -363,6 +418,23 @@ export default function Quotes() {
                 ))}
               </TableBody>
             </Table>
+            {totalTablePages > 1 && (
+              <div className="flex items-center justify-between px-4 py-3 border-t bg-slate-50">
+                <div className="text-sm text-slate-500">
+                  Exibindo <span className="font-medium">{Math.min(totalCount, tablePage * TABLE_PAGE_SIZE + 1)}-{Math.min(totalCount, (tablePage + 1) * TABLE_PAGE_SIZE)}</span> de <span className="font-medium">{totalCount}</span> orçamentos 
+                  {totalCount > 0 && ` · Pág. ${tablePage + 1}/${totalTablePages}`}
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setTablePage(p => Math.max(0, p - 1))} disabled={tablePage === 0}>
+                    ← Anterior
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => setTablePage(p => Math.min(totalTablePages - 1, p + 1))} disabled={tablePage >= totalTablePages - 1}>
+                    Próxima →
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
           )}
         </CardContent>
       </Card>

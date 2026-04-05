@@ -322,11 +322,35 @@ export default function SalesOrders() {
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [cancelWithOPsConfirm, setCancelWithOPsConfirm] = useState(null);
 
-  const { data: orders, isLoading } = useQuery({
-    queryKey: ['sales-orders', companyId],
-    queryFn: () => companyId ? base44.entities.SalesOrder.listAll({ company_id: companyId }) : Promise.resolve([]),
+  const [tablePage, setTablePage] = useState(0);
+  const TABLE_PAGE_SIZE = 50;
+
+  const { data: result, isLoading } = useQuery({
+    queryKey: ['sales-orders', companyId, tablePage, search, filterStatus],
+    queryFn: async () => {
+      if (!companyId) return { data: [], count: 0 };
+      
+      const conditions = { company_id: companyId };
+      if (filterStatus !== 'all') {
+        conditions.status = filterStatus;
+      }
+
+      const searchFields = search ? ['order_number', 'client_name', 'numero_pedido_externo'] : [];
+      
+      return base44.entities.SalesOrder.queryPaginated(
+        conditions, 
+        '-created_at', 
+        TABLE_PAGE_SIZE, 
+        tablePage * TABLE_PAGE_SIZE,
+        searchFields,
+        search
+      );
+    },
     enabled: !!companyId,
   });
+
+  const orders = result?.data || [];
+  const totalCount = result?.count || 0;
   
   const { data: clients } = useQuery({
     queryKey: ['clients', companyId],
@@ -533,12 +557,44 @@ export default function SalesOrders() {
     }
   };
 
-  const filtered = orders?.filter(o => {
-    const matchesSearch = o.order_number?.toLowerCase().includes(search.toLowerCase()) ||
-      o.client_name?.toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = filterStatus === 'all' || o.status === filterStatus;
-    return matchesSearch && matchesStatus;
-  });
+  const totalTablePages = Math.ceil(totalCount / TABLE_PAGE_SIZE);
+
+  const pagedOrders = React.useMemo(() => {
+    if (!orders || !search) return orders;
+    const s = search.toLowerCase();
+    return [...orders].sort((a, b) => {
+      const aNum = a.order_number?.toLowerCase() || '';
+      const bNum = b.order_number?.toLowerCase() || '';
+      const aExt = a.numero_pedido_externo?.toLowerCase() || '';
+      const bExt = b.numero_pedido_externo?.toLowerCase() || '';
+      const aClient = a.client_name?.toLowerCase() || '';
+      const bClient = b.client_name?.toLowerCase() || '';
+
+      // 1. Exact match
+      const aExact = aNum === s || aExt === s;
+      const bExact = bNum === s || bExt === s;
+      if (aExact && !bExact) return -1;
+      if (bExact && !aExact) return 1;
+
+      // 2. Starts with search string
+      const aStarts = aNum.startsWith(s) || aExt.startsWith(s);
+      const bStarts = bNum.startsWith(s) || bExt.startsWith(s);
+      if (aStarts && !bStarts) return -1;
+      if (bStarts && !aStarts) return 1;
+
+      return 0;
+    });
+  }, [orders, search]);
+
+  const handleSearchChange = (e) => {
+    setSearch(e.target.value);
+    setTablePage(0);
+  };
+
+  const handleStatusChange = (val) => {
+    setFilterStatus(val);
+    setTablePage(0);
+  };
 
   const formatCurrency = (value) => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);
@@ -565,11 +621,11 @@ export default function SalesOrders() {
               <Input
                 placeholder="Buscar por número ou cliente..."
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={handleSearchChange}
                 className="pl-10"
               />
             </div>
-            <Select value={filterStatus} onValueChange={setFilterStatus}>
+            <Select value={filterStatus} onValueChange={handleStatusChange}>
               <SelectTrigger className="w-40">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
@@ -592,13 +648,14 @@ export default function SalesOrders() {
                 <Skeleton key={i} className="h-14 w-full" />
               ))}
             </div>
-          ) : filtered?.length === 0 ? (
+          ) : totalCount === 0 ? (
             <div className="text-center py-12">
               <ShoppingCart className="h-12 w-12 mx-auto text-slate-300 mb-4" />
               <p className="text-slate-500">Nenhum pedido encontrado</p>
             </div>
           ) : (
-            <Table>
+            <div className="overflow-x-auto">
+              <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Número</TableHead>
@@ -611,7 +668,7 @@ export default function SalesOrders() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered?.map((order) => (
+                {pagedOrders?.map((order) => (
                   <TableRow key={order.id}>
                     <TableCell>
                       <div>
@@ -695,6 +752,23 @@ export default function SalesOrders() {
                 ))}
               </TableBody>
             </Table>
+              {totalTablePages > 1 && (
+                <div className="flex items-center justify-between px-4 py-3 border-t bg-slate-50">
+                  <div className="text-sm text-slate-500">
+                    Exibindo <span className="font-medium">{Math.min(totalCount, tablePage * TABLE_PAGE_SIZE + 1)}-{Math.min(totalCount, (tablePage + 1) * TABLE_PAGE_SIZE)}</span> de <span className="font-medium">{totalCount}</span> pedidos 
+                    {totalCount > 0 && ` · Pág. ${tablePage + 1}/${totalTablePages}`}
+                  </div>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={() => setTablePage(p => Math.max(0, p - 1))} disabled={tablePage === 0}>
+                      ← Anterior
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => setTablePage(p => Math.min(totalTablePages - 1, p + 1))} disabled={tablePage >= totalTablePages - 1}>
+                      Próxima →
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
           )}
         </CardContent>
       </Card>

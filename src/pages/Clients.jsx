@@ -263,11 +263,28 @@ export default function Clients() {
   const [importFile, setImportFile] = useState(null);
   const [importing, setImporting] = useState(false);
 
-  const { data: clients, isLoading } = useQuery({
-    queryKey: ['clients', companyId],
-    queryFn: () => companyId ? base44.entities.Client.listAll({ company_id: companyId }, '-created_date') : Promise.resolve([]),
+  const [tablePage, setTablePage] = useState(0);
+  const TABLE_PAGE_SIZE = 50;
+
+  const { data: result, isLoading } = useQuery({
+    queryKey: ['clients', companyId, tablePage, search],
+    queryFn: async () => {
+      if (!companyId) return { data: [], count: 0 };
+      const searchFields = search ? ['name', 'document', 'code', 'email'] : [];
+      return base44.entities.Client.queryPaginated(
+        { company_id: companyId },
+        '-created_date',
+        TABLE_PAGE_SIZE,
+        tablePage * TABLE_PAGE_SIZE,
+        searchFields,
+        search
+      );
+    },
     enabled: !!companyId,
   });
+
+  const clients = result?.data || [];
+  const totalCount = result?.count || 0;
 
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.Client.create({ ...data, company_id: companyId }),
@@ -318,12 +335,39 @@ export default function Clients() {
     setDialogOpen(true);
   };
 
-  const filteredClients = clients?.filter(c =>
-    c.name?.toLowerCase().includes(search.toLowerCase()) ||
-    c.code?.toLowerCase().includes(search.toLowerCase()) ||
-    c.document?.includes(search) ||
-    c.email?.toLowerCase().includes(search.toLowerCase())
-  ).sort((a, b) => (a.code || '').localeCompare(b.code || '', undefined, { numeric: true }));
+  const totalTablePages = Math.ceil(totalCount / TABLE_PAGE_SIZE);
+
+  const pagedClients = React.useMemo(() => {
+    if (!clients || !search) return clients;
+    const s = search.toLowerCase();
+    return [...clients].sort((a, b) => {
+      const aName = a.name?.toLowerCase() || '';
+      const bName = b.name?.toLowerCase() || '';
+      const aDoc = a.document?.toLowerCase() || '';
+      const bDoc = b.document?.toLowerCase() || '';
+      const aCode = a.code?.toLowerCase() || '';
+      const bCode = b.code?.toLowerCase() || '';
+
+      // 1. Exact match in name, document or code
+      const aExact = aName === s || aDoc === s || aCode === s;
+      const bExact = bName === s || bDoc === s || bCode === s;
+      if (aExact && !bExact) return -1;
+      if (bExact && !aExact) return 1;
+
+      // 2. Starts with search string
+      const aStarts = aName.startsWith(s) || aDoc.startsWith(s) || aCode.startsWith(s);
+      const bStarts = bName.startsWith(s) || bDoc.startsWith(s) || bCode.startsWith(s);
+      if (aStarts && !bStarts) return -1;
+      if (bStarts && !aStarts) return 1;
+
+      return 0;
+    });
+  }, [clients, search]);
+
+  const handleSearchChange = (e) => {
+    setSearch(e.target.value);
+    setTablePage(0);
+  };
 
   const formatCurrency = (value) => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);
@@ -450,7 +494,7 @@ export default function Clients() {
             <Input
               placeholder="Buscar por nome, código, documento ou e-mail..."
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={handleSearchChange}
               className="pl-10"
             />
           </div>
@@ -469,7 +513,7 @@ export default function Clients() {
                 </div>
               ))}
             </div>
-          ) : filteredClients?.length === 0 ? (
+          ) : totalCount === 0 ? (
             <div className="text-center py-12">
               <Users className="h-12 w-12 mx-auto text-slate-300 mb-4" />
               <p className="text-slate-500">Nenhum cliente encontrado</p>
@@ -494,7 +538,7 @@ export default function Clients() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredClients?.map((client) => (
+                  {pagedClients?.map((client) => (
                     <TableRow key={client.id}>
                       <TableCell className="font-mono text-indigo-600">
                         {client.code || '-'}
@@ -554,6 +598,22 @@ export default function Clients() {
                   ))}
                 </TableBody>
               </Table>
+              {totalTablePages > 1 && (
+                <div className="flex items-center justify-between px-4 py-3 border-t bg-slate-50">
+                  <div className="text-sm text-slate-500">
+                    Exibindo <span className="font-medium">{Math.min(totalCount, tablePage * TABLE_PAGE_SIZE + 1)}-{Math.min(totalCount, (tablePage + 1) * TABLE_PAGE_SIZE)}</span> de <span className="font-medium">{totalCount}</span> itens 
+                    {totalCount > 0 && ` · Pág. ${tablePage + 1}/${totalTablePages}`}
+                  </div>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={() => setTablePage(p => Math.max(0, p - 1))} disabled={tablePage === 0}>
+                      ← Anterior
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => setTablePage(p => Math.min(totalTablePages - 1, p + 1))} disabled={tablePage >= totalTablePages - 1}>
+                      Próxima →
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </CardContent>
