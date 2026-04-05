@@ -56,35 +56,35 @@ const mapAuditFields = (data) => {
 const createEntityHandler = (entityName) => {
   return {
     async list(sort = '-created_date', limit = 1000, skip = 0) {
-      let query = supabase.from(entityName).select('*');
-      if (limit > 0) {
-        query = query.range(skip, skip + limit - 1);
-      }
-      if (typeof sort === 'string') {
-        const isDesc = sort.startsWith('-');
-        const column = isDesc ? sort.substring(1) : sort;
-        const sortColumn = (column === 'created_date' || column === 'registered_date' || column === 'created_at') ? 'created_at' : column;
-        query = query.order(sortColumn, { ascending: !isDesc });
-      }
-      const { data, error } = await query;
-      if (error) throw error;
-      return mapAuditFields(data) || [];
+      const { data } = await this.queryPaginated({}, sort, limit, skip);
+      return data;
     },
     
     async filter(conditions = {}, sort, limit = 1000, skip = 0) {
+      const { data } = await this.queryPaginated(conditions, sort, limit, skip);
+      return data;
+    },
+
+    async queryPaginated(conditions = {}, sort, limit = 1000, skip = 0, searchFields = [], searchString = '') {
       const sanitizedFilters = sanitizeData(conditions, entityName);
-      let query = supabase.from(entityName).select('*');
+      let query = supabase.from(entityName).select('*', { count: 'exact' });
       
-      // Apply filters first
+      // Apply filters
       for (const [key, value] of Object.entries(sanitizedFilters)) {
         if (value !== undefined) {
           if (value === null) query = query.is(key, null);
           else if (Array.isArray(value)) query = query.in(key, value);
+          else if (typeof value === 'object' && value?.like) query = query.ilike(key, value.like);
           else query = query.eq(key, value);
         }
       }
 
-      // Apply sorting
+      // Apply multi-column search
+      if (searchString && searchFields.length > 0) {
+        const orConditions = searchFields.map(field => `${field}.ilike.%${searchString}%`).join(',');
+        query = query.or(orConditions);
+      }
+
       if (typeof sort === 'string') {
         const isDesc = sort.startsWith('-');
         const column = isDesc ? sort.substring(1) : sort;
@@ -92,14 +92,13 @@ const createEntityHandler = (entityName) => {
         query = query.order(sortColumn, { ascending: !isDesc });
       }
 
-      // Apply range last (PostgREST best practice)
       if (limit > 0) {
         query = query.range(skip, skip + limit - 1);
       }
       
-      const { data, error } = await query;
+      const { data, error, count } = await query;
       if (error) throw error;
-      return mapAuditFields(data) || [];
+      return { data: mapAuditFields(data) || [], count: count || 0 };
     },
 
     async listAll(conditions = {}, sort) {
@@ -110,14 +109,14 @@ const createEntityHandler = (entityName) => {
 
       while (hasMore) {
         console.info(`[base44] Fetching ${entityName} - Skip: ${currentSkip}`);
-        const page = await this.filter(conditions, sort, CHUNK_SIZE, currentSkip);
+        const { data: page, count } = await this.queryPaginated(conditions, sort, CHUNK_SIZE, currentSkip);
         
         if (!page || page.length === 0) {
           hasMore = false;
         } else {
           allData = [...allData, ...page];
-          console.info(`[base44] Found ${page.length} items (Total so far: ${allData.length})`);
-          if (page.length < CHUNK_SIZE) {
+          console.info(`[base44] Found ${page.length} items (Total so far: ${allData.length} of ${count})`);
+          if (page.length < CHUNK_SIZE || allData.length >= count) {
             hasMore = false;
           } else {
             currentSkip += CHUNK_SIZE;

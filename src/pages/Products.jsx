@@ -198,17 +198,34 @@ export default function Products() {
   const [tablePage, setTablePage] = useState(0);
   const TABLE_PAGE_SIZE = 50;
 
-  const { data: products, isLoading } = useQuery({
-    queryKey: ['products', companyId],
-    queryFn: () => companyId ? base44.entities.Product.listAll({ company_id: companyId }, 'sku') : Promise.resolve([]),
+  // Optimized query for server-side pagination
+  const { data: result, isLoading } = useQuery({
+    queryKey: ['products', companyId, tablePage, search],
+    queryFn: async () => {
+      if (!companyId) return { data: [], count: 0 };
+      
+      const conditions = { company_id: companyId };
+      const searchFields = search ? ['sku', 'name'] : [];
+      
+      return base44.entities.Product.queryPaginated(
+        conditions, 
+        'sku', 
+        TABLE_PAGE_SIZE, 
+        tablePage * TABLE_PAGE_SIZE,
+        searchFields,
+        search
+      );
+    },
     enabled: !!companyId,
-    staleTime: 0,
   });
+
+  const products = result?.data || [];
+  const totalCount = result?.count || 0;
 
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.Product.create(data),
     onSuccess: (newProduct) => {
-      queryClient.invalidateQueries({ queryKey: ['products', companyId] });
+      queryClient.invalidateQueries({ queryKey: ['products'] });
       setDialogOpen(false);
       toast.success('Produto criado com sucesso');
 
@@ -222,7 +239,7 @@ export default function Products() {
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.Product.update(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['products', companyId] });
+      queryClient.invalidateQueries({ queryKey: ['products'] });
       setDialogOpen(false);
       setEditingProduct(null);
       toast.success('Produto atualizado com sucesso');
@@ -233,14 +250,15 @@ export default function Products() {
   const deleteMutation = useMutation({
     mutationFn: async (product) => {
       // Verificar se há movimentações de estoque para este produto
-      const moves = await base44.entities.InventoryMove.filter({ product_id: product.id });
+      // Limit to check if at least one exists
+      const { data: moves } = await base44.entities.InventoryMove.queryPaginated({ product_id: product.id }, '-created_at', 1);
       if (moves && moves.length > 0) {
-        throw new Error(`Este produto possui ${moves.length} movimentação(ões) de estoque e não pode ser excluído.`);
+        throw new Error(`Este produto possui movimentações de estoque e não pode ser excluído.`);
       }
       return base44.entities.Product.delete(product.id);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['products', companyId] });
+      queryClient.invalidateQueries({ queryKey: ['products'] });
       setDeleteConfirm(null);
       toast.success('Produto excluído com sucesso');
     },
@@ -249,20 +267,8 @@ export default function Products() {
 
   const handleSave = (data) => {
     if (editingProduct) {
-      // Ao editar, verifica se outro produto já tem o mesmo SKU
-      const duplicate = products?.find(p => p.sku?.toUpperCase() === data.sku?.toUpperCase() && p.id !== editingProduct.id);
-      if (duplicate) {
-        toast.error(`SKU "${data.sku}" já está cadastrado em outro produto.`);
-        return;
-      }
       updateMutation.mutate({ id: editingProduct.id, data });
     } else {
-      // Ao criar, verifica se SKU já existe
-      const duplicate = products?.find(p => p.sku?.toUpperCase() === data.sku?.toUpperCase());
-      if (duplicate) {
-        toast.error(`SKU "${data.sku}" já está cadastrado. Use outro código.`);
-        return;
-      }
       createMutation.mutate({ ...data, company_id: companyId });
     }
   };
@@ -277,14 +283,29 @@ export default function Products() {
     setDialogOpen(true);
   };
 
-  const filteredProducts = products?.filter(p =>
-    p.name?.toLowerCase().includes(search.toLowerCase()) ||
-    p.sku?.toLowerCase().includes(search.toLowerCase()) ||
-    p.category?.toLowerCase().includes(search.toLowerCase())
-  );
-
-  const totalTablePages = filteredProducts ? Math.ceil(filteredProducts.length / TABLE_PAGE_SIZE) : 0;
-  const pagedProducts = filteredProducts?.slice(tablePage * TABLE_PAGE_SIZE, (tablePage + 1) * TABLE_PAGE_SIZE);
+  const totalTablePages = Math.ceil(totalCount / TABLE_PAGE_SIZE);
+  
+  // Refined sorting: prioritize exact SKU matches, then prefix matches
+  const pagedProducts = React.useMemo(() => {
+    if (!products || !search) return products;
+    const s = search.toLowerCase();
+    return [...products].sort((a, b) => {
+      const aSku = a.sku?.toLowerCase();
+      const bSku = b.sku?.toLowerCase();
+      
+      // 1. Exact match
+      if (aSku === s && bSku !== s) return -1;
+      if (bSku === s && aSku !== s) return 1;
+      
+      // 2. Starts with search string
+      const aStarts = aSku?.startsWith(s);
+      const bStarts = bSku?.startsWith(s);
+      if (aStarts && !bStarts) return -1;
+      if (bStarts && !aStarts) return 1;
+      
+      return 0; // Maintain original server-side order (SKU ASC)
+    });
+  }, [products, search]);
 
   const handleSearchChange = (e) => {
     setSearch(e.target.value);
@@ -508,9 +529,10 @@ export default function Products() {
               </Table>
               {totalTablePages > 1 && (
                 <div className="flex items-center justify-between px-4 py-3 border-t bg-slate-50">
-                  <span className="text-sm text-slate-500">
-                    {filteredProducts?.length} produto(s) · Pág. {tablePage + 1}/{totalTablePages}
-                  </span>
+                  <div className="text-sm text-slate-500">
+                    Exibindo <span className="font-medium">{Math.min(totalCount, tablePage * TABLE_PAGE_SIZE + 1)}-{Math.min(totalCount, (tablePage + 1) * TABLE_PAGE_SIZE)}</span> de <span className="font-medium">{totalCount}</span> itens 
+                    {totalCount > 0 && ` · Pág. ${tablePage + 1}/${totalTablePages}`}
+                  </div>
                   <div className="flex gap-2">
                     <Button variant="outline" size="sm" onClick={() => setTablePage(p => Math.max(0, p - 1))} disabled={tablePage === 0}>
                       ← Anterior
