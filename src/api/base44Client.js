@@ -2,8 +2,9 @@ import { createClient } from '@supabase/supabase-js';
 
 // Setup connection to Supabase
 // Chaves configuradas via arquivo .env
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+// Fallback para ambientes que não suportam import.meta.env (ex: testes node)
+const supabaseUrl = import.meta.env?.VITE_SUPABASE_URL || '';
+const supabaseKey = import.meta.env?.VITE_SUPABASE_ANON_KEY || '';
 
 if (!supabaseUrl || supabaseUrl.includes('SEU_PROJECT_REF')) {
   console.warn('⚠️ ATENÇÃO: VITE_SUPABASE_URL não configurada no arquivo .env. Acesse app.supabase.com → Settings → Data API → Project URL para obter a URL do projeto.');
@@ -15,10 +16,9 @@ if (!supabaseKey) {
 export const supabase = createClient(supabaseUrl, supabaseKey);
 
 // O admin key deve ser evitado no navegador por questões de segurança.
-// Para operações administrativas, utilize o fluxo de pré-autorização.
 export const supabaseAdmin = null;
 
-// Função para limpar dados: converte strings vazias em null (útil para campos UUID no Postgres)
+// Função para limpar dados: converte strings vazias em null
 const sanitizeData = (data, entityName) => {
   if (!data || typeof data !== 'object') return data;
   
@@ -35,6 +35,11 @@ const sanitizeData = (data, entityName) => {
     delete sanitized.company_id;
   }
   
+  // Remover campos de auditoria antes de enviar para o banco
+  delete sanitized.created_date;
+  delete sanitized.created_at;
+  delete sanitized.registered_date;
+  
   return sanitized;
 };
 
@@ -42,14 +47,11 @@ const sanitizeData = (data, entityName) => {
 const createEntityHandler = (entityName) => {
   return {
     async list(sort = '-created_date', limit = 1000) {
-      // Handle Supabase select
       let query = supabase.from(entityName).select('*').limit(limit);
       
-      // Attempt rudimentary sorting based on string format
       if (typeof sort === 'string') {
         const isDesc = sort.startsWith('-');
         const column = isDesc ? sort.substring(1) : sort;
-        // Fallback para created_at se o campo for de auditoria padrão
         const sortColumn = (column === 'created_date' || column === 'registered_date' || column === 'created_at') ? 'created_at' : column;
         query = query.order(sortColumn, { ascending: !isDesc });
       }
@@ -57,18 +59,21 @@ const createEntityHandler = (entityName) => {
       const { data, error } = await query;
       if (error) throw error;
       
-      // Mapear created_at para created_date para compatibilidade com o legado da UI
-      return (data || []).map(item => ({
-        ...item,
-        created_date: item.created_date || item.created_at || item.registered_date
-      }));
+      if (data && Array.isArray(data)) {
+        for (let i = 0; i < data.length; i++) {
+          const item = data[i];
+          if (item && !item.created_date) {
+            item.created_date = item.created_at || item.registered_date;
+          }
+        }
+      }
+      return data || [];
     },
     
     async filter(conditions = {}, sort) {
       const sanitizedFilters = sanitizeData(conditions, entityName);
       let query = supabase.from(entityName).select('*');
       
-      // Apply exact matches or IN matches for arrays
       for (const [key, value] of Object.entries(sanitizedFilters)) {
         if (value !== undefined) {
           if (value === null) {
@@ -81,11 +86,9 @@ const createEntityHandler = (entityName) => {
         }
       }
 
-      // Sorting
       if (typeof sort === 'string') {
         const isDesc = sort.startsWith('-');
         const column = isDesc ? sort.substring(1) : sort;
-        // Fallback para created_at se o campo for de auditoria padrão
         const sortColumn = (column === 'created_date' || column === 'registered_date' || column === 'created_at') ? 'created_at' : column;
         query = query.order(sortColumn, { ascending: !isDesc });
       }
@@ -93,23 +96,20 @@ const createEntityHandler = (entityName) => {
       const { data, error } = await query;
       if (error) throw error;
       
-      // Mapear created_at para created_date para compatibilidade com o legado da UI
-      return (data || []).map(item => ({
-        ...item,
-        created_date: item.created_date || item.created_at || item.registered_date
-      }));
+      if (data && Array.isArray(data)) {
+        for (let i = 0; i < data.length; i++) {
+          const item = data[i];
+          if (item && !item.created_date) {
+            item.created_date = item.created_at || item.registered_date;
+          }
+        }
+      }
+      return data || [];
     },
     
     async create(data) {
       const sanitized = sanitizeData(data, entityName);
       
-      // REMOVER created_date da inserção se o campo gerará erro no schema.
-      // Manteremos apenas created_at gerenciado pelo DB.
-      delete sanitized.created_date;
-
-      // Usar fetch direto para evitar o bug do postgrest-js que adiciona
-      // aspas duplas nos nomes de colunas no parâmetro "columns" da URL,
-      // causando erro 400 no PostgREST.
       const session = (await supabase.auth.getSession()).data?.session;
       const token = session?.access_token || supabaseKey;
       
@@ -132,20 +132,14 @@ const createEntityHandler = (entityName) => {
       
       const result = await response.json();
       const createdItem = Array.isArray(result) ? result[0] : result;
-      
-      // Retornar com created_date injetado para a UI
-      return {
-        ...createdItem,
-        created_date: createdItem?.created_date || createdItem?.created_at || new Date().toISOString()
-      };
+      if (createdItem && !createdItem.created_date) {
+        createdItem.created_date = createdItem.created_at || new Date().toISOString();
+      }
+      return createdItem;
     },
     
     async bulkCreate(dataArray) {
-      const sanitizedArray = (dataArray || []).map(item => {
-        const s = sanitizeData(item, entityName);
-        delete s.created_date; // Evitar erros de schema no Supabase
-        return s;
-      });
+      const sanitizedArray = (dataArray || []).map(item => sanitizeData(item, entityName));
       const session = (await supabase.auth.getSession()).data?.session;
       const token = session?.access_token || supabaseKey;
       
@@ -167,10 +161,15 @@ const createEntityHandler = (entityName) => {
       }
       
       const result = await response.json();
-      return (result || []).map(item => ({
-        ...item,
-        created_date: item.created_date || item.created_at || new Date().toISOString()
-      }));
+      if (result && Array.isArray(result)) {
+        for (let i = 0; i < result.length; i++) {
+          const item = result[i];
+          if (item && !item.created_date) {
+            item.created_date = item.created_at || new Date().toISOString();
+          }
+        }
+      }
+      return result || [];
     },
     
     async update(id, data) {
@@ -180,10 +179,10 @@ const createEntityHandler = (entityName) => {
         console.error(`Error updating ${entityName} with id ${id}:`, error);
         throw error;
       }
-      return {
-        ...result,
-        created_date: result?.created_date || result?.created_at || new Date().toISOString()
-      };
+      if (result && !result.created_date) {
+        result.created_date = result.created_at || new Date().toISOString();
+      }
+      return result;
     },
     
     async delete(id) {
@@ -192,25 +191,19 @@ const createEntityHandler = (entityName) => {
       return true;
     },
 
-    // Mock subscription to avoid crashes
     subscribe(callback) {
-      console.log(`[Mock] Inscrito em eventos da entidade: ${entityName}`);
-      // Return a no-op unsubscribe function
-      return () => console.log(`[Mock] Desinscrito de: ${entityName}`);
+      return () => {};
     }
   };
 };
 
-// Smart proxy that catches ANY entity name the app requests
 const entitiesProxy = new Proxy({}, {
   get(target, prop) {
     if (typeof prop !== 'string') return Reflect.get(target, prop);
-    // When the app requests base44.entities.Product, we return a Supabase handler for "Product"
     return createEntityHandler(prop);
   }
 });
 
-// The exported base44 object that mimics the base44 SDK
 export const base44 = {
   entities: entitiesProxy,
   functions: {
@@ -218,62 +211,45 @@ export const base44 = {
       const { data, error } = await supabase.functions.invoke(functionName, {
         body: body
       });
-      if (error) {
-        console.error(`Error invoking function ${functionName}:`, error);
-        throw error;
-      }
+      if (error) throw error;
       return { data };
     }
   },
   auth: {
-    me: async () => {
-      const { data: { session }, error } = await supabase.auth.getSession();
-      if (error || !session) throw new Error('Não autenticado');
+    me: (function() {
+      let cachedUser = null;
+      let lastFetch = 0;
+      const CACHE_TTL = 30000;
 
-      // Tenta recuperar dados extras do usuário (caso exista na tabela User)
-      const { data: profile } = await supabase.from('User').select('*').eq('email', session.user.email).maybeSingle();
+      return async () => {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        if (error || !session) throw new Error('Não autenticado');
 
-      return {
-        id: session.user.id,
-        email: session.user.email,
-        full_name: profile?.full_name || session.user.user_metadata?.full_name || 'Autenticado(a)',
-        role: profile?.role || 'admin', // Força 'admin' para liberar todas as telas como master
-        // Fallback para uma company genérica caso o usuário não tenha o company_id no perfil
-        company_id: profile?.company_id || '00000000-0000-0000-0000-000000000000',
-        current_company_id: profile?.company_id || '00000000-0000-0000-0000-000000000000',
-        account_status: 'APROVADO',
-        active: true
-      };
-    },
-    updateMe: async (data) => {
-      console.log('updateMe not fully implemented for Auth yet', data);
-      return { success: true };
-    },
-    signUp: async (email, password, metadata = {}) => {
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: metadata
+        const now = Date.now();
+        if (cachedUser && (now - lastFetch < CACHE_TTL)) {
+          return cachedUser;
         }
-      });
-      if (error) throw error;
-      return data;
-    },
-    signIn: async (email, password) => {
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) throw error;
-      return data;
-    },
+
+        const { data: profile } = await supabase.from('User').select('*').eq('email', session.user.email).maybeSingle();
+
+        cachedUser = {
+          id: session.user.id,
+          email: session.user.email,
+          full_name: profile?.full_name || session.user.user_metadata?.full_name || 'Autenticado(a)',
+          role: profile?.role || 'admin',
+          company_id: profile?.company_id || '00000000-0000-0000-0000-000000000000',
+          current_company_id: profile?.company_id || '00000000-0000-0000-0000-000000000000',
+          account_status: 'APROVADO',
+          active: true
+        };
+        
+        lastFetch = now;
+        return cachedUser;
+      };
+    })(),
     logout: async () => {
       await supabase.auth.signOut();
       window.location.href = '/login';
-    }
-  },
-  appLogs: {
-    logUserInApp: async (pageName) => {
-      console.log(`[Mock Log] Usuário acessou a página: ${pageName}`);
-      return true;
     }
   },
   integrations: {
