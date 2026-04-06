@@ -85,7 +85,8 @@ export default function ServiceRequests() {
   const createMutation = useMutation({
     mutationFn: async (data) => {
       const requestNumber = `SR-${Date.now().toString().slice(-8)}`;
-      const client = clients?.find(c => c.id === data.client_id);
+      const client = clients?.find(c => c.id === data.client_id) || 
+        await base44.entities.Client.filter({ id: data.client_id }).then(r => r?.[0]);
       const order = orders?.find(o => o.id === data.order_id);
       const product = await base44.entities.Product.filter({ id: data.product_id }).then(p => p?.[0]);
 
@@ -93,7 +94,7 @@ export default function ServiceRequests() {
          company_id: companyId,
          ...data,
          request_number: requestNumber,
-         client_name: client?.name,
+         client_name: client?.name || client?.client_name,
          order_number: order?.order_number,
          product_name: product?.name,
          status: 'ABERTA'
