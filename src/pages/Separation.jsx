@@ -231,6 +231,19 @@ export default function Separation() {
   });
 
   const handleSeparateRequest = async (item, requiredQty, component) => {
+     // Se não movimenta estoque, separar tudo de uma vez sem validar saldo ou abrir diálogo de mapeamento
+     if (selectedOrder.moves_stock === false) {
+        separateItemMutation.mutate({ 
+           item, 
+           qty: requiredQty, 
+           from_warehouse_id: null, 
+           from_location_id: 'N/A',
+           to_warehouse_id: null,
+           to_location_id: 'Doca'
+        });
+        return;
+     }
+
      // Pre-flight check de saldo global do banco de dados
      const prodId = component ? component.component_id : item.product_id;
      

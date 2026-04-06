@@ -62,8 +62,7 @@ function ItemForm({ item, products, onSave, onCancel, loading }) {
     fulfill_mode: 'AUTO'
   });
 
-  const handleProductChange = (productId) => {
-    const product = products?.find(p => p.id === productId);
+  const handleProductChange = (productId, product) => {
     setForm({
       ...form,
       product_id: productId,
@@ -526,10 +525,20 @@ export default function SalesOrderDetail() {
            )}
           {order.status === 'CONFIRMADO' && (
             <>
-              <Button onClick={() => setReservationDialogOpen(true)} className="bg-indigo-600 hover:bg-indigo-700">
-                <Package className="h-4 w-4 mr-2" />
-                Reservar Estoque
-              </Button>
+              {order.moves_stock !== false && (
+                <Button onClick={() => setReservationDialogOpen(true)} className="bg-indigo-600 hover:bg-indigo-700">
+                  <Package className="h-4 w-4 mr-2" />
+                  Reservar Estoque
+                </Button>
+              )}
+              {order.moves_stock === false && (
+                <Link to={createPageUrl(`Separation?order=${orderId}`)}>
+                  <Button className="bg-emerald-600 hover:bg-emerald-700">
+                    <Package className="h-4 w-4 mr-2" />
+                    Iniciar Separação
+                  </Button>
+                </Link>
+              )}
               <Button onClick={() => setCancelDialogOpen(true)} variant="destructive">
                 <Trash2 className="h-4 w-4 mr-2" />
                 Cancelar Pedido
