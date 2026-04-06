@@ -49,8 +49,7 @@ function NewQuoteForm({ clients, sellers, paymentConditions, onSave, onCancel, l
     notes: ''
   });
 
-  const handleClientChange = (clientId) => {
-    const client = clients?.find(c => c.id === clientId);
+  const handleClientChange = (clientId, client) => {
     setForm({ ...form, client_id: clientId, client_name: client?.name || '' });
   };
 

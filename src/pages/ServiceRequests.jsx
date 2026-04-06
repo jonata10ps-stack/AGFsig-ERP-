@@ -399,7 +399,7 @@ export default function ServiceRequests() {
             <ClientSearchSelect
                label="Cliente *"
                value={form.client_id}
-               onSelect={(v) => setForm({ ...form, client_id: v })}
+               onSelect={(id, client) => setForm({ ...form, client_id: id, client_name: client?.name || '' })}
                placeholder="Digite nome, código ou documento..."
                required
              />
@@ -453,7 +453,12 @@ export default function ServiceRequests() {
             <ProductSearchSelect
               label="Produto"
               value={form.product_id}
-              onSelect={(v) => setForm({ ...form, product_id: v })}
+              onSelect={(id, product) => setForm({ 
+                ...form, 
+                product_id: id, 
+                product_sku: product?.sku || '', 
+                product_name: product?.name || '' 
+              })}
             />
 
             <div className="space-y-2">

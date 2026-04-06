@@ -526,11 +526,11 @@ export default function SalesAppointments() {
                 <Label>Cliente Cadastrado *</Label>
                 <ClientSearchSelect
                   value={formData.client_id || ''}
-                  onChange={(clientId, clientName) => {
+                  onSelect={(clientId, client) => {
                     setFormData({ 
                       ...formData, 
                       client_id: clientId || '', 
-                      client_name: clientName || '',
+                      client_name: client?.name || '',
                       prospective_client_name: ''
                     });
                   }}

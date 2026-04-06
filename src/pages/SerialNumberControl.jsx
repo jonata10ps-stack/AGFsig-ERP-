@@ -377,7 +377,12 @@ export default function SerialNumberControl() {
             <ProductSearchSelect
               label="Produto"
               value={form.product_id}
-              onSelect={(v) => setForm({ ...form, product_id: v })}
+              onSelect={(id, product) => setForm({ 
+                ...form, 
+                product_id: id, 
+                product_sku: product?.sku || '', 
+                product_name: product?.name || '' 
+              })}
               required={!editingId}
               disabled={!!editingId}
             />
@@ -385,7 +390,7 @@ export default function SerialNumberControl() {
             <ClientSearchSelect
               label="Cliente"
               value={form.client_id}
-              onSelect={(v) => setForm({ ...form, client_id: v })}
+              onSelect={(id, client) => setForm({ ...form, client_id: id, client_name: client?.name || '' })}
               placeholder="Deixe em branco se estiver em estoque"
             />
 

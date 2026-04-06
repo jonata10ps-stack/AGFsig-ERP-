@@ -515,6 +515,7 @@ export default function StorageAllocation() {
           </CardHeader>
           <CardContent className="space-y-4">
             <QRScanner 
+              id="scanner-product"
               onScan={(code) => {
                 const item = pendingItems?.find(i => i.product_sku === code);
                 if (item) {
@@ -626,6 +627,7 @@ export default function StorageAllocation() {
             ) : (
               <>
                 <QRScanner 
+                  id="scanner-location"
                   onScan={(code) => {
                     const location = locations?.find(l => l.barcode === code);
                     if (!location) {
@@ -649,65 +651,84 @@ export default function StorageAllocation() {
                   <Separator className="flex-1" />
                 </div>
 
-                {!selectedItem ? (
-                   <div className="text-center py-4 text-slate-500">
-                     <MapPin className="h-6 w-6 mx-auto text-slate-300 mb-2" />
-                     <p className="text-xs">Escaneie ou selecione um produto</p>
-                   </div>
-                 ) : suggestedLocations.length === 0 ? (
-                   <div className="text-center py-4 text-slate-500">
-                     <AlertCircle className="h-6 w-6 mx-auto text-slate-300 mb-2" />
-                     <p className="text-xs">Nenhuma localização disponível</p>
-                   </div>
-                 ) : (
-                  <div className="space-y-2 max-h-60 overflow-y-auto">
-                    {suggestedLocations.map((suggested, index) => {
-                      const { location, hasProduct, occupancy } = suggested;
-                      const isSelected = selectedLocation?.id === location.id;
-                      const isBest = index === 0;
+                  <div className="space-y-4">
+                    {suggestedLocations.length > 0 && (
+                      <div className="space-y-2 max-h-60 overflow-y-auto">
+                        {suggestedLocations.map((suggested, index) => {
+                          const { location, hasProduct, occupancy } = suggested;
+                          const isSelected = selectedLocation?.id === location.id;
+                          const isBest = index === 0;
 
-                      return (
-                        <button
-                          key={location.id}
-                          onClick={() => handleSelectLocation(location)}
-                          className={`w-full text-left p-3 rounded-lg border transition-all ${
-                            isSelected
-                              ? 'bg-emerald-50 border-emerald-300 ring-2 ring-emerald-200'
-                              : 'bg-white border-slate-200 hover:border-emerald-200'
-                          }`}
+                          return (
+                            <button
+                              key={location.id}
+                              onClick={() => handleSelectLocation(location)}
+                              className={`w-full text-left p-3 rounded-lg border transition-all ${
+                                isSelected
+                                  ? 'bg-emerald-50 border-emerald-300 ring-2 ring-emerald-200'
+                                  : 'bg-white border-slate-200 hover:border-emerald-200'
+                              }`}
+                            >
+                              <div className="flex items-start justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                  <p className="font-mono font-bold text-slate-900">{location.barcode}</p>
+                                  {isBest && (
+                                    <Badge className="bg-amber-100 text-amber-700 text-xs flex items-center gap-1">
+                                      <Sparkles className="h-3 w-3" />
+                                      Sugerida
+                                    </Badge>
+                                  )}
+                                </div>
+                                {isSelected && <CheckCircle className="h-5 w-5 text-emerald-600" />}
+                              </div>
+                              <p className="text-xs text-slate-600 mb-2">
+                                {[location.rua, location.modulo, location.nivel].filter(Boolean).join(' / ')}
+                              </p>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    <div className="pt-2">
+                      {!manualMode ? (
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="w-full text-slate-500 hover:text-indigo-600"
+                          onClick={() => setManualMode(true)}
                         >
-                          <div className="flex items-start justify-between mb-2">
-                            <div className="flex items-center gap-2">
-                              <p className="font-mono font-bold text-slate-900">{location.barcode}</p>
-                              {isBest && (
-                                <Badge className="bg-amber-100 text-amber-700 text-xs flex items-center gap-1">
-                                  <Sparkles className="h-3 w-3" />
-                                  Sugerida
-                                </Badge>
-                              )}
-                            </div>
-                            {isSelected && <CheckCircle className="h-5 w-5 text-emerald-600" />}
+                          <Edit2 className="h-4 w-4 mr-2" />
+                          Digitar Localização Manualmente
+                        </Button>
+                      ) : (
+                        <div className="space-y-3 bg-slate-50 p-3 rounded-lg border border-slate-200">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-xs">Código da Localização</Label>
+                            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setManualMode(false)}>
+                              <X className="h-3 w-3" />
+                            </Button>
                           </div>
-                          <p className="text-xs text-slate-600 mb-2">
-                            {[location.rua, location.modulo, location.nivel].filter(Boolean).join(' / ')}
-                          </p>
                           <div className="flex gap-2">
-                            {hasProduct && (
-                              <Badge className="bg-blue-100 text-blue-700 text-xs">
-                                Produto já aqui
-                              </Badge>
-                            )}
-                            {occupancy > 0 && (
-                              <Badge variant="outline" className="text-xs">
-                                {occupancy} itens
-                              </Badge>
-                            )}
+                            <Input
+                              placeholder="Ex: A-01-01"
+                              value={manualLocationCode}
+                              onChange={(e) => setManualLocationCode(e.target.value.toUpperCase())}
+                              className="font-mono font-bold"
+                              onKeyDown={(e) => e.key === 'Enter' && handleManualLocationSubmit()}
+                              autoFocus
+                            />
+                            <Button onClick={handleManualLocationSubmit}>
+                              OK
+                            </Button>
                           </div>
-                        </button>
-                      );
-                    })}
+                          <p className="text-[10px] text-slate-500 italic text-center">
+                            Dica: Digite o nome ou código de barras da prateleira
+                          </p>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                )}
               </>
             )}
           </CardContent>

@@ -76,8 +76,7 @@ function CreateOPForm({ products, routes, orders, warehouses, locations, onSave,
 
   const [warehouseLocations, setWarehouseLocations] = useState([]);
 
-  const handleProductChange = (productId) => {
-    const product = products?.find(p => p.id === productId);
+  const handleProductChange = (productId, product) => {
     const route = routes?.find(r => r.product_id === productId);
     setForm({ 
       ...form, 
@@ -156,11 +155,8 @@ function CreateOPForm({ products, routes, orders, warehouses, locations, onSave,
       <ClientSearchSelect
         label="Cliente (Opcional)"
         value={form.client_id}
-        onSelect={(id) => {
-          const client = base44.entities.Client.list().then(clients => {
-            const found = clients.find(c => c.id === id);
-            setForm({ ...form, client_id: id, client_name: found?.name || '' });
-          });
+        onSelect={(id, client) => {
+          setForm({ ...form, client_id: id, client_name: client?.name || '' });
         }}
         placeholder="Vincular a um cliente..."
       />

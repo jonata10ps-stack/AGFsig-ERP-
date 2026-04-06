@@ -62,8 +62,18 @@ export default function BOMs() {
         }
 
         const nextVersionNumber = maxVersion + 1;
+        let itemsToClone = [];
         
-        if (!mainBom) {
+        if (mainBom) {
+           // If we have a preceding version, get its items
+           if (mainBom.current_version_id) {
+             try {
+               itemsToClone = await base44.entities.BOMItem.listAll({ bom_version_id: mainBom.current_version_id });
+             } catch (err) {
+               console.warn('Could not fetch items to clone:', err);
+             }
+           }
+        } else {
           // Criar BOM nova se não existir absolutamente nada
           mainBom = await base44.entities.BOM.create({
             company_id: companyId || '00000000-0000-0000-0000-000000000000',
@@ -71,7 +81,7 @@ export default function BOMs() {
             product_sku: product.sku,
             product_name: product.name,
             is_active: true,
-            current_version_number: 1
+            current_version_number: 0
           });
         }
 
@@ -91,7 +101,22 @@ export default function BOMs() {
           effective_date: new Date().toISOString().split('T')[0]
         });
 
-        // 4. Atualizar a BOM principal
+        // 4. Clone items if any
+        if (itemsToClone && itemsToClone.length > 0) {
+          const clonedItems = itemsToClone.map(item => {
+            const ni = { ...item };
+            delete ni.id;
+            delete ni.created_at;
+            delete ni.created_date;
+            delete ni.registered_date;
+            delete ni.updated_at;
+            ni.bom_version_id = version.id;
+            return ni;
+          });
+          await base44.entities.BOMItem.bulkCreate(clonedItems);
+        }
+
+        // 5. Atualizar a BOM principal
         await base44.entities.BOM.update(mainBom.id, {
           current_version_id: version.id,
           current_version_number: nextVersionNumber,
@@ -104,11 +129,14 @@ export default function BOMs() {
         throw err;
       }
     },
-    onSuccess: () => {
+    onSuccess: (mainBom) => {
        queryClient.invalidateQueries({ queryKey: ['boms', companyId] });
        setShowNewDialog(false);
        setNewBOM({ selectedProduct: null });
-       toast.success('BOM criado com sucesso');
+       toast.success('BOM processado com sucesso. Redirecionando...');
+       setTimeout(() => {
+         window.location.href = createPageUrl(`BOMDetail?id=${mainBom.id}`);
+       }, 1000);
      },
      onError: (error) => {
        console.error('Erro ao criar BOM:', error);

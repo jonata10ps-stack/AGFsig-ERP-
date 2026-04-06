@@ -895,13 +895,9 @@ export default function ProductionOrderDetail() {
                      <div className="mt-2 space-y-2">
                        <ClientSearchSelect 
                          value={tempClientId}
-                         onSelect={(id) => {
-                           // Fetch client name for display if needed
-                           base44.entities.Client.list().then(clients => {
-                             const found = clients.find(c => c.id === id);
-                             setTempClientId(id);
-                             setTempClientName(found?.name || '');
-                           });
+                         onSelect={(id, client) => {
+                           setTempClientId(id);
+                           setTempClientName(client?.name || '');
                          }}
                          placeholder="Buscar cliente..."
                        />

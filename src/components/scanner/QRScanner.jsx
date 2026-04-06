@@ -5,13 +5,25 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { toast } from 'sonner';
 
-export default function QRScanner({ onScan, active = true, placeholder = "Posicione o código QR na câmera" }) {
+export default function QRScanner({ 
+  onScan, 
+  active = true, 
+  id = "qr-reader",
+  placeholder = "Posicione o código QR na câmera" 
+}) {
   const scannerRef = useRef(null);
   const [scanning, setScanning] = useState(false);
   const [error, setError] = useState(null);
   const [lastScan, setLastScan] = useState(null);
 
+  useEffect(() => {
+    if (!active && scanning) {
+      stopScanning();
+    }
+  }, [active, scanning]);
+
   const startScanning = async () => {
+    if (!active) return;
     try {
       setError(null);
       setScanning(true);
@@ -19,7 +31,7 @@ export default function QRScanner({ onScan, active = true, placeholder = "Posici
       // Aguarda o próximo frame para garantir que o DOM está pronto
       await new Promise(resolve => setTimeout(resolve, 100));
       
-      const html5QrCode = new Html5Qrcode("qr-reader");
+      const html5QrCode = new Html5Qrcode(id);
       scannerRef.current = html5QrCode;
 
       const config = {
@@ -80,7 +92,7 @@ export default function QRScanner({ onScan, active = true, placeholder = "Posici
       <div className="relative">
         {/* Elemento sempre presente no DOM */}
         <div 
-          id="qr-reader" 
+          id={id} 
           style={{ display: scanning ? 'block' : 'none' }}
           className="w-full"
         />
