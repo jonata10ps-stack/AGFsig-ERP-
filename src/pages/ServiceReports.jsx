@@ -42,8 +42,8 @@ export default function ServiceReports() {
     return true;
   });
 
-  const totalRevenue = filteredOrders.reduce((sum, o) => sum + (o.total_cost || 0), 0);
-  const totalHours = filteredOrders.reduce((sum, o) => sum + (o.labor_hours || 0), 0);
+  const totalRevenue = filteredOrders.reduce((sum, o) => sum + Number(o.total_cost || 0), 0);
+  const totalHours = filteredOrders.reduce((sum, o) => sum + Number(o.labor_hours || 0), 0);
   const avgSatisfaction = filteredOrders.filter(o => o.satisfaction_rating).length > 0
     ? filteredOrders.reduce((sum, o) => sum + (o.satisfaction_rating || 0), 0) / 
       filteredOrders.filter(o => o.satisfaction_rating).length
