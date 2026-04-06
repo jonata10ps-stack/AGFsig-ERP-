@@ -41,6 +41,8 @@ const STATUS_CONFIG = {
 function ItemDialog({ open, onClose, products, onSave }) {
   const [form, setForm] = useState({
     product_id: '',
+    product_sku: '',
+    product_name: '',
     qty_requested: 1,
     notes: ''
   });
@@ -51,15 +53,11 @@ function ItemDialog({ open, onClose, products, onSave }) {
       toast.error('Produto e quantidade são obrigatórios');
       return;
     }
-    const product = products?.find(p => p.id === form.product_id);
     onSave({
       ...form,
-      product_sku: product?.sku,
-      product_name: product?.name,
-      unit: product?.unit || 'UN',
       qty_pending: form.qty_requested
     });
-    setForm({ product_id: '', qty_requested: 1, notes: '' });
+    setForm({ product_id: '', product_sku: '', product_name: '', qty_requested: 1, notes: '' });
   };
 
   return (
@@ -74,7 +72,12 @@ function ItemDialog({ open, onClose, products, onSave }) {
               onScan={(code) => {
                 const product = products?.find(p => p.sku === code);
                 if (product) {
-                  setForm({ ...form, product_id: product.id });
+                  setForm({ 
+                    ...form, 
+                    product_id: product.id,
+                    product_sku: product.sku,
+                    product_name: product.name 
+                  });
                   toast.success(`Produto ${product.sku} selecionado`);
                 } else {
                   toast.error('Produto não encontrado');
@@ -85,7 +88,12 @@ function ItemDialog({ open, onClose, products, onSave }) {
             <ProductSearchSelect
               label="Ou busque manualmente"
               value={form.product_id}
-              onSelect={(v) => setForm({ ...form, product_id: v })}
+              onSelect={(id, product) => setForm({ 
+                ...form, 
+                product_id: id,
+                product_sku: product?.sku || '',
+                product_name: product?.name || ''
+              })}
               placeholder="Buscar por código ou descrição..."
               required
             />
