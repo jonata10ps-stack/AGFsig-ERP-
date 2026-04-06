@@ -1,18 +1,34 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.23';
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
 Deno.serve(async (req) => {
+  // Handle CORS preflight requests
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
+
   try {
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me();
 
     if (!user || user.role !== 'admin') {
-      return Response.json({ error: 'Admin access required' }, { status: 403 });
+      return new Response(JSON.stringify({ error: 'Admin access required' }), {
+        status: 403,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
 
     const body = await req.json().catch(() => ({}));
     const companyId = body.company_id || user.current_company_id || user.company_ids?.[0];
     if (!companyId) {
-      return Response.json({ error: 'No company selected' }, { status: 400 });
+      return new Response(JSON.stringify({ error: 'No company selected' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
 
     // 1. Carrega todos os produtos
@@ -42,12 +58,12 @@ Deno.serve(async (req) => {
     let deletedCount = 0;
 
     // 4. Para cada SKU duplicado, remove os redundantes
-    for (const [sku, products] of dupeSkus) {
+    for (const [sku, products] of (dupeSkus as any)) {
       // Busca movimentações para cada produto
       const moveCounts = {};
-      for (const p of products) {
+      for (const p of (products as any)) {
         const moves = await base44.asServiceRole.entities.InventoryMove.filter({ company_id: companyId, product_id: p.id }, '', 1, 0);
-        moveCounts[p.id] = moves?.length || 0;
+        (moveCounts as any)[p.id] = moves?.length || 0;
         await new Promise(r => setTimeout(r, 300));
       }
 
@@ -67,7 +83,7 @@ Deno.serve(async (req) => {
         deleteIds = [...withoutMoves, ...sorted.slice(1)].map(p => p.id);
       } else {
         // Nenhum tem movimentação: manter o mais antigo
-        const sorted = [...products].sort((a, b) => new Date(a.created_date) - new Date(b.created_date));
+        const sorted = [...products].sort((a, b) => (new Date(a.created_date) as any) - (new Date(b.created_date) as any));
         keepId = sorted[0].id;
         deleteIds = sorted.slice(1).map(p => p.id);
       }
@@ -80,13 +96,18 @@ Deno.serve(async (req) => {
       }
     }
 
-    return Response.json({
+    return new Response(JSON.stringify({
       success: true,
       totalDuplicateSkus: dupeSkus.length,
       totalProductsDeleted: deletedCount,
       message: `${deletedCount} produto(s) duplicado(s) removido(s) com sucesso. ${dupeSkus.length} SKU(s) processados.`
+    }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
   } catch (error) {
-    return Response.json({ error: error.message }, { status: 500 });
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
   }
 });

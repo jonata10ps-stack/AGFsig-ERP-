@@ -1,18 +1,34 @@
 import { createClientFromRequest } from 'npm:@base44/sdk@0.8.20';
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
 Deno.serve(async (req) => {
+  // Handle CORS preflight requests
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
+
   try {
     const base44 = createClientFromRequest(req);
     const user = await base44.auth.me();
 
     if (!user) {
-      return Response.json({ error: 'Unauthorized' }, { status: 401 });
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
 
-    const { relatedId } = await req.json();
+    const { relatedId } = await req.json().catch(() => ({}));
 
     if (!relatedId) {
-      return Response.json({ error: 'relatedId is required' }, { status: 400 });
+      return new Response(JSON.stringify({ error: 'relatedId is required' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
 
     // Buscar movimento de inventário relacionado a COMPRA #69a9f2e8
@@ -22,10 +38,11 @@ Deno.serve(async (req) => {
       related_id: relatedId
     });
 
-    console.log('Movimentos encontrados:', movements.length);
-
     if (movements.length === 0) {
-      return Response.json({ error: 'Nenhum movimento encontrado para esse documento' }, { status: 404 });
+      return new Response(JSON.stringify({ error: 'Nenhum movimento encontrado para esse documento' }), {
+        status: 404,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
 
     // Filtrar movimento que é do STR06 e está como TRANSFERENCIA
@@ -35,11 +52,11 @@ Deno.serve(async (req) => {
     );
 
     if (!str06Movement) {
-      return Response.json({ error: 'Movimento TRANSFERENCIA não encontrado' }, { status: 404 });
+      return new Response(JSON.stringify({ error: 'Movimento TRANSFERENCIA não encontrado' }), {
+        status: 404,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
-
-    console.log('Movimento encontrado:', str06Movement);
-    console.log('Atualizando para ENTRADA...');
 
     // Atualizar movimento de TRANSFERENCIA para ENTRADA
     await base44.entities.InventoryMove.update(str06Movement.id, {
@@ -49,9 +66,7 @@ Deno.serve(async (req) => {
       reason: `Recebimento/Alocação - ${str06Movement.reason}`
     });
 
-    console.log('Movimento corrigido com sucesso');
-
-    return Response.json({
+    return new Response(JSON.stringify({
       success: true,
       message: 'Movimento corrigido de TRANSFERENCIA para ENTRADA',
       movementId: str06Movement.id,
@@ -61,9 +76,14 @@ Deno.serve(async (req) => {
         to_warehouse_id: str06Movement.to_warehouse_id,
         to_location_id: str06Movement.to_location_id
       }
+    }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
   } catch (error) {
     console.error('Erro ao corrigir movimento:', error);
-    return Response.json({ error: error.message }, { status: 500 });
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
   }
 });
