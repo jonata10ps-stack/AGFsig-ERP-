@@ -67,10 +67,17 @@ export default function StockPledgeQuery() {
     queryFn: async () => {
       if (!companyId || openOPs.length === 0 || allBOMs.length === 0) return [];
 
-      // Build map: product_id -> active BOM
+      // Build map: product_id -> best available BOM
       const productBOMMap = {};
       allBOMs.forEach(bom => {
-        if (bom.active !== false && bom.current_version_id) {
+        if (!bom.current_version_id) return;
+
+        // Prioritize active BOMs or initialize if it's the first one found for the product
+        const isActive = bom.is_active !== false && bom.active !== false;
+        const currentStored = productBOMMap[bom.product_id];
+        const isCurrentActive = currentStored && (currentStored.is_active !== false && currentStored.active !== false);
+
+        if (!currentStored || (isActive && !isCurrentActive)) {
           productBOMMap[bom.product_id] = bom;
         }
       });
