@@ -43,7 +43,7 @@ export default function WarehouseSearchSelect({ value, onSelect, label, placehol
     search === '' ||
     w.name?.toLowerCase().includes(search.toLowerCase()) ||
     w.code?.toLowerCase().includes(search.toLowerCase())
-  ).slice(0, 8);
+  );
 
   const handleSelect = (warehouse) => {
     setSelectedWarehouse(warehouse);

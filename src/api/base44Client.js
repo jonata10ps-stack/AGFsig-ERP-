@@ -245,6 +245,25 @@ export const base44 = {
       }
       return true;
     },
+    signIn: async (email, password) => {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (error) throw error;
+      return data;
+    },
+    signUp: async (email, password, metadata = {}) => {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: metadata,
+        },
+      });
+      if (error) throw error;
+      return data;
+    },
     logout: async () => {
       await supabase.auth.signOut();
       window.location.href = '/login';

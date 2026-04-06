@@ -79,7 +79,7 @@ function App() {
   return (
     <AuthProvider>
       <QueryClientProvider client={queryClientInstance}>
-        <Router>
+        <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <NavigationTracker />
           <Routes>
             <Route path="/public/os/:id" element={<PublicServiceOrderReport />} />

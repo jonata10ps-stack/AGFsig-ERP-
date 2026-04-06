@@ -21,20 +21,41 @@ export default function ClientSearchSelect({
   const [selectedClient, setSelectedClient] = useState(null);
   const wrapperRef = useRef(null);
 
-  const { data: clients } = useQuery({
-    queryKey: ['clients', companyId],
-    queryFn: () => companyId ? base44.entities.Client.filter({ company_id: companyId, active: true }) : Promise.resolve([]),
-    enabled: !!companyId,
+  const PAGE_SIZE = 50;
+  const [page, setPage] = useState(0);
+
+  const { data: result, isLoading } = useQuery({
+    queryKey: ['clients-search', companyId, search, page],
+    queryFn: async () => {
+      if (!companyId) return { data: [], count: 0 };
+      
+      const conditions = { company_id: companyId };
+      const searchFields = search ? ['name', 'document', 'code'] : [];
+      
+      return base44.entities.Client.queryPaginated(
+        conditions, 
+        'name', 
+        PAGE_SIZE, 
+        page * PAGE_SIZE,
+        searchFields,
+        search
+      );
+    },
+    enabled: !!companyId && isOpen,
+    staleTime: 30000,
   });
 
+  const clients = result?.data || [];
+  const totalCount = result?.count || 0;
+
   useEffect(() => {
-    if (value && clients) {
-      const client = clients.find(c => c.id === value);
-      setSelectedClient(client);
-    } else {
-      setSelectedClient(null);
+    // If we have a value but no selectedClient, we should fetch that specific client
+    if (value && !selectedClient && companyId) {
+      base44.entities.Client.filter({ id: value }).then(r => {
+        if (r && r[0]) setSelectedClient(r[0]);
+      });
     }
-  }, [value, clients]);
+  }, [value, selectedClient, companyId]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -46,25 +67,7 @@ export default function ClientSearchSelect({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const normalize = (str) => str?.toString().toLowerCase().replace(/[^a-z0-9]/g, '') || '';
-
-  const filteredClients = clients?.filter(c => {
-    if (search === '') return true;
-    
-    const term = search.toLowerCase();
-    const normalizedTerm = normalize(search);
-    
-    return (
-      c.name?.toLowerCase().includes(term) ||
-      c.client_name?.toLowerCase().includes(term) ||
-      c.social_name?.toLowerCase().includes(term) ||
-      c.razao_social?.toLowerCase().includes(term) ||
-      c.code?.toLowerCase().includes(term) ||
-      c.email?.toLowerCase().includes(term) ||
-      (c.document && normalize(c.document).includes(normalizedTerm)) ||
-      (c.client_document && normalize(c.client_document).includes(normalizedTerm))
-    );
-  }).slice(0, 10);
+  const filteredClients = clients; // Now using server-side results directly
 
   const handleSelect = (client) => {
     setSelectedClient(client);
@@ -91,9 +94,9 @@ export default function ClientSearchSelect({
           <div className="flex items-center gap-2 px-3 py-2 border border-slate-200 rounded-md bg-white">
             <Users className="h-4 w-4 text-slate-400 flex-shrink-0" />
             <div className="flex-1 min-w-0">
-              <span className="text-sm font-medium text-slate-900">{selectedClient.name}</span>
-              {selectedClient.document && (
-                <span className="text-xs text-slate-500 ml-2">• {selectedClient.document}</span>
+              <span className="text-sm font-medium text-slate-900">{selectedClient.name || selectedClient.client_name}</span>
+              {(selectedClient.document || selectedClient.client_document) && (
+                <span className="text-xs text-slate-500 ml-2">• {selectedClient.document || selectedClient.client_document}</span>
               )}
             </div>
             <button
@@ -117,7 +120,18 @@ export default function ClientSearchSelect({
               onFocus={() => setIsOpen(true)}
               className="pl-10"
             />
+            {isLoading && (
+              <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                <div className="h-4 w-4 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+              </div>
+            )}
           </>
+        )}
+
+        {isOpen && !selectedClient && search && !isLoading && filteredClients.length === 0 && (
+          <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg p-4 text-center">
+            <p className="text-sm text-slate-500">Nenhum cliente encontrado para "{search}"</p>
+          </div>
         )}
 
         {isOpen && !selectedClient && filteredClients && filteredClients.length > 0 && (
@@ -140,10 +154,10 @@ export default function ClientSearchSelect({
                         {client.code}
                       </span>
                     )}
-                    <p className="text-sm font-medium text-slate-900">{client.name}</p>
+                    <p className="text-sm font-medium text-slate-900">{client.name || client.client_name}</p>
                   </div>
-                  {client.document && (
-                    <p className="text-xs text-slate-500 mt-0.5">CNPJ/CPF: {client.document}</p>
+                  {(client.document || client.client_document) && (
+                    <p className="text-xs text-slate-500 mt-0.5">CNPJ/CPF: {client.document || client.client_document}</p>
                   )}
                   {client.email && (
                     <p className="text-xs text-slate-500">{client.email}</p>
@@ -151,6 +165,29 @@ export default function ClientSearchSelect({
                 </div>
               </button>
             ))}
+            {totalCount > PAGE_SIZE && (
+              <div className="p-2 border-t bg-slate-50 flex items-center justify-between text-[10px] text-slate-500">
+                <span>Total: {totalCount} clientes</span>
+                <div className="flex gap-1">
+                  <button 
+                    type="button"
+                    disabled={page === 0}
+                    onClick={(e) => { e.stopPropagation(); setPage(p => p - 1); }}
+                    className="px-2 py-1 bg-white border rounded disabled:opacity-50"
+                  >
+                    Anterior
+                  </button>
+                  <button 
+                    type="button"
+                    disabled={(page + 1) * PAGE_SIZE >= totalCount}
+                    onClick={(e) => { e.stopPropagation(); setPage(p => p + 1); }}
+                    className="px-2 py-1 bg-white border rounded disabled:opacity-50"
+                  >
+                    Próxima
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
