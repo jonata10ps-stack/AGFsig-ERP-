@@ -10,6 +10,7 @@ import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import ProductSearchSelect from '@/components/products/ProductSearchSelect';
+import { toast } from 'sonner';
 
 export default function BOMDetail() {
   const urlParams = new URLSearchParams(window.location.search);
@@ -20,6 +21,7 @@ export default function BOMDetail() {
   const [showEditItemDialog, setShowEditItemDialog] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [newItem, setNewItem] = useState({ selectedComponent: null, quantity: 1, sequence: 1, routes: [] });
+  const [showNewVersionDialog, setShowNewVersionDialog] = useState(false);
 
   const { data: products = [] } = useQuery({
     queryKey: ['products'],
@@ -58,6 +60,14 @@ export default function BOMDetail() {
 
   const createVersionMutation = useMutation({
     mutationFn: async () => {
+      // 1. Obter versão ativa e seus itens antes de criar a nova
+      const currentActiveVersion = versions.find(v => v.is_active) || versions[0];
+      let itemsToClone = [];
+      if (currentActiveVersion) {
+        itemsToClone = await base44.entities.BOMItem.listAll({ bom_version_id: currentActiveVersion.id });
+      }
+
+      // 2. Criar nova versão
       const newVersionNumber = (versions[0]?.version_number || 0) + 1;
       const newVersion = await base44.entities.BOMVersion.create({
         company_id: bom.company_id,
@@ -67,12 +77,26 @@ export default function BOMDetail() {
         effective_date: new Date().toISOString().split('T')[0]
       });
 
-      // Desativar versões antigas
+      // 3. Clonar os itens se existirem
+      if (itemsToClone && itemsToClone.length > 0) {
+        const clonedItems = itemsToClone.map(item => {
+          const newItem = { ...item };
+          delete newItem.id;
+          delete newItem.created_at;
+          delete newItem.created_date;
+          delete newItem.registered_date;
+          newItem.bom_version_id = newVersion.id;
+          return newItem;
+        });
+        await base44.entities.BOMItem.bulkCreate(clonedItems);
+      }
+
+      // 4. Desativar versões antigas
       for (const v of versions) {
         await base44.entities.BOMVersion.update(v.id, { is_active: false });
       }
 
-      // Atualizar BOM com nova versão
+      // 5. Atualizar BOM com nova versão
       await base44.entities.BOM.update(bomId, {
         current_version_id: newVersion.id,
         current_version_number: newVersionNumber
@@ -81,8 +105,14 @@ export default function BOMDetail() {
       return newVersion;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(['bom-versions']);
-      queryClient.invalidateQueries(['bom']);
+      queryClient.invalidateQueries({ queryKey: ['bom-versions'] });
+      queryClient.invalidateQueries({ queryKey: ['bom'] });
+      queryClient.invalidateQueries({ queryKey: ['bom-items'] });
+      setShowNewVersionDialog(false);
+      toast.success('Nova versão criada com sucesso com todos os itens clonados!');
+    },
+    onError: (error) => {
+      toast.error('Erro ao criar nova versão: ' + error.message);
     }
   });
 
@@ -111,7 +141,7 @@ export default function BOMDetail() {
       return base44.entities.BOMItem.create(itemData);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(['bom-items']);
+      queryClient.invalidateQueries({ queryKey: ['bom-items'] });
       setShowAddItemDialog(false);
       setNewItem({ selectedComponent: null, quantity: 1, sequence: 1, routes: [] });
     }
@@ -137,7 +167,7 @@ export default function BOMDetail() {
       return base44.entities.BOMItem.update(itemId, itemData);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(['bom-items']);
+      queryClient.invalidateQueries({ queryKey: ['bom-items'] });
       setShowEditItemDialog(false);
       setEditingItem(null);
     }
@@ -146,14 +176,14 @@ export default function BOMDetail() {
   const deleteItemMutation = useMutation({
     mutationFn: (itemId) => base44.entities.BOMItem.delete(itemId),
     onSuccess: () => {
-      queryClient.invalidateQueries(['bom-items']);
+      queryClient.invalidateQueries({ queryKey: ['bom-items'] });
     }
   });
 
   const toggleActiveMutation = useMutation({
     mutationFn: () => base44.entities.BOM.update(bomId, { is_active: !bom.is_active }),
     onSuccess: () => {
-      queryClient.invalidateQueries(['bom', bomId]);
+      queryClient.invalidateQueries({ queryKey: ['bom', bomId] });
     }
   });
 
@@ -178,10 +208,22 @@ export default function BOMDetail() {
         >
           {bom.is_active ? 'Inativar' : 'Ativar'}
         </Button>
-        <Button onClick={() => createVersionMutation.mutate()}>
+        <Button onClick={() => setShowNewVersionDialog(true)}>
           Nova Versão
         </Button>
       </div>
+
+      {createVersionMutation.isPending && (
+        <div className="fixed inset-0 bg-white/60 backdrop-blur-sm z-50 flex flex-col items-center justify-center">
+          <div className="bg-white p-6 rounded-xl shadow-xl border flex flex-col items-center gap-4">
+            <div className="h-12 w-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+            <div className="text-center">
+              <p className="font-bold text-lg">Criando Nova Versão...</p>
+              <p className="text-sm text-slate-500">Clonando itens da versão anterior</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-3 gap-4">
         <Card>
@@ -496,6 +538,32 @@ export default function BOMDetail() {
                 disabled={!newItem.selectedComponent || addItemMutation.isPending}
               >
                 Adicionar
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={showNewVersionDialog} onOpenChange={setShowNewVersionDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirmar Nova Versão</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <p className="text-sm text-slate-600">
+              Você está prestes a criar a <strong>Versão {(versions[0]?.version_number || 0) + 1}</strong> deste BOM.
+            </p>
+            <p className="text-sm text-slate-600">
+              Todos os itens da versão atual serão clonados automaticamente para que você possa editá-los sem perder o histórico do BOM antigo.
+            </p>
+            <div className="flex justify-end gap-2 pt-4">
+              <Button variant="outline" onClick={() => setShowNewVersionDialog(false)}>
+                Cancelar
+              </Button>
+              <Button 
+                onClick={() => createVersionMutation.mutate()}
+                disabled={createVersionMutation.isPending}
+              >
+                Gerar Nova Versão
               </Button>
             </div>
           </div>

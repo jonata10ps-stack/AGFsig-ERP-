@@ -10,6 +10,7 @@ import { createClient } from '@supabase/supabase-js';
  * @property {(id: string) => Promise<any>} delete
  * @property {(conditions: Object) => Promise<any>} deleteBy
  * @property {(conditions: Object, sort?: string, limit?: number, skip?: number, searchFields?: string[], searchString?: string) => Promise<{data: any[], count: number}>} queryPaginated
+ * @property {(conditions?: Object, sort?: string) => Promise<any[]>} listAll
  * @property {(callback: function) => function} subscribe
  */
 
