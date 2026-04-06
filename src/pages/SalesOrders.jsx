@@ -61,8 +61,10 @@ function OrderForm({ order, clients, sellers, products, paymentConditions, onSav
   const [items, setItems] = useState([]);
   const [currentItem, setCurrentItem] = useState({
     product_id: '',
+    product_sku: '',
+    product_name: '',
     qty: 1,
-    unit_price: ''
+    unit_price: 0
   });
 
   const handleClientChange = (clientId, client) => {
@@ -99,7 +101,7 @@ function OrderForm({ order, clients, sellers, products, paymentConditions, onSav
     }
     const total_price = currentItem.qty * currentItem.unit_price;
     setItems([...items, { ...currentItem, total_price }]);
-    setCurrentItem({ product_id: '', qty: 1, unit_price: '' });
+    setCurrentItem({ product_id: '', product_sku: '', product_name: '', qty: 1, unit_price: 0 });
   };
 
   const removeItem = (index) => {

@@ -49,6 +49,7 @@ const CONDITION_CONFIG = {
 function CreateReturnDialog({ open, onOpenChange, clients, orders, onCreate, loading }) {
   const [form, setForm] = useState({
     client_id: '',
+    client_name: '',
     order_id: '',
     reason: '',
     reason_description: '',
@@ -65,6 +66,7 @@ function CreateReturnDialog({ open, onOpenChange, clients, orders, onCreate, loa
     onCreate(form);
     setForm({
       client_id: '',
+      client_name: '',
       order_id: '',
       reason: '',
       reason_description: '',
@@ -83,7 +85,12 @@ function CreateReturnDialog({ open, onOpenChange, clients, orders, onCreate, loa
           <ClientSearchSelect
             label="Cliente *"
             value={form.client_id}
-            onSelect={(id) => setForm({ ...form, client_id: id, order_id: '' })}
+            onSelect={(id, client) => setForm({ 
+              ...form, 
+              client_id: id, 
+              client_name: client?.name || '',
+              order_id: '' 
+            })}
             placeholder="Selecione o cliente..."
             required
           />
