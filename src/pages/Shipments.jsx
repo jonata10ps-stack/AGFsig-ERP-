@@ -81,13 +81,11 @@ function ShipmentForm({ order, initialItems = [], clients, products, onSave, onC
     }
   }, [initialItems]);
 
-  const handleClientChange = (clientId) => {
-    const client = clients?.find(c => c.id === clientId);
+  const handleClientChange = (clientId, client) => {
     setForm({ ...form, client_id: clientId, client_name: client?.name || '' });
   };
 
-  const handleProductChange = (productId) => {
-    const product = products?.find(p => p.id === productId);
+  const handleProductChange = (productId, product) => {
     setCurrentItem({
       ...currentItem,
       product_id: productId,

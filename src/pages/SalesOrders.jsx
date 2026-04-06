@@ -65,8 +65,7 @@ function OrderForm({ order, clients, sellers, products, paymentConditions, onSav
     unit_price: ''
   });
 
-  const handleClientChange = (clientId) => {
-    const client = clients?.find(c => c.id === clientId);
+  const handleClientChange = (clientId, client) => {
     setForm({ ...form, client_id: clientId, client_name: client?.name || '' });
   };
 
@@ -80,8 +79,7 @@ function OrderForm({ order, clients, sellers, products, paymentConditions, onSav
     setForm({ ...form, payment_condition_id: conditionId, payment_condition_name: condition?.name || '' });
   };
 
-  const handleProductChange = (productId) => {
-    const product = products?.find(p => p.id === productId);
+  const handleProductChange = (productId, product) => {
     setCurrentItem({
       ...currentItem,
       product_id: productId,
