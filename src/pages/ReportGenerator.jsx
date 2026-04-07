@@ -13,6 +13,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
+import { jsPDF } from 'jspdf';
+import * as XLSX from 'xlsx';
 
 export default function ReportGenerator() {
   const { companyId } = useCompanyId();
@@ -134,24 +136,29 @@ Forneça:
 2. Principais insights (máx 3)
 3. Recomendações (máx 2)`;
 
-        const aiResponse = await base44.integrations.Core.InvokeLLM({
-          prompt,
-          response_json_schema: {
-            type: 'object',
-            properties: {
-              summary: { type: 'string' },
-              insights: { type: 'array', items: { type: 'string' } },
-              recommendations: { type: 'array', items: { type: 'string' } }
+        try {
+          const aiResponse = await base44.integrations.Core.InvokeLLM({
+            prompt,
+            response_json_schema: {
+              type: 'object',
+              properties: {
+                summary: { type: 'string' },
+                insights: { type: 'array', items: { type: 'string' } },
+                recommendations: { type: 'array', items: { type: 'string' } }
+              }
             }
-          }
-        });
+          });
 
-        reportData.summary = aiResponse?.summary || '';
-        reportData.ai_insights = aiResponse;
+          reportData.summary = aiResponse?.summary || '';
+          reportData.ai_insights = aiResponse;
+        } catch (aiErr) {
+          console.error('Falha na IA:', aiErr);
+          reportData.summary = 'Análise de IA temporariamente indisponível.';
+        }
       }
 
       // Criar registro de relatório gerado
-      const report = await base44.entities.GeneratedReport.create({
+      await base44.entities.GeneratedReport.create({
         company_id: companyId,
         template_id: templateId,
         template_name: template.name,
@@ -159,12 +166,10 @@ Forneça:
         status: 'CONCLUIDO',
         date_from: dateFrom,
         date_to: dateTo,
-        filters_applied: JSON.stringify({ dateFrom, dateTo }),
-        // summary: reportData.summary,
-        // data_points: reportData.total_orders,
+        filters_applied: JSON.stringify({ dateFrom, dateTo })
       });
 
-      setGeneratedReport({ ...reportData, id: report.id });
+      setGeneratedReport({ ...reportData });
       toast.success('Relatório gerado com sucesso');
     } catch (error) {
       toast.error('Erro ao gerar relatório: ' + error.message);
@@ -177,7 +182,6 @@ Forneça:
     if (!generatedReport) return;
 
     let csv = `Relatório: ${template.name}\nPeríodo: ${dateFrom} a ${dateTo}\n\n`;
-    
     csv += `Total de Registros,${generatedReport.total_orders}\n`;
     csv += `Valor Total,R$ ${generatedReport.total_amount.toFixed(2)}\n\n`;
 
@@ -198,8 +202,41 @@ Forneça:
   };
 
   const downloadPDF = () => {
-    toast.success('Download de PDF iniciado');
-    // Implementar geração de PDF com jsPDF se necessário
+    if (!generatedReport) return;
+    
+    const doc = new jsPDF();
+    const title = template.name;
+    const dateRange = `Periodo: ${dateFrom} a ${dateTo}`;
+    
+    doc.setFontSize(18);
+    doc.text(title, 14, 22);
+    doc.setFontSize(11);
+    doc.text(dateRange, 14, 30);
+    
+    doc.text(`Total de Registros: ${generatedReport.total_orders}`, 14, 40);
+    doc.text(`Valor Total: R$ ${generatedReport.total_amount.toFixed(2)}`, 14, 47);
+    
+    if (generatedReport.summary) {
+      doc.setFontSize(12);
+      doc.text('Analise de IA:', 14, 57);
+      doc.setFontSize(10);
+      const splitSummary = doc.splitTextToSize(generatedReport.summary, 180);
+      doc.text(splitSummary, 14, 64);
+    }
+    
+    doc.save(`relatorio_${template.name.replace(/\s+/g, '_')}.pdf`);
+    toast.success('PDF gerado com sucesso');
+  };
+
+  const downloadExcel = () => {
+    if (!generatedReport || !generatedReport.data.length) return;
+    
+    const worksheet = XLSX.utils.json_to_sheet(generatedReport.data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Relatorio");
+    
+    XLSX.writeFile(workbook, `relatorio_${template.name.replace(/\s+/g, '_')}.xlsx`);
+    toast.success('Excel gerado com sucesso');
   };
 
   if (loadingTemplate) {
@@ -305,29 +342,22 @@ Forneça:
                 <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
                   <p className="text-sm font-medium text-blue-900 mb-2">Análise de IA</p>
                   <p className="text-sm text-blue-800">{generatedReport.summary}</p>
-                  {generatedReport.ai_insights?.insights && (
-                    <ul className="mt-2 ml-4 text-sm text-blue-800 list-disc">
-                      {generatedReport.ai_insights.insights.map((insight, i) => (
-                        <li key={i}>{insight}</li>
-                      ))}
-                    </ul>
-                  )}
                 </div>
               )}
 
-              <div className="flex gap-2">
-                {(template.format === 'PDF' || template.format === 'AMBOS') && (
-                  <Button onClick={downloadPDF} variant="outline" className="flex-1">
-                    <Download className="h-4 w-4 mr-2" />
-                    Download PDF
-                  </Button>
-                )}
-                {(template.format === 'CSV' || template.format === 'AMBOS') && (
-                  <Button onClick={downloadCSV} variant="outline" className="flex-1">
-                    <Download className="h-4 w-4 mr-2" />
-                    Download CSV
-                  </Button>
-                )}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                <Button onClick={downloadPDF} variant="outline" className="w-full">
+                  <Download className="h-4 w-4 mr-2" />
+                  PDF
+                </Button>
+                <Button onClick={downloadExcel} variant="outline" className="w-full">
+                  <Download className="h-4 w-4 mr-2" />
+                  Excel
+                </Button>
+                <Button onClick={downloadCSV} variant="outline" className="w-full">
+                  <Download className="h-4 w-4 mr-2" />
+                  CSV
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -354,7 +384,7 @@ Forneça:
                         <tr key={i} className="border-b hover:bg-slate-50">
                           {Object.values(row).map((val, j) => (
                             <td key={j} className="p-2 text-slate-700">
-                              {typeof val === 'number' ? val.toFixed(2) : val}
+                              {typeof val === 'number' ? val.toFixed(2) : String(val)}
                             </td>
                           ))}
                         </tr>
