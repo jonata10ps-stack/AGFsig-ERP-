@@ -90,9 +90,11 @@ export default function ServiceRequests() {
       const order = orders?.find(o => o.id === data.order_id);
       const product = await base44.entities.Product.filter({ id: data.product_id }).then(p => p?.[0]);
 
+      const { product_sku, ...cleanedData } = data;
+      
       return await base44.entities.ServiceRequest.create({
          company_id: companyId,
-         ...data,
+         ...cleanedData,
          request_number: requestNumber,
          client_name: client?.name || client?.client_name,
          order_number: order?.order_number,
