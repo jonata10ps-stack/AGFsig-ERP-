@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Plus, Trash2, Package, Pencil } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Package, Pencil, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -129,13 +129,17 @@ export default function BOMDetail() {
         quantity: data.quantity,
         sequence: data.sequence,
         unit: component.unit || 'UN',
-        routes: data.routes
+        routes: Array.isArray(data.routes) ? JSON.stringify(data.routes) : data.routes
       };
 
       // Compatibilidade: se houver roteiros, manter o primeiro como route_id
-      if (data.routes.length > 0) {
-        itemData.route_id = data.routes[0].route_id;
-        itemData.route_name = data.routes[0].route_name;
+      const routesArray = Array.isArray(data.routes) ? data.routes : [];
+      if (routesArray.length > 0) {
+        itemData.route_id = routesArray[0].route_id || null;
+        itemData.route_name = routesArray[0].route_name || null;
+      } else {
+        itemData.route_id = null;
+        itemData.route_name = null;
       }
 
       return base44.entities.BOMItem.create(itemData);
@@ -149,27 +153,41 @@ export default function BOMDetail() {
 
   const updateItemMutation = useMutation({
     mutationFn: async ({ itemId, data }) => {
+      console.log('📝 Tentando atualizar item:', itemId, data);
+      
       const itemData = {
         quantity: data.quantity,
         sequence: data.sequence,
-        routes: data.routes
+        // Garantir que routes seja enviado como string se a coluna for do tipo TEXT no banco
+        routes: Array.isArray(data.routes) ? JSON.stringify(data.routes) : data.routes
       };
 
-      // Compatibilidade: se houver roteiros, manter o primeiro como route_id
-      if (data.routes.length > 0) {
-        itemData.route_id = data.routes[0].route_id;
-        itemData.route_name = data.routes[0].route_name;
+      // Compatibilidade: se houver roteiros, manter o primeiro como route_id (UUID)
+      const routesArray = Array.isArray(data.routes) ? data.routes : [];
+      if (routesArray.length > 0) {
+        itemData.route_id = routesArray[0].route_id || null;
+        itemData.route_name = routesArray[0].route_name || null;
       } else {
         itemData.route_id = null;
         itemData.route_name = null;
       }
 
-      return base44.entities.BOMItem.update(itemId, itemData);
+      console.log('📤 Dados enviados ao banco:', itemData);
+      
+      const result = await base44.entities.BOMItem.update(itemId, itemData);
+      console.log('✅ Resultado do banco:', result);
+      return result;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      console.log('🎉 Update sucesso:', data);
       queryClient.invalidateQueries({ queryKey: ['bom-items'] });
+      toast.success('Item atualizado com sucesso');
       setShowEditItemDialog(false);
       setEditingItem(null);
+    },
+    onError: (error) => {
+      console.error('❌ Erro no update do item:', error);
+      toast.error('Erro ao salvar: ' + (error.message || 'Verifique o console'));
     }
   });
 
@@ -181,13 +199,50 @@ export default function BOMDetail() {
   });
 
   const toggleActiveMutation = useMutation({
-    mutationFn: () => base44.entities.BOM.update(bomId, { is_active: !bom.is_active }),
+    mutationFn: async () => {
+      const newStatus = !bom.is_active;
+      return await base44.entities.BOM.update(bomId, { is_active: newStatus });
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['bom', bomId] });
+      toast.success(bom.is_active ? 'BOM inativado' : 'BOM ativado');
+    },
+    onError: (error) => {
+      toast.error('Erro ao atualizar status do BOM: ' + error.message);
+    }
+  });
+
+  const updateVersionMutation = useMutation({
+    mutationFn: async (data) => {
+      if (!activeVersion?.id) return;
+      const payload = {
+        routes: Array.isArray(data.routes) ? JSON.stringify(data.routes) : data.routes
+      };
+      return await base44.entities.BOMVersion.update(activeVersion.id, payload);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['bom-versions'] });
+      toast.success('Roteiros do produto final atualizados');
+    },
+    onError: (error) => {
+      toast.error('Erro ao salvar roteiros da versão: ' + error.message);
     }
   });
 
   if (!bom) return <div className="p-8">Carregando...</div>;
+
+  // Extrair roteiros da versão ativa para o componente
+  let versionRoutes = [];
+  try {
+    if (activeVersion?.routes) {
+      versionRoutes = typeof activeVersion.routes === 'string' 
+        ? JSON.parse(activeVersion.routes) 
+        : activeVersion.routes;
+    }
+  } catch (e) {
+    console.error('Erro ao parsear roteiros da versão:', e);
+  }
+  if (!Array.isArray(versionRoutes)) versionRoutes = [];
 
   return (
     <div className="space-y-6">
@@ -225,34 +280,91 @@ export default function BOMDetail() {
         </div>
       )}
 
-      <div className="grid grid-cols-3 gap-4">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">Versão Atual</CardTitle>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card className="col-span-1 border-indigo-100 bg-indigo-50/5">
+          <CardHeader className="py-3 px-4">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <Package className="h-4 w-4 text-indigo-600" />
+              Versão Ativa
+            </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {bom.current_version_number || '-'}
+          <CardContent className="py-2 px-4">
+            <div className="text-2xl font-bold text-indigo-900 overflow-hidden text-ellipsis whitespace-nowrap">
+              v{activeVersion?.version_number || '-'}
+            </div>
+            <div className="flex items-center gap-2 mt-1">
+              {bom.is_active ? (
+                <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200">Ativa</Badge>
+              ) : (
+                <Badge variant="outline" className="text-slate-400">Inativa</Badge>
+              )}
+              <span className="text-[10px] text-slate-400">
+                {activeVersion?.effective_date ? new Date(activeVersion.effective_date).toLocaleDateString() : ''}
+              </span>
             </div>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">Total de Itens</CardTitle>
+
+        <Card className="col-span-1 md:col-span-3 border-emerald-100 bg-emerald-50/5">
+          <CardHeader className="py-3 px-4 flex flex-row items-center justify-between space-y-0">
+            <div>
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <ArrowLeft className="h-4 w-4 text-emerald-600 rotate-180" />
+                Roteiros do Produto Principal
+              </CardTitle>
+              <p className="text-[10px] text-slate-500 mt-0.5">Etapas de montagem final para {bom.product_name}</p>
+            </div>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 text-emerald-700 hover:bg-emerald-100 gap-1 px-2"
+              onClick={() => {
+                const updatedRoutes = [...versionRoutes, { route_id: '', route_name: '', sequence: versionRoutes.length + 1 }];
+                updateVersionMutation.mutate({ routes: updatedRoutes });
+              }}
+            >
+              <Plus className="h-3 w-3" /> Adicionar
+            </Button>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{items.length}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">Status</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {bom.is_active ? (
-              <Badge className="bg-green-100 text-green-800">Ativo</Badge>
+          <CardContent className="py-2 px-4">
+            {versionRoutes.length === 0 ? (
+              <div className="py-3 text-center border border-dashed border-emerald-200 rounded-lg">
+                <p className="text-[11px] text-slate-400 italic">Nenhum roteiro de montagem final cadastrado.</p>
+              </div>
             ) : (
-              <Badge variant="outline">Inativo</Badge>
+              <div className="flex flex-wrap gap-2 py-1">
+                {versionRoutes.map((route, idx) => (
+                  <div key={idx} className="flex items-center bg-white border border-emerald-100 shadow-sm rounded-md px-2 py-1 gap-2 group transition-all hover:border-emerald-300">
+                    <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 h-5 w-5 rounded-full flex items-center justify-center">
+                      {idx + 1}
+                    </span>
+                    <select
+                      className="bg-transparent border-none text-xs focus:ring-0 p-0 h-auto w-32 cursor-pointer font-medium text-slate-700"
+                      value={route.route_id}
+                      onChange={(e) => {
+                        const sel = routes.find(r => r.id === e.target.value);
+                        const updated = [...versionRoutes];
+                        updated[idx] = { ...updated[idx], route_id: sel?.id, route_name: sel?.name };
+                        updateVersionMutation.mutate({ routes: updated });
+                      }}
+                    >
+                      <option value="">Selecionar...</option>
+                      {routes.map(r => (
+                        <option key={r.id} value={r.id}>{r.name}</option>
+                      ))}
+                    </select>
+                    <button 
+                      className="text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+                      onClick={() => {
+                        const updated = versionRoutes.filter((_, i) => i !== idx);
+                        updateVersionMutation.mutate({ routes: updated });
+                      }}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
             )}
           </CardContent>
         </Card>
@@ -285,12 +397,20 @@ export default function BOMDetail() {
                     <div className="text-sm text-slate-500 w-8">#{item.sequence}</div>
                     <div>
                       <div className="font-medium">{item.component_name}</div>
-                      <div className="text-sm text-slate-500">
-                        SKU: {item.component_sku} • Qtd: {item.quantity} {item.unit}
-                        {Array.isArray(item.routes) && item.routes.length > 0 && (
-                          <> • Roteiros: {item.routes.map((r, i) => `${i + 1}. ${r.route_name}`).join(', ')}</>
-                        )}
-                        {(!Array.isArray(item.routes) || item.routes.length === 0) && item.route_name && <> • Roteiro: {item.route_name}</>}
+                      <div className="text-xs text-slate-500 mt-1">
+                        SKU: {item.component_sku || ''}
+                        {(!item.component_sku && item.product_sku) ? item.product_sku : ''}
+                        {item.unit && ` • Unidade: ${item.unit}`}
+                        {(() => {
+                          const routes = typeof item.routes === 'string' ? JSON.parse(item.routes || '[]') : (Array.isArray(item.routes) ? item.routes : []);
+                          if (routes.length > 0) {
+                            return <> • Roteiros: {routes.map((r, i) => `${i + 1}. ${r.route_name}`).join(', ')}</>;
+                          }
+                          if (item.route_name) {
+                            return <> • Roteiro: {item.route_name}</>;
+                          }
+                          return null;
+                        })()}
                       </div>
                     </div>
                   </div>
@@ -299,11 +419,23 @@ export default function BOMDetail() {
                       variant="ghost"
                       size="icon"
                       onClick={() => {
+                        let existingRoutes = [];
+                        try {
+                          existingRoutes = typeof item.routes === 'string' ? JSON.parse(item.routes || '[]') : (Array.isArray(item.routes) ? item.routes : []);
+                        } catch (e) {
+                          console.warn('Erro ao parsear routes:', e);
+                        }
+
+                        const defaultRoutes = (existingRoutes.length === 0 && item.route_id) 
+                          ? [{ route_id: item.route_id, route_name: item.route_name || 'Roteiro Atual', sequence: 1 }]
+                          : existingRoutes;
+                          
                         setEditingItem({
                           id: item.id,
                           quantity: item.quantity,
                           sequence: item.sequence,
-                          routes: Array.isArray(item.routes) ? item.routes : []
+                          component_name: item.component_name,
+                          routes: defaultRoutes
                         });
                         setShowEditItemDialog(true);
                       }}
@@ -329,6 +461,9 @@ export default function BOMDetail() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Editar Item do BOM</DialogTitle>
+            <div className="text-xs text-slate-500 mt-1">
+              Configure os roteiros e detalhes do item selecionado.
+            </div>
           </DialogHeader>
           {editingItem && (
             <div className="space-y-4 pt-4">

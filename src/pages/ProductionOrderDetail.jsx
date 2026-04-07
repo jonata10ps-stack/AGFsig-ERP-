@@ -52,10 +52,12 @@ export default function ProductionOrderDetail() {
   const [showAddStepDialog, setShowAddStepDialog] = useState(false);
   const [stepName, setStepName] = useState('');
   const [stepDescription, setStepDescription] = useState('');
+  const [stepResourceId, setStepResourceId] = useState('');
   const [editingStepId, setEditingStepId] = useState(null);
   const [editStepStatus, setEditStepStatus] = useState('');
   const [editStepStartDate, setEditStepStartDate] = useState('');
   const [editStepEndDate, setEditStepEndDate] = useState('');
+  const [editStepResourceId, setEditStepResourceId] = useState('');
   const [showCloseWarning, setShowCloseWarning] = useState(false);
   const [closeWarnings, setCloseWarnings] = useState([]);
   const [cancelLoading, setCancelLoading] = useState(false);
@@ -78,6 +80,12 @@ export default function ProductionOrderDetail() {
     queryKey: ['production-steps', opId, companyId],
     queryFn: () => base44.entities.ProductionStep.filter({ company_id: companyId, op_id: opId }),
     enabled: !!opId && !!companyId,
+  });
+
+  const { data: resources = [] } = useQuery({
+    queryKey: ['resources-detail', companyId],
+    queryFn: () => base44.entities.Resource.filter({ company_id: companyId }, 'name', 1000),
+    enabled: !!companyId,
   });
 
   const { data: warehouses = [] } = useQuery({
@@ -133,101 +141,118 @@ export default function ProductionOrderDetail() {
         const existingCheck = await base44.entities.ProductionStep.filter({ company_id: companyId, op_id: opId });
         if (existingCheck.length > 0) throw new Error('Esta OP já possui etapas cadastradas');
 
-        const boms = await base44.entities.BOM.filter({
-          company_id: companyId,
-          product_id: op.product_id,
-          active: true
-        });
+        console.log('🏭 Iniciando geração de etapas para OP:', opId);
+        
+        // 1. Buscar a BOM e sua versão ativa
+        const boms = await base44.entities.BOM.filter({ company_id: companyId, product_id: op.product_id });
+        const bom = boms?.find(b => b.is_active) || boms?.[0];
+        
+        if (!bom) throw new Error('BOM ativa não encontrada para este produto.');
 
-        if (!boms?.[0]) throw new Error('BOM não encontrado para este produto');
+        const versions = await base44.entities.BOMVersion.filter({ bom_id: bom.id }, '-version_number');
+        const activeVersion = versions.find(v => v.id === bom.current_version_id) || 
+                             versions.find(v => v.is_active === true || v.is_active === 'true' || v.is_active === 'TRUE') || 
+                             versions[0];
+        
+        if (!activeVersion) throw new Error('Nenhuma versão encontrada para este BOM.');
 
-        const bomItems = await base44.entities.BOMItem.filter({
-          company_id: companyId,
-          bom_version_id: boms[0].current_version_id
-        });
-
-        if (!bomItems.length) throw new Error('BOM não possui componentes');
-
-        // Otimização: Coletar todos os IDs de roteiro de uma vez para evitar N chamadas sequenciais
-        const allRouteIds = new Set();
-        bomItems.forEach(item => {
-          if (item.routes?.length > 0) {
-            item.routes.forEach(r => { if (r.route_id) allRouteIds.add(r.route_id); });
-          } else if (item.route_id) {
-            allRouteIds.add(item.route_id);
-          }
-        });
-
-        // Carregar todos os passos de uma vez (bulk fetch)
-        const routeIdsArray = Array.from(allRouteIds);
-        let allRouteSteps = [];
-        if (routeIdsArray.length > 0) {
-          allRouteSteps = await base44.entities.ProductionRouteStep.filter({
-            company_id: companyId,
-            route_id: routeIdsArray
-          });
-        }
+        // 2. Buscar ITENS (componentes) do BOM
+        const bomItems = await base44.entities.BOMItem.filter({ bom_version_id: activeVersion.id });
+        console.log(`📎 Encontrados ${bomItems.length} itens na BOM para versão ${activeVersion.version_number}`);
 
         const stepsToCreate = [];
         let globalSequence = 1;
 
-        for (const bomItem of bomItems) {
-          let itemRouteId = null;
-          if (bomItem.routes?.length > 0) {
-            const sorted = [...bomItem.routes].sort((a, b) => (a.sequence || 0) - (b.sequence || 0));
-            itemRouteId = sorted[0].route_id;
-          } else if (bomItem.route_id) {
-            itemRouteId = bomItem.route_id;
+        // --- ETAPA A: Roteiros dos Componentes ---
+        for (const bomItem of (bomItems || []).sort((a, b) => (Number(a.sequence) || 0) - (Number(b.sequence) || 0))) {
+          let itemRoutes = [];
+          try {
+            const routesData = bomItem.routes;
+            if (typeof routesData === 'string' && (routesData.startsWith('[') || routesData.startsWith('{'))) {
+              itemRoutes = JSON.parse(routesData);
+            } else if (Array.isArray(routesData)) {
+              itemRoutes = routesData;
+            } else if (bomItem.route_id) {
+              itemRoutes = [{ route_id: bomItem.route_id, route_name: bomItem.route_name, sequence: 1 }];
+            }
+            if (!Array.isArray(itemRoutes)) {
+              itemRoutes = itemRoutes ? [itemRoutes] : [];
+            }
+          } catch (e) {
+            console.warn(`Erro ao ler roteiros do item ${bomItem.component_name}`);
           }
 
-          if (!itemRouteId) {
-            stepsToCreate.push({
-              company_id: companyId,
-              op_id: opId,
-              sequence: globalSequence++,
-              name: bomItem.component_name,
-              description: bomItem.component_sku || '',
-              component_sku: bomItem.component_sku,
-              component_name: bomItem.component_name,
-              status: 'PENDENTE'
-            });
-          } else {
-            const relevantRouteSteps = allRouteSteps.filter(rs => rs.route_id === itemRouteId);
+          for (const routeRef of itemRoutes) {
+            const routeId = routeRef.route_id || routeRef.id;
+            if (!routeId) continue;
 
-            for (const routeStep of relevantRouteSteps) {
+            const routeSteps = await base44.entities.ProductionRouteStep.filter({ route_id: routeId });
+            for (const rs of (routeSteps || []).sort((a, b) => (Number(a.sequence) || 0) - (Number(b.sequence) || 0))) {
               stepsToCreate.push({
                 company_id: companyId,
                 op_id: opId,
                 sequence: globalSequence++,
-                name: routeStep.name,
-                description: `${bomItem.component_name} - ${routeStep.description || ''}`,
-                component_sku: bomItem.component_sku,
-                component_name: bomItem.component_name,
-                resource_type: routeStep.resource_type,
-                resource_id: routeStep.resource_id,
+                name: `${bomItem.component_name}: ${rs.name}`,
+                description: rs.description || '',
                 status: 'PENDENTE',
-                estimated_time: routeStep.estimated_time
+                resource_type: rs.resource_type,
+                resource_id: rs.resource_id,
               });
             }
           }
         }
 
-        if (stepsToCreate.length > 0) {
-          await base44.entities.ProductionStep.bulkCreate(stepsToCreate);
-          // Wait a bit before clearing the flag to allow queries to complete
-          await new Promise(resolve => setTimeout(resolve, 500));
+        // --- ETAPA B: Roteiros do Produto Principal (Montagem Final) ---
+        let versionRoutes = [];
+        try {
+          if (activeVersion?.routes) {
+            versionRoutes = typeof activeVersion.routes === 'string' 
+              ? JSON.parse(activeVersion.routes) 
+              : activeVersion.routes;
+          }
+          if (!Array.isArray(versionRoutes)) versionRoutes = [];
+        } catch (e) {
+          console.warn('Erro ao ler roteiros da versão');
         }
+
+        if (versionRoutes.length > 0) {
+          console.log(`🏭 Gerando ${versionRoutes.length} roteiros de MONTAGEM FINAL`);
+          for (const routeRef of versionRoutes) {
+            const routeId = routeRef.route_id || routeRef.id;
+            if (!routeId) continue;
+
+            const routeSteps = await base44.entities.ProductionRouteStep.filter({ route_id: routeId });
+            for (const rs of (routeSteps || []).sort((a, b) => (Number(a.sequence) || 0) - (Number(b.sequence) || 0))) {
+              stepsToCreate.push({
+                company_id: companyId,
+                op_id: opId,
+                sequence: globalSequence++,
+                name: `${op.product_name}: ${rs.name}`,
+                description: `Montagem Final - ${rs.description || ''}`,
+                status: 'PENDENTE',
+                resource_type: rs.resource_type,
+                resource_id: rs.resource_id,
+              });
+            }
+          }
+        }
+
+        if (stepsToCreate.length === 0) {
+          throw new Error('Nenhum roteiro encontrado na BOM ou nos componentes.');
+        }
+
+        await base44.entities.ProductionStep.bulkCreate(stepsToCreate);
+        toast.success(`${stepsToCreate.length} etapas geradas do BOM (Componentes + Montagem Principal)`);
+      } catch (err) {
+        console.error('Erro na inicialização:', err);
+        toast.error(err.message || 'Erro ao gerar etapas');
       } finally {
         initializingRef.current = false;
+        queryClient.invalidateQueries({ queryKey: ['production-steps', opId, companyId] });
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['production-steps', opId, companyId] });
-      toast.success('Etapas criadas a partir do BOM');
-    },
-    onError: (error) => {
-      initializingRef.current = false;
-      toast.error(error.message || 'Erro ao inicializar etapas');
+      // Já invalidado no finally para garantir
     }
   });
 
@@ -424,7 +449,8 @@ export default function ProductionOrderDetail() {
         sequence: steps.length + 1,
         name: stepName,
         description: stepDescription,
-        status: 'PENDENTE'
+        status: 'PENDENTE',
+        resource_id: stepResourceId || null
       });
     },
     onSuccess: () => {
@@ -433,6 +459,7 @@ export default function ProductionOrderDetail() {
       setShowAddStepDialog(false);
       setStepName('');
       setStepDescription('');
+      setStepResourceId('');
     },
     onError: (error) => {
       toast.error(error.message || 'Erro ao adicionar etapa');
@@ -445,6 +472,7 @@ export default function ProductionOrderDetail() {
       if (editStepStatus) updateData.status = editStepStatus;
       if (editStepStartDate) updateData.scheduled_start_date = editStepStartDate;
       if (editStepEndDate) updateData.scheduled_end_date = editStepEndDate;
+      if (editStepResourceId) updateData.resource_id = editStepResourceId;
       
       await base44.entities.ProductionStep.update(stepId, updateData);
     },
@@ -1124,21 +1152,37 @@ export default function ProductionOrderDetail() {
                               </SelectContent>
                             </Select>
                           </div>
-                          <div>
-                            <Label>Data Início</Label>
-                            <Input 
-                              type="date" 
-                              value={editStepStartDate}
-                              onChange={(e) => setEditStepStartDate(e.target.value)}
-                            />
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <Label>Data Início</Label>
+                              <Input 
+                                type="date" 
+                                value={editStepStartDate}
+                                onChange={(e) => setEditStepStartDate(e.target.value)}
+                              />
+                            </div>
+                            <div>
+                              <Label>Data Conclusão</Label>
+                              <Input 
+                                type="date" 
+                                value={editStepEndDate}
+                                onChange={(e) => setEditStepEndDate(e.target.value)}
+                              />
+                            </div>
                           </div>
-                          <div>
-                            <Label>Data Conclusão</Label>
-                            <Input 
-                              type="date" 
-                              value={editStepEndDate}
-                              onChange={(e) => setEditStepEndDate(e.target.value)}
-                            />
+                          <div className="md:col-span-2">
+                            <Label>Recurso de Produção</Label>
+                            <Select value={editStepResourceId} onValueChange={setEditStepResourceId}>
+                              <SelectTrigger className="h-9 mt-1">
+                                <SelectValue placeholder="Selecione o recurso" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">Nenhum recurso</SelectItem>
+                                {resources.map(r => (
+                                  <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
                           </div>
                           <div className="flex gap-2">
                             <Button 
@@ -1277,6 +1321,20 @@ export default function ProductionOrderDetail() {
                 onChange={(e) => setStepDescription(e.target.value)}
                 placeholder="Descrição (opcional)"
               />
+            </div>
+            <div>
+              <Label>Recurso de Produção</Label>
+              <Select value={stepResourceId} onValueChange={setStepResourceId}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Selecione o recurso" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Nenhum recurso</SelectItem>
+                  {resources.map(r => (
+                    <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <DialogFooter>

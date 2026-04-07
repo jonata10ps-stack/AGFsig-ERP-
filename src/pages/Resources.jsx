@@ -203,7 +203,7 @@ export default function Resources() {
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right">
-                    R$ {resource.cost_per_hour?.toFixed(2) || '0.00'}
+                    R$ {Number(resource.cost_per_hour || 0).toFixed(2)}
                   </TableCell>
                   <TableCell>
                     <Badge className={resource.active ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-700"}>

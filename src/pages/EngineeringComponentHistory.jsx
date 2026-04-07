@@ -45,7 +45,7 @@ function buildComponentTimeline(item, projectUpdates) {
   });
 
   // Drawing events — each drawing has uploaded_at
-  (item.drawings || []).forEach((d, idx) => {
+  (Array.isArray(item.drawings) ? item.drawings : []).forEach((d, idx) => {
     if (d.uploaded_at) {
       events.push({
         id: `drawing-${item.id}-${idx}`,

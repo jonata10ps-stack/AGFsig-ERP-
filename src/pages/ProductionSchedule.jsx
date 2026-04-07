@@ -12,8 +12,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import {
   Calendar, CheckCircle2, X, ChevronDown, Play, Pause,
   AlertTriangle, Clock, Activity, Search, Filter, RefreshCw,
-  ExternalLink, Layers
+  ExternalLink, Layers, MoreVertical, Loader2
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { useCompanyId } from '@/components/useCompanyId';
 import moment from 'moment';
 import { Link } from 'react-router-dom';
@@ -70,6 +71,8 @@ export default function ProductionSchedule() {
   const [editingStep, setEditingStep] = useState(null);
   const [editStartDate, setEditStartDate] = useState('');
   const [editEndDate, setEditEndDate] = useState('');
+  const [editResourceId, setEditResourceId] = useState('');
+  const [isSavingStep, setIsSavingStep] = useState(false);
   const [viewMode, setViewMode] = useState('list'); // 'list' | 'gantt'
 
   const { data: steps = [], isLoading, refetch } = useQuery({
@@ -86,6 +89,12 @@ export default function ProductionSchedule() {
       const data = await base44.entities.ProductionOrder.filter({ company_id: companyId }, '-created_date', 1000);
       return Object.fromEntries(data.map(o => [o.id, o]));
     },
+    enabled: !!companyId,
+  });
+
+  const { data: resources = [] } = useQuery({
+    queryKey: ['resources-schedule', companyId],
+    queryFn: () => base44.entities.Resource.filter({ company_id: companyId }, 'name', 1000),
     enabled: !!companyId,
   });
 
@@ -185,10 +194,24 @@ export default function ProductionSchedule() {
   const completeStep = async (stepId) => { await base44.entities.ProductionStep.update(stepId, { status: 'CONCLUIDA', completed_at: new Date().toISOString() }); refetch(); };
   const skipStep = async (stepId) => { await base44.entities.ProductionStep.update(stepId, { status: 'PULADA' }); refetch(); };
 
-  const handleSaveDates = async () => {
+  const handleSaveStepDetails = async () => {
     if (!editingStep) return;
-    await base44.entities.ProductionStep.update(editingStep.id, { scheduled_start_date: editStartDate || null, scheduled_end_date: editEndDate || null });
-    refetch(); setEditingStep(null);
+    setIsSavingStep(true);
+    try {
+      await base44.entities.ProductionStep.update(editingStep.id, { 
+        scheduled_start_date: editStartDate || null, 
+        scheduled_end_date: editEndDate || null,
+        resource_id: editResourceId || null
+      });
+      toast.success('Etapa atualizada com sucesso');
+      refetch();
+      setEditingStep(null);
+    } catch (e) {
+      console.error('Erro ao salvar etapa:', e);
+      toast.error('Erro ao salvar etapa: ' + (e.message || 'Erro no banco de dados'));
+    } finally {
+      setIsSavingStep(false);
+    }
   };
 
   if (isLoading) return (
@@ -480,7 +503,12 @@ export default function ProductionSchedule() {
                                   <div className="flex items-center gap-3 mt-1 text-xs text-slate-400 flex-wrap">
                                     <button
                                       className="flex items-center gap-1 hover:text-indigo-600 transition-colors"
-                                      onClick={() => { setEditingStep(step); setEditStartDate(step.scheduled_start_date || ''); setEditEndDate(step.scheduled_end_date || ''); }}
+                                      onClick={() => { 
+                                        setEditingStep(step); 
+                                        setEditStartDate(step.scheduled_start_date ? moment(step.scheduled_start_date).format('YYYY-MM-DD') : ''); 
+                                        setEditEndDate(step.scheduled_end_date ? moment(step.scheduled_end_date).format('YYYY-MM-DD') : ''); 
+                                        setEditResourceId(step.resource_id || '');
+                                      }}
                                     >
                                       <Calendar className="h-3 w-3" />
                                       {step.scheduled_start_date ? moment(step.scheduled_start_date).format('DD/MM') : '?'}
@@ -537,20 +565,41 @@ export default function ProductionSchedule() {
       <Dialog open={!!editingStep} onOpenChange={open => !open && setEditingStep(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Editar Datas da Etapa</DialogTitle>
+            <DialogTitle>Editar Detalhes da Etapa</DialogTitle>
             <DialogDescription>{editingStep?.name} — Seq. {editingStep?.sequence}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 pt-2">
-            <div>
-              <Label>Data de Início</Label>
-              <Input type="date" value={editStartDate} onChange={e => setEditStartDate(e.target.value)} className="mt-1" />
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Início Planejado</Label>
+                <Input type="date" value={editStartDate} onChange={e => setEditStartDate(e.target.value)} className="mt-1" />
+              </div>
+              <div>
+                <Label>Término Planejado</Label>
+                <Input type="date" value={editEndDate} onChange={e => setEditEndDate(e.target.value)} className="mt-1" />
+              </div>
             </div>
+            
             <div>
-              <Label>Data de Término</Label>
-              <Input type="date" value={editEndDate} onChange={e => setEditEndDate(e.target.value)} className="mt-1" />
+              <Label>Recurso de Produção</Label>
+              <Select value={editResourceId} onValueChange={setEditResourceId}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Selecione um recurso (Máquina/Op)..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Nenhum recurso</SelectItem>
+                  {resources.map(r => (
+                    <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-            <div className="flex gap-2">
-              <Button onClick={handleSaveDates} className="flex-1">Salvar</Button>
+
+            <div className="flex gap-2 pt-2">
+              <Button onClick={handleSaveStepDetails} disabled={isSavingStep} className="flex-1 gap-2">
+                {isSavingStep && <Loader2 className="h-4 w-4 animate-spin" />}
+                Salvar Alterações
+              </Button>
               <Button variant="outline" onClick={() => setEditingStep(null)} className="flex-1">Cancelar</Button>
             </div>
           </div>

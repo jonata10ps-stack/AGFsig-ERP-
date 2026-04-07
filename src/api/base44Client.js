@@ -19,15 +19,22 @@ import { createClient } from '@supabase/supabase-js';
  */
 
 // Setup connection to Supabase
-const supabaseUrl = import.meta.env?.VITE_SUPABASE_URL || '';
+// Use relative path in dev to let Vite proxy handle CORS, otherwise use direct URL
+const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+const supabaseUrl = isLocal 
+  ? window.location.origin 
+  : (import.meta.env?.VITE_SUPABASE_URL || '');
 const supabaseKey = import.meta.env?.VITE_SUPABASE_ANON_KEY || '';
 
 if (!supabaseUrl || supabaseUrl.includes('SEU_PROJECT_REF')) {
   console.warn('⚠️ ATENÇÃO: VITE_SUPABASE_URL não configurada no arquivo .env.');
 }
 
+const sbServiceKey = import.meta.env?.VITE_SUPABASE_SERVICE_ROLE_KEY || '';
 export const supabase = createClient(supabaseUrl, supabaseKey);
-export const supabaseAdmin = null;
+export const supabaseAdmin = (supabaseUrl && sbServiceKey) 
+  ? createClient(supabaseUrl, sbServiceKey) 
+  : null;
 
 const sanitizeData = (data, entityName) => {
   if (!data || typeof data !== 'object') return data;
@@ -272,7 +279,28 @@ export const base44 = {
   },
   integrations: {
     Core: {
-      UploadFile: async () => ({ file_url: 'https://placeholder.com/file' }),
+      UploadFile: async ({ file, bucket = 'attachments', path = '' }) => {
+        try {
+          const fileName = `${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
+          const filePath = path ? `${path}/${fileName}` : fileName;
+          
+          const client = supabaseAdmin || supabase;
+          const { data, error } = await client.storage
+            .from(bucket)
+            .upload(filePath, file, { cacheControl: '3600', upsert: true });
+
+          if (error) throw error;
+          
+          const { data: { publicUrl } } = client.storage
+            .from(bucket)
+            .getPublicUrl(filePath);
+
+          return { file_url: publicUrl };
+        } catch (err) {
+          console.error('Erro no UploadFile:', err);
+          throw err;
+        }
+      },
       ExtractDataFromUploadedFile: async () => ({ parsed_data: [] })
     }
   }

@@ -396,51 +396,81 @@ export default function ProductionOrders() {
         // Criar etapas baseadas nos roteiros dos componentes do BOM
         let stepSequence = 1;
         const stepsToCreate = [];
+
+        // 1. Incluir etapas do roteiro principal do produto (se selecionado no form)
+        if (data.route_id) {
+          const mainRouteSteps = await base44.entities.ProductionRouteStep.filter({ 
+            company_id: companyId,
+            route_id: data.route_id 
+          });
+          
+          if (mainRouteSteps && mainRouteSteps.length > 0) {
+            for (const step of mainRouteSteps.sort((a, b) => (a.sequence || 0) - (b.sequence || 0))) {
+              stepsToCreate.push({
+                company_id: companyId,
+                op_id: op.id,
+                sequence: stepSequence++,
+                name: step.name,
+                description: `Montagem Final - ${step.description || ''}`,
+                resource_type: step.resource_type,
+                resource_id: step.resource_id,
+                status: 'PENDENTE'
+              });
+            }
+          }
+        }
         
-        for (const bomItem of bomItems.sort((a, b) => (Number(a.sequence) || 0) - (Number(b.sequence) || 0))) {
-          // Se o item tem roteiros definidos (array routes)
-          if (bomItem.routes && Array.isArray(bomItem.routes) && bomItem.routes.length > 0) {
-            for (const routeRef of bomItem.routes.sort((a, b) => a.sequence - b.sequence)) {
+        // 2. Incluir etapas dos componentes da BOM
+        for (const bomItem of (bomItems || []).sort((a, b) => (Number(a.sequence) || 0) - (Number(b.sequence) || 0))) {
+          // Coletar IDs de roteiro do componente (pode estar em routes[] ou route_id)
+          let itemRoutes = [];
+          
+          let routesData = bomItem.routes;
+          if (typeof routesData === 'string' && routesData.startsWith('[')) {
+            try {
+              routesData = JSON.parse(routesData);
+            } catch (e) {
+              console.warn(`Erro ao parsear routes do item ${bomItem.component_name}:`, e);
+            }
+          }
+
+          if (Array.isArray(routesData) && routesData.length > 0) {
+            itemRoutes = routesData;
+          } else if (bomItem.route_id) {
+            itemRoutes = [{ route_id: bomItem.route_id, sequence: 1 }];
+          }
+
+          if (itemRoutes.length === 0) {
+            // Se o componente não tem roteiro, criar uma etapa de Preparação
+            stepsToCreate.push({
+              company_id: companyId,
+              op_id: op.id,
+              sequence: stepSequence++,
+              name: `Fabricação: ${bomItem.component_name}`,
+              description: `Material: ${bomItem.component_sku || ''}`,
+              status: 'PENDENTE'
+            });
+          } else {
+            // Buscar etapas dos roteiros do componente
+            for (const routeRef of itemRoutes.sort((a, b) => (Number(a.sequence) || 0) - (Number(b.sequence) || 0))) {
               const routeSteps = await base44.entities.ProductionRouteStep.filter({ 
                 company_id: companyId,
                 route_id: routeRef.route_id 
               });
               
               if (routeSteps && routeSteps.length > 0) {
-                for (const step of routeSteps.sort((a, b) => a.sequence - b.sequence)) {
+                for (const step of routeSteps.sort((a, b) => (Number(a.sequence) || 0) - (Number(b.sequence) || 0))) {
                   stepsToCreate.push({
                     company_id: companyId,
                     op_id: op.id,
                     sequence: stepSequence++,
-                    name: `${bomItem.component_name} - ${step.name}`,
-                    description: step.description,
+                    name: `${bomItem.component_name}: ${step.name}`,
+                    description: step.description || '',
                     resource_type: step.resource_type,
                     resource_id: step.resource_id,
                     status: 'PENDENTE'
                   });
                 }
-              }
-            }
-          }
-          // Fallback: se não tem array routes mas tem route_id
-          else if (bomItem.route_id) {
-            const routeSteps = await base44.entities.ProductionRouteStep.filter({ 
-              company_id: companyId,
-              route_id: bomItem.route_id 
-            });
-            
-            if (routeSteps && routeSteps.length > 0) {
-              for (const step of routeSteps.sort((a, b) => a.sequence - b.sequence)) {
-                stepsToCreate.push({
-                  company_id: companyId,
-                  op_id: op.id,
-                  sequence: stepSequence++,
-                  name: `${bomItem.component_name} - ${step.name}`,
-                  description: step.description,
-                  resource_type: step.resource_type,
-                  resource_id: step.resource_id,
-                  status: 'PENDENTE'
-                });
               }
             }
           }

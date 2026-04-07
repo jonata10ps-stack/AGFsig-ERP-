@@ -113,7 +113,7 @@ export default function EngineeringComponents() {
                       </div>
 
                       {/* Drawings */}
-                      {item.drawings?.length > 0 ? (
+                      {Array.isArray(item.drawings) && item.drawings.length > 0 ? (
                         <div className="flex flex-wrap gap-2 pt-1">
                           {item.drawings.map((d, idx) => {
                             const isLatest = idx === item.drawings.length - 1;

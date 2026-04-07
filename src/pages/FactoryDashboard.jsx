@@ -62,7 +62,26 @@ export default function FactoryDashboard() {
   today.setHours(0, 0, 0, 0);
 
   const activeOPs = ops.filter(op => ['ABERTA', 'EM_ANDAMENTO', 'PAUSADA'].includes(op.status));
-  const lateOPs = activeOPs.filter(op => op.due_date && isBefore(parseISO(op.due_date), today));
+  
+  // Calculate late steps based on scheduled_end_date
+  const lateSteps = steps.filter(s => 
+    ['PENDENTE', 'EM_ANDAMENTO'].includes(s.status) && 
+    s.scheduled_end_date && 
+    isBefore(parseISO(s.scheduled_end_date), today)
+  );
+
+  // OPs are late if they passed due_date OR have late steps
+  const lateOPs = activeOPs.filter(op => {
+    const isPastDeadline = op.due_date && isBefore(parseISO(op.due_date), today);
+    const hasLateSteps = steps.some(s => 
+      s.op_id === op.id && 
+      ['PENDENTE', 'EM_ANDAMENTO'].includes(s.status) && 
+      s.scheduled_end_date && 
+      isBefore(parseISO(s.scheduled_end_date), today)
+    );
+    return isPastDeadline || hasLateSteps;
+  });
+
   const inProgressOPs = activeOPs.filter(op => op.status === 'EM_ANDAMENTO');
 
   // OPs by status (all, for pie chart)
@@ -78,9 +97,9 @@ export default function FactoryDashboard() {
   resources.forEach(r => { resourceMap[r.id] = r.name; });
 
   const stepsByResource = steps
-    .filter(s => s.status === 'EM_ANDAMENTO' && s.resource_id)
+    .filter(s => s.status === 'EM_ANDAMENTO')
     .reduce((acc, s) => {
-      const name = resourceMap[s.resource_id] || s.resource_name || s.resource_id;
+      const name = resourceMap[s.resource_id] || s.resource_name || 'Recurso não definido';
       acc[name] = (acc[name] || 0) + 1;
       return acc;
     }, {});
@@ -90,9 +109,13 @@ export default function FactoryDashboard() {
     .sort((a, b) => b.etapas - a.etapas)
     .slice(0, 10);
 
-  // Late OPs table sorted by due_date
+  // Late OPs table sorted by due_date or latest scheduled step
   const lateOPsSorted = [...lateOPs]
-    .sort((a, b) => new Date(a.due_date) - new Date(b.due_date))
+    .sort((a, b) => {
+      const dateA = a.due_date || '';
+      const dateB = b.due_date || '';
+      return dateA.localeCompare(dateB);
+    })
     .slice(0, 10);
 
   return (
@@ -110,7 +133,7 @@ export default function FactoryDashboard() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <Card className="glass-card shadow-sm border-none overflow-hidden">
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
@@ -139,7 +162,7 @@ export default function FactoryDashboard() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="shadow-sm border-red-100 bg-red-50/20">
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 rounded-lg bg-red-100 flex items-center justify-center">
@@ -147,7 +170,27 @@ export default function FactoryDashboard() {
               </div>
               <div>
                 <p className="text-sm text-slate-500">OPs Atrasadas</p>
-                <p className="text-2xl font-bold text-red-600">{lateOPs.length}</p>
+                <div className="flex items-baseline gap-2">
+                  <p className="text-2xl font-bold text-red-600">{lateOPs.length}</p>
+                  <span className="text-[10px] text-red-400">Total</span>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-sm border-orange-100 bg-orange-50/20">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-orange-100 flex items-center justify-center">
+                <Clock className="h-5 w-5 text-orange-600" />
+              </div>
+              <div>
+                <p className="text-sm text-slate-500">Etapas Atrasadas</p>
+                <div className="flex items-baseline gap-2">
+                  <p className="text-2xl font-bold text-orange-600">{lateSteps.length}</p>
+                  <span className="text-[10px] text-orange-400 font-medium">Cronograma</span>
+                </div>
               </div>
             </div>
           </CardContent>
@@ -253,22 +296,56 @@ export default function FactoryDashboard() {
                 </thead>
                 <tbody>
                   {lateOPsSorted.map(op => {
-                    const daysLate = Math.floor((today - new Date(op.due_date)) / 86400000);
+                    const nestedLateSteps = steps.filter(s => 
+                      s.op_id === op.id && 
+                      ['PENDENTE', 'EM_ANDAMENTO'].includes(s.status) && 
+                      s.scheduled_end_date && 
+                      isBefore(parseISO(s.scheduled_end_date), today)
+                    ).sort((a, b) => a.scheduled_end_date.localeCompare(b.scheduled_end_date));
+
+                    const isOPDateLate = op.due_date && isBefore(parseISO(op.due_date), today);
+                    const earliestStepLate = nestedLateSteps[0];
+                    
+                    // Priority: show OP due_date if it's late, otherwise show the earliest late step date
+                    const displayDateStr = isOPDateLate ? op.due_date : (earliestStepLate?.scheduled_end_date || op.due_date);
+                    const daysLate = displayDateStr ? Math.floor((today.getTime() - new Date(displayDateStr).getTime()) / 86400000) : 0;
+
                     return (
-                      <tr key={op.id} className="border-b last:border-0 hover:bg-red-50">
-                        <td className="py-2 pr-4 font-mono font-semibold text-slate-800">{op.numero_op_externo || op.op_number}</td>
-                        <td className="py-2 pr-4 text-slate-700">{op.product_name}</td>
-                        <td className="py-2 pr-4">
-                          <Badge style={{ backgroundColor: `${STATUS_COLORS[op.status]}20`, color: STATUS_COLORS[op.status], border: `1px solid ${STATUS_COLORS[op.status]}40` }}>
-                            {STATUS_LABELS[op.status]}
+                      <tr key={op.id} className="border-b last:border-0 hover:bg-red-50/50">
+                        <td className="py-3 pr-4 font-mono font-semibold text-slate-800 align-top">{op.numero_op_externo || op.op_number}</td>
+                        <td className="py-3 pr-4 align-top">
+                          <p className="font-medium text-slate-700">{op.product_name}</p>
+                          {nestedLateSteps.length > 0 && (
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {nestedLateSteps.map((ls, idx) => (
+                                <Badge key={idx} variant="outline" className="bg-orange-50 text-orange-600 border-orange-200 text-[10px] py-0 px-1.5 h-4 font-normal">
+                                  {ls.name}
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-3 pr-4 align-top">
+                          <Badge variant="outline" className="px-2 py-0.5 rounded-full" style={{ backgroundColor: `${STATUS_COLORS[op.status]}15`, color: STATUS_COLORS[op.status], borderColor: `${STATUS_COLORS[op.status]}30` }}>
+                            {STATUS_LABELS[op.status] || op.status}
                           </Badge>
                         </td>
-                        <td className="py-2 pr-4 text-red-600 font-medium flex items-center gap-1">
-                          <Clock className="h-3.5 w-3.5" />
-                          {format(parseISO(op.due_date), 'dd/MM/yyyy')}
-                          <span className="text-xs text-red-400 ml-1">({daysLate}d)</span>
+                        <td className="py-3 pr-4 text-red-600 font-medium align-top">
+                          <div className="flex flex-col">
+                            <div className="flex items-center gap-1">
+                              <Clock className="h-3.5 w-3.5" />
+                              {displayDateStr ? format(parseISO(displayDateStr), 'dd/MM/yyyy') : 'Sem prazo'}
+                              {daysLate > 0 && <span className="text-[10px] text-red-400 font-normal ml-0.5">({daysLate}d)</span>}
+                            </div>
+                            {!isOPDateLate && earliestStepLate && (
+                              <span className="text-[10px] text-orange-400 font-normal mt-0.5 leading-none">Atraso no Cronograma</span>
+                            )}
+                            {isOPDateLate && (
+                              <span className="text-[10px] text-red-400 font-normal mt-0.5 leading-none font-bold">Entrega Atrasada</span>
+                            )}
+                          </div>
                         </td>
-                        <td className="py-2 text-right font-semibold text-slate-700">{op.qty_planned}</td>
+                        <td className="py-3 text-right font-semibold text-slate-700 align-top">{op.qty_planned}</td>
                       </tr>
                     );
                   })}

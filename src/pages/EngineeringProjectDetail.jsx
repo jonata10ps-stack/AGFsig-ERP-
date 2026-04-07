@@ -66,7 +66,19 @@ export default function EngineeringProjectDetail() {
   const [addItemOpen, setAddItemOpen] = useState(false);
   const [addUpdateOpen, setAddUpdateOpen] = useState(false);
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
-  const [itemForm, setItemForm] = useState({ code: '', description: '', quantity: 1, unit: 'UN', material: '', notes: '' });
+  const [itemForm, setItemForm] = useState({ 
+    code: '', 
+    description: '', 
+    quantity: 1, 
+    unit: 'UN', 
+    material: '', 
+    notes: '',
+    category: '',
+    cost_price: '',
+    sale_price: '',
+    min_stock: '',
+    max_stock: ''
+  });
   const [updateForm, setUpdateForm] = useState({ type: 'PROGRESSO', title: '', content: '', hours_logged: '', progress_percent: '' });
   const [editingUpdate, setEditingUpdate] = useState(null); // update being edited
 
@@ -157,22 +169,75 @@ export default function EngineeringProjectDetail() {
   const addItemMutation = useMutation({
     mutationFn: async () => {
       if (!itemForm.code || !itemForm.description) throw new Error('Código e descrição são obrigatórios');
+      
+      // 1. Garantir que o produto exista no cadastro geral
+      const existingProduct = (await base44.entities.Product.filter({ company_id: companyId, sku: itemForm.code }))?.[0];
+      
+      if (!existingProduct) {
+        // Criar produto se não existir
+        await base44.entities.Product.create({
+          company_id: companyId,
+          sku: itemForm.code,
+          name: itemForm.description,
+          unit: itemForm.unit || 'UN',
+          category: itemForm.category || 'ENGENHARIA',
+          cost_price: parseFloat(itemForm.cost_price) || 0,
+          sale_price: parseFloat(itemForm.sale_price) || 0,
+          min_stock: parseFloat(itemForm.min_stock) || 0,
+          max_stock: parseFloat(itemForm.max_stock) || 0,
+          active: true
+        });
+        toast.info('Novo produto cadastrado automaticamente');
+      }
+
+      // 2. Adicionar o item ao projeto de engenharia
       await base44.entities.EngineeringProjectItem.create({
-        ...itemForm,
+        code: itemForm.code,
+        description: itemForm.description,
         company_id: companyId,
         project_id: projectId,
         quantity: parseFloat(itemForm.quantity) || 1,
+        unit: itemForm.unit,
+        material: itemForm.material,
+        notes: itemForm.notes,
         drawings: [],
       });
     },
     onSuccess: () => {
       refetchItems();
-      toast.success('Item adicionado!');
+      toast.success('Item e Produto vinculados com sucesso!');
       setAddItemOpen(false);
-      setItemForm({ code: '', description: '', quantity: 1, unit: 'UN', material: '', notes: '' });
+      setItemForm({ 
+        code: '', description: '', quantity: 1, unit: 'UN', material: '', notes: '',
+        category: '', cost_price: '', sale_price: '', min_stock: '', max_stock: ''
+      });
     },
     onError: (e) => toast.error('Erro: ' + e.message),
   });
+
+  // Função para buscar produto ao sair do campo código
+  const handleLookupProduct = async (code) => {
+    if (!code) return;
+    try {
+      const resp = await base44.entities.Product.filter({ company_id: companyId, sku: code });
+      const prod = resp?.[0];
+      if (prod) {
+        setItemForm(prev => ({
+          ...prev,
+          description: prod.name || prev.description,
+          unit: prod.unit || prev.unit,
+          category: prod.category || prev.category,
+          cost_price: String(prod.cost_price || ''),
+          sale_price: String(prod.sale_price || ''),
+          min_stock: String(prod.min_stock || ''),
+          max_stock: String(prod.max_stock || '')
+        }));
+        toast.info('Dados carregados do cadastro de produtos');
+      }
+    } catch (err) {
+      console.error('Erro ao buscar produto:', err);
+    }
+  };
 
   // Validation: when changing status to CONCLUIDO, non-obsolete items must have a drawing
   const itemsMissingDrawings = items.filter(item => !item.obsolete && (!item.drawings || item.drawings.length === 0));
@@ -298,15 +363,27 @@ export default function EngineeringProjectDetail() {
     const file = e.target.files[0];
     if (!file) return;
     setUploadingAttachment(true);
-    const { file_url } = await base44.integrations.Core.UploadFile({ file });
-    setUploadingAttachment(false);
-    const ext = file.name.split('.').pop().toUpperCase();
-    const fileType = ['PDF', 'DXF', 'DWG'].includes(ext) ? ext : 'OUTRO';
-    const drawing = { name: file.name, url: file_url, file_type: fileType, revision: '1', uploaded_at: new Date().toISOString() };
-    const newDrawings = [...(item.drawings || []), drawing];
-    await base44.entities.EngineeringProjectItem.update(item.id, { drawings: newDrawings });
-    refetchItems();
-    toast.success('Desenho adicionado!');
+    try {
+      const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      const ext = file.name.split('.').pop().toUpperCase();
+      const fileType = ['PDF', 'DXF', 'DWG'].includes(ext) ? ext : 'OUTRO';
+      const drawing = { 
+        name: file.name, 
+        url: file_url, 
+        file_type: fileType, 
+        revision: String((item.drawings?.length || 0) + 1), 
+        uploaded_at: new Date().toISOString() 
+      };
+      const newDrawings = [...(item.drawings || []), drawing];
+      await base44.entities.EngineeringProjectItem.update(item.id, { drawings: newDrawings });
+      await refetchItems();
+      toast.success('Desenho salvo com sucesso!');
+    } catch (err) {
+      console.error('Erro ao salvar desenho:', err);
+      toast.error('Erro ao salvar desenho: ' + err.message);
+    } finally {
+      setUploadingAttachment(false);
+    }
   };
 
   const deleteItem = async (itemId) => {
@@ -540,7 +617,7 @@ export default function EngineeringProjectDetail() {
                           </Button>
                         </div>
                       </div>
-                      {item.drawings?.length > 0 && (
+                      {Array.isArray(item.drawings) && item.drawings.length > 0 && (
                         <div className="flex flex-wrap gap-2 pt-2 border-t">
                           {item.drawings.map((d, idx) => (
                             <a key={idx} href={d.url} target="_blank" rel="noreferrer"
@@ -574,7 +651,7 @@ export default function EngineeringProjectDetail() {
               </label>
             </CardHeader>
             <CardContent>
-              {!project.attachments?.length ? (
+              {!Array.isArray(project.attachments) || project.attachments.length === 0 ? (
                 <p className="text-center text-slate-500 py-8">Nenhum anexo adicionado</p>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -738,24 +815,47 @@ export default function EngineeringProjectDetail() {
         </TabsContent>
       </Tabs>
       {/* Add Item Dialog */}
-      <Dialog open={addItemOpen} onOpenChange={setAddItemOpen}>
-        <DialogContent>
+       <Dialog open={addItemOpen} onOpenChange={setAddItemOpen}>
+        <DialogContent className="max-w-xl">
           <DialogHeader><DialogTitle>Adicionar Peça / Componente</DialogTitle></DialogHeader>
-          <div className="space-y-4">
+          <div className="space-y-4 py-2">
             <div className="grid grid-cols-2 gap-4">
-              <div><Label>Código *</Label><Input value={itemForm.code} onChange={e => setItemForm({...itemForm, code: e.target.value})} placeholder="PC-001" /></div>
+              <div>
+                <Label>Código / SKU *</Label>
+                <Input 
+                  value={itemForm.code} 
+                  onChange={e => setItemForm({...itemForm, code: e.target.value})} 
+                  onBlur={() => handleLookupProduct(itemForm.code)}
+                  placeholder="Ex: AMPH04" 
+                />
+              </div>
               <div><Label>Unidade</Label><Input value={itemForm.unit} onChange={e => setItemForm({...itemForm, unit: e.target.value})} /></div>
             </div>
             <div><Label>Descrição *</Label><Input value={itemForm.description} onChange={e => setItemForm({...itemForm, description: e.target.value})} placeholder="Descrição da peça" /></div>
+            
             <div className="grid grid-cols-2 gap-4">
               <div><Label>Quantidade</Label><Input type="number" value={itemForm.quantity} onChange={e => setItemForm({...itemForm, quantity: e.target.value})} /></div>
-              <div><Label>Material</Label><Input value={itemForm.material} onChange={e => setItemForm({...itemForm, material: e.target.value})} /></div>
+              <div><Label>Categoria do Produto</Label><Input value={itemForm.category} onChange={e => setItemForm({...itemForm, category: e.target.value})} placeholder="Ex: Fabricação" /></div>
             </div>
-            <div><Label>Observações</Label><Textarea value={itemForm.notes} onChange={e => setItemForm({...itemForm, notes: e.target.value})} rows={2} /></div>
+
+            <div className="grid grid-cols-2 gap-4 p-3 bg-slate-50 rounded-lg border border-slate-100">
+               <div className="col-span-2 text-xs font-semibold text-slate-500 mb-1">DADOS DE CUSTO E ESTOQUE (PRODUTO)</div>
+               <div><Label>Preço de Custo</Label><Input type="number" step="0.01" value={itemForm.cost_price} onChange={e => setItemForm({...itemForm, cost_price: e.target.value})} /></div>
+               <div><Label>Preço de Venda</Label><Input type="number" step="0.01" value={itemForm.sale_price} onChange={e => setItemForm({...itemForm, sale_price: e.target.value})} /></div>
+               <div><Label>Estoque Mín.</Label><Input type="number" value={itemForm.min_stock} onChange={e => setItemForm({...itemForm, min_stock: e.target.value})} /></div>
+               <div><Label>Estoque Máx.</Label><Input type="number" value={itemForm.max_stock} onChange={e => setItemForm({...itemForm, max_stock: e.target.value})} /></div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4">
+              <div><Label>Material / Especificação</Label><Input value={itemForm.material} onChange={e => setItemForm({...itemForm, material: e.target.value})} /></div>
+              <div><Label>Observações</Label><Textarea value={itemForm.notes} onChange={e => setItemForm({...itemForm, notes: e.target.value})} rows={2} /></div>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddItemOpen(false)}>Cancelar</Button>
-            <Button onClick={() => addItemMutation.mutate()} className="bg-indigo-600 hover:bg-indigo-700" disabled={addItemMutation.isPending}>Adicionar</Button>
+            <Button onClick={() => addItemMutation.mutate()} className="bg-indigo-600 hover:bg-indigo-700" disabled={addItemMutation.isPending}>
+              {addItemMutation.isPending ? 'Salvando...' : 'Adicionar e Víncular'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
