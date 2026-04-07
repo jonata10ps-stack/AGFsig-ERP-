@@ -1,15 +1,23 @@
 {
-  "short_name": "AGFSig ERP",
-  "name": "AGFSig ERP - Sistema de Produção",
+  "name": "AGFsig ERP",
+  "short_name": "AGFsig",
+  "description": "Sistema ERP AGF Equipamentos",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#4f46e5",
   "icons": [
     {
-      "src": "https://base44.com/logo_v2.svg",
-      "sizes": "64x64 32x32 24x24 16x16",
-      "type": "image/svg+xml"
+      "src": "https://agfsig-erp-lime.vercel.app/logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://agfsig-erp-lime.vercel.app/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
     }
-  ],
-  "start_url": ".",
-  "display": "standalone",
-  "theme_color": "#000000",
-  "background_color": "#ffffff"
+  ]
 }

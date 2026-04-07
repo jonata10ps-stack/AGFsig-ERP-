@@ -19,22 +19,23 @@ import { createClient } from '@supabase/supabase-js';
  */
 
 // Setup connection to Supabase
-// Use relative path in dev to let Vite proxy handle CORS, otherwise use direct URL
 const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 const supabaseUrl = isLocal 
   ? window.location.origin 
   : (import.meta.env?.VITE_SUPABASE_URL || '');
 const supabaseKey = import.meta.env?.VITE_SUPABASE_ANON_KEY || '';
-
-if (!supabaseUrl || supabaseUrl.includes('SEU_PROJECT_REF')) {
-  console.warn('⚠️ ATENÇÃO: VITE_SUPABASE_URL não configurada no arquivo .env.');
-}
-
 const sbServiceKey = import.meta.env?.VITE_SUPABASE_SERVICE_ROLE_KEY || '';
-export const supabase = createClient(supabaseUrl, supabaseKey);
-export const supabaseAdmin = (supabaseUrl && sbServiceKey) 
-  ? createClient(supabaseUrl, sbServiceKey) 
-  : null;
+
+// Singleton pattern to prevent "Multiple GoTrueClient instances" warnings
+if (!window._supabaseInstance) {
+  window._supabaseInstance = createClient(supabaseUrl, supabaseKey);
+}
+export const supabase = window._supabaseInstance;
+
+if (!window._supabaseAdminInstance && supabaseUrl && sbServiceKey) {
+  window._supabaseAdminInstance = createClient(supabaseUrl, sbServiceKey);
+}
+export const supabaseAdmin = window._supabaseAdminInstance;
 
 const sanitizeData = (data, entityName) => {
   if (!data || typeof data !== 'object') return data;

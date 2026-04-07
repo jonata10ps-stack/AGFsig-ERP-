@@ -629,10 +629,10 @@ export default function ProductionSchedule() {
 
       {/* Edit dates dialog */}
       <Dialog open={!!editingStep} onOpenChange={open => !open && setEditingStep(null)}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-[450px]">
           <DialogHeader>
             <DialogTitle>Editar Detalhes da Etapa</DialogTitle>
-            <DialogDescription>{editingStep?.name} — Seq. {editingStep?.sequence}</DialogDescription>
+            <DialogDescription className="sr-only">Altere as datas e o recurso desta etapa de produção.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 pt-2">
             <div className="grid grid-cols-2 gap-4">
@@ -648,7 +648,7 @@ export default function ProductionSchedule() {
             
             <div>
               <Label>Recurso de Produção</Label>
-              <Select value={editResourceId} onValueChange={setEditResourceId}>
+              <Select value={editResourceId || "none"} onValueChange={setEditResourceId}>
                 <SelectTrigger className="mt-1">
                   <SelectValue placeholder="Selecione um recurso (Máquina/Op)..." />
                 </SelectTrigger>

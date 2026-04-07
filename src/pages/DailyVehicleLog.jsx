@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from 'sonner';
 
@@ -65,25 +65,30 @@ export default function DailyVehicleLog() {
   }, [logs, user, currentSeller, today]);
 
   const createMutation = useMutation({
-     mutationFn: async (data) => {
-       if (currentSeller) {
-         return await base44.entities.DailyVehicleLog.create({
-           ...data,
-           company_id: companyId,
-           seller_id: currentSeller.id,
-           seller_name: currentSeller.name,
-           status: 'ABERTO',
-         });
-       } else {
-         return await base44.entities.DailyVehicleLog.create({
-           ...data,
-           company_id: companyId,
-           seller_id: user.id,
-           seller_name: user.full_name || user.email,
-           status: 'ABERTO',
-         });
-       }
-     },
+      mutationFn: async (data) => {
+        const payload = {
+          ...data,
+          company_id: companyId,
+          created_by: user.email,
+          km_start: data.km_start ? parseFloat(data.km_start) : 0,
+        };
+
+        if (currentSeller) {
+          return await base44.entities.DailyVehicleLog.create({
+            ...payload,
+            seller_id: currentSeller.id,
+            seller_name: currentSeller.name,
+            status: 'ABERTO',
+          });
+        } else {
+          return await base44.entities.DailyVehicleLog.create({
+            ...payload,
+            seller_id: user.id,
+            seller_name: user.full_name || user.email,
+            status: 'ABERTO',
+          });
+        }
+      },
      onSuccess: () => {
        queryClient.invalidateQueries({ queryKey: ['daily-vehicle-logs', companyId] });
       toast.success('Registro iniciado com sucesso!');
@@ -220,69 +225,68 @@ export default function DailyVehicleLog() {
           <h1 className="text-2xl font-bold text-slate-900">Registro de KM Diário</h1>
           <p className="text-slate-500">Controle de quilometragem do veículo</p>
         </div>
-        {!todayLog && (
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
-                Iniciar Dia
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Iniciar Registro do Dia</DialogTitle>
-              </DialogHeader>
-              <form onSubmit={handleSubmit} className="space-y-4">
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogTrigger asChild>
+            <Button>
+              <Plus className="h-4 w-4 mr-2" />
+              Novo Registro
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Novo Registro de KM</DialogTitle>
+              <DialogDescription className="sr-only">Inicie o controle de quilometragem registrando o KM inicial do veículo.</DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="text-sm font-medium">Data</label>
+                <Input
+                  type="date"
+                  value={formData.log_date}
+                  onChange={(e) => setFormData({ ...formData, log_date: e.target.value })}
+                  className="mt-1"
+                  required
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={formData.is_company_vehicle}
+                  onChange={(e) => setFormData({ ...formData, is_company_vehicle: e.target.checked })}
+                  className="w-4 h-4"
+                />
+                <label className="text-sm font-medium">Veículo da empresa</label>
+              </div>
+              {formData.is_company_vehicle && (
                 <div>
-                  <label className="text-sm font-medium">Data</label>
+                  <label className="text-sm font-medium">KM Inicial *</label>
                   <Input
-                    type="date"
-                    value={formData.log_date}
-                    onChange={(e) => setFormData({ ...formData, log_date: e.target.value })}
+                    type="number"
+                    value={formData.km_start}
+                    onChange={(e) => setFormData({ ...formData, km_start: e.target.value })}
                     className="mt-1"
                     required
+                    min="0"
+                    step="0.1"
+                    placeholder="Ex: 12345"
                   />
                 </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={formData.is_company_vehicle}
-                    onChange={(e) => setFormData({ ...formData, is_company_vehicle: e.target.checked })}
-                    className="w-4 h-4"
-                  />
-                  <label className="text-sm font-medium">Veículo da empresa</label>
-                </div>
-                {formData.is_company_vehicle && (
-                  <div>
-                    <label className="text-sm font-medium">KM Inicial *</label>
-                    <Input
-                      type="number"
-                      value={formData.km_start}
-                      onChange={(e) => setFormData({ ...formData, km_start: e.target.value })}
-                      className="mt-1"
-                      required
-                      min="0"
-                      step="0.1"
-                      placeholder="Ex: 12345"
-                    />
-                  </div>
-                )}
-                <div>
-                  <label className="text-sm font-medium">Observações</label>
-                  <Textarea
-                    value={formData.notes}
-                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                    className="mt-1"
-                    rows={3}
-                  />
-                </div>
-                <Button type="submit" className="w-full" disabled={createMutation.isPending}>
-                  {createMutation.isPending ? 'Salvando...' : 'Iniciar Registro'}
-                </Button>
-              </form>
-            </DialogContent>
-          </Dialog>
-        )}
+              )}
+              <div>
+                <label className="text-sm font-medium">Observações</label>
+                <Textarea
+                  value={formData.notes}
+                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                  className="mt-1"
+                  rows={3}
+                />
+              </div>
+              <Button type="submit" className="w-full" disabled={createMutation.isPending}>
+                {createMutation.isPending ? 'Salvando...' : 'Criar Registro'}
+              </Button>
+            </form>
+          </DialogContent>
+        </Dialog>
       </div>
 
       {todayLog && (
@@ -334,6 +338,7 @@ export default function DailyVehicleLog() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Fechar Registro do Dia</DialogTitle>
+            <DialogDescription className="sr-only">Finalize o controle de quilometragem registrando o KM final do veículo.</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleCloseSubmit} className="space-y-4">
             {closingLog?.is_company_vehicle && (
@@ -390,6 +395,7 @@ export default function DailyVehicleLog() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Editar Registro</DialogTitle>
+            <DialogDescription className="sr-only">Altere as informações de quilometragem ou observações do registro.</DialogDescription>
           </DialogHeader>
           <form onSubmit={handleEditSubmit} className="space-y-4">
             <div>

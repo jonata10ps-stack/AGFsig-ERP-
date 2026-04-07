@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
-import { base44 } from '@/api/base44Client';
+import { base44, supabase } from '@/api/base44Client';
 import { Bell, X, AlertTriangle, Clock, Factory, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { differenceInDays, differenceInHours, parseISO } from 'date-fns';
@@ -85,6 +85,17 @@ export default function NotificationsPanel({ open, onClose }) {
         const cid = user?.current_company_id || user?.company_ids?.[0] || user?.company_id;
         if (!cid) return;
 
+        const productionAlertsAction = async () => {
+          try {
+            const { data, error } = await supabase.rpc('generate_production_alerts', { p_company_id: cid });
+            if (error) throw error;
+            return data?.alerts || [];
+          } catch (e) {
+            console.debug('RPC generate_production_alerts não disponível:', e.message);
+            return [];
+          }
+        };
+
         const [
           productionRequests,
           salesOrders,
@@ -100,11 +111,7 @@ export default function NotificationsPanel({ open, onClose }) {
           base44.entities.ProductionRequest.filter({ company_id: cid }, '-created_date', 50),
           base44.entities.SalesOrder.filter({ company_id: cid }, '-created_date', 50),
           base44.entities.Notification.filter({ user_email: user.email, company_id: cid, is_read: false }, '-created_date', 50),
-          base44.functions.invoke('generateProductionAlerts', {}).then(r => r.data?.alerts || []).catch(e => {
-            // Silencia erro de CORS/inexistência no console para evitar poluição
-            console.debug('Edge Function generateProductionAlerts não disponível:', e.message);
-            return [];
-          }),
+          productionAlertsAction(),
           base44.entities.ProductionOrder.filter({ company_id: cid }, '-created_date', 100),
           base44.entities.InventoryMove.filter({ company_id: cid }, '-created_date', 50),
           base44.entities.Quote.filter({ company_id: cid }, '-created_date', 30),
