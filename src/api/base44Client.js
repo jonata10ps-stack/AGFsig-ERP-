@@ -20,10 +20,7 @@ import { createClient } from '@supabase/supabase-js';
 
 // Setup connection to Supabase
 const getSupabaseConfig = () => {
-  const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-  const url = isLocal 
-    ? window.location.origin 
-    : (import.meta.env?.VITE_SUPABASE_URL || '');
+  const url = 'https://vcbbvqhfcnouhsazqoxr.supabase.co';
   const key = import.meta.env?.VITE_SUPABASE_ANON_KEY || '';
   const adminKey = import.meta.env?.VITE_SUPABASE_SERVICE_ROLE_KEY || '';
   return { url, key, adminKey };
