@@ -128,10 +128,6 @@ export default function ServiceRequests() {
         description: request.description,
         status: 'PENDENTE'
       });
-
-      await base44.entities.ServiceRequest.update(request.id, {
-        status: 'EM_ATENDIMENTO'
-      });
     },
     onSuccess: () => {
        queryClient.invalidateQueries({ queryKey: ['service-requests', companyId] });

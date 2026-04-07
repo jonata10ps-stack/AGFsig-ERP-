@@ -109,9 +109,10 @@ export default function ServiceOrderDetail() {
         if (newStatus === 'EM_ANDAMENTO' && !order.started_at) {
           updates.started_at = new Date().toISOString();
         }
-        if (newStatus === 'CONCLUIDA') {
-          updates.completed_at = new Date().toISOString();
-          updates.total_cost = Number(formData.labor_cost || 0) + Number(formData.parts_cost || 0);
+        if (newStatus === 'EM_ANDAMENTO' && order.request_id) {
+          await base44.entities.ServiceRequest.update(order.request_id, {
+            status: 'EM_ATENDIMENTO'
+          });
         }
         return await base44.entities.ServiceOrder.update(orderId, updates);
       } catch (err) {
