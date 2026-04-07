@@ -455,6 +455,8 @@ export default function ProductionOrderDetail() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['production-steps', opId, companyId] });
+      queryClient.invalidateQueries({ queryKey: ['productionSteps', companyId] });
+      queryClient.invalidateQueries({ queryKey: ['productionOrders', companyId] });
       toast.success('Etapa adicionada com sucesso');
       setShowAddStepDialog(false);
       setStepName('');
@@ -474,10 +476,25 @@ export default function ProductionOrderDetail() {
       if (editStepEndDate) updateData.scheduled_end_date = editStepEndDate;
       if (editStepResourceId) updateData.resource_id = editStepResourceId;
       
+      // Se estiver iniciando (EM_ANDAMENTO), garante que a OP também mude para EM_ANDAMENTO
+      if (editStepStatus === 'EM_ANDAMENTO') {
+        updateData.started_at = new Date().toISOString();
+      } else if (editStepStatus === 'CONCLUIDA') {
+        updateData.completed_at = new Date().toISOString();
+      }
+      
       await base44.entities.ProductionStep.update(stepId, updateData);
+
+      // Sincroniza o status da OP se uma etapa iniciar
+      if (editStepStatus === 'EM_ANDAMENTO' && op && op.status !== 'EM_ANDAMENTO' && op.status !== 'CONCLUIDA' && op.status !== 'ENCERRADA') {
+        await base44.entities.ProductionOrder.update(opId, { status: 'EM_ANDAMENTO' });
+      }
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['production-order', opId, companyId] });
       queryClient.invalidateQueries({ queryKey: ['production-steps', opId, companyId] });
+      queryClient.invalidateQueries({ queryKey: ['productionSteps', companyId] });
+      queryClient.invalidateQueries({ queryKey: ['productionOrders', companyId] });
       toast.success('Etapa atualizada com sucesso');
       setEditingStepId(null);
       setEditStepStatus('');
@@ -495,6 +512,8 @@ export default function ProductionOrderDetail() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['production-steps', opId, companyId] });
+      queryClient.invalidateQueries({ queryKey: ['productionSteps', companyId] });
+      queryClient.invalidateQueries({ queryKey: ['productionOrders', companyId] });
       toast.success('Etapa removida com sucesso');
     },
     onError: (error) => {

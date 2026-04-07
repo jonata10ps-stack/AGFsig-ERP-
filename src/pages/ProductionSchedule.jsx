@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { base44 } from '@/api/base44Client';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -63,6 +63,7 @@ function GanttBar({ step, timeStart, totalDays }) {
 }
 
 export default function ProductionSchedule() {
+  const queryClient = useQueryClient();
   const { companyId } = useCompanyId();
   const [expandedOPs, setExpandedOPs] = useState({});
   const [searchTerm, setSearchTerm] = useState('');
@@ -189,10 +190,42 @@ export default function ProductionSchedule() {
     });
   }, [grouped, ordersMap, searchTerm, statusFilter, activeKPI]);
 
-  const startStep = async (stepId) => { await base44.entities.ProductionStep.update(stepId, { status: 'EM_ANDAMENTO', started_at: new Date().toISOString() }); refetch(); };
-  const pauseStep = async (stepId) => { await base44.entities.ProductionStep.update(stepId, { status: 'PENDENTE' }); refetch(); };
-  const completeStep = async (stepId) => { await base44.entities.ProductionStep.update(stepId, { status: 'CONCLUIDA', completed_at: new Date().toISOString() }); refetch(); };
-  const skipStep = async (stepId) => { await base44.entities.ProductionStep.update(stepId, { status: 'PULADA' }); refetch(); };
+  const invalidateAll = () => {
+    queryClient.invalidateQueries({ queryKey: ['productionSteps', companyId] });
+    queryClient.invalidateQueries({ queryKey: ['production-steps'] });
+    queryClient.invalidateQueries({ queryKey: ['productionOrders', companyId] });
+    queryClient.invalidateQueries({ queryKey: ['production-order'] });
+    queryClient.invalidateQueries({ queryKey: ['production-orders'] });
+  };
+
+  const startStep = async (stepId) => { 
+    const step = steps.find(s => s.id === stepId);
+    await base44.entities.ProductionStep.update(stepId, { status: 'EM_ANDAMENTO', started_at: new Date().toISOString() }); 
+    
+    // Also update OP status to EM_ANDAMENTO if it wasn't already
+    if (step && step.op_id) {
+      const op = ordersMap[step.op_id];
+      if (op && op.status !== 'EM_ANDAMENTO' && op.status !== 'CONCLUIDA' && op.status !== 'ENCERRADA') {
+        await base44.entities.ProductionOrder.update(step.op_id, { status: 'EM_ANDAMENTO' });
+      }
+    }
+    invalidateAll(); 
+  };
+
+  const pauseStep = async (stepId) => { 
+    await base44.entities.ProductionStep.update(stepId, { status: 'PENDENTE' }); 
+    invalidateAll(); 
+  };
+
+  const completeStep = async (stepId) => { 
+    await base44.entities.ProductionStep.update(stepId, { status: 'CONCLUIDA', completed_at: new Date().toISOString() }); 
+    invalidateAll(); 
+  };
+
+  const skipStep = async (stepId) => { 
+    await base44.entities.ProductionStep.update(stepId, { status: 'PULADA' }); 
+    invalidateAll(); 
+  };
 
   const handleSaveStepDetails = async () => {
     if (!editingStep) return;
@@ -204,7 +237,7 @@ export default function ProductionSchedule() {
         resource_id: editResourceId || null
       });
       toast.success('Etapa atualizada com sucesso');
-      refetch();
+      invalidateAll();
       setEditingStep(null);
     } catch (e) {
       console.error('Erro ao salvar etapa:', e);

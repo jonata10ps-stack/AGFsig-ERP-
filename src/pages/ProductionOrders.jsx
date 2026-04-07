@@ -509,6 +509,13 @@ export default function ProductionOrders() {
         console.warn('⚠️ Nenhuma BOM ativa encontrada para o produto', data.product_id);
       }
       
+      console.log('✅ BOM e Etapas criadas para OP');
+      queryClient.invalidateQueries({ queryKey: ['production-orders', companyId] });
+      queryClient.invalidateQueries({ queryKey: ['productionOrders', companyId] });
+      queryClient.invalidateQueries({ queryKey: ['production-steps'] });
+      queryClient.invalidateQueries({ queryKey: ['productionSteps'] });
+      toast.success('Ordem de Produção criada com sucesso');
+      
       return op;
     },
     onSuccess: () => {
@@ -608,6 +615,8 @@ export default function ProductionOrders() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['production-orders', companyId] });
+      queryClient.invalidateQueries({ queryKey: ['productionOrders', companyId] });
+      queryClient.invalidateQueries({ queryKey: ['production-order'] });
       toast.success('Status atualizado');
     },
     onError: (error) => {
