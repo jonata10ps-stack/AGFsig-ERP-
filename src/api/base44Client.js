@@ -304,11 +304,21 @@ export const base44 = {
         }
       },
       InvokeLLM: async (body) => {
-        const { data, error } = await supabase.functions.invoke('generate-report-insights', {
-          body
-        });
-        if (error) throw error;
-        return data;
+        try {
+          const { data, error } = await supabase.functions.invoke('generate-report-insights', {
+            body
+          });
+          if (error) throw error;
+          return data;
+        } catch (err) {
+          console.warn('Edge Function falhou, tentando via RPC...', err);
+          const { data, error } = await supabase.rpc('get_ai_report_insights', { 
+            p_prompt: body.prompt,
+            p_schema: body.response_json_schema 
+          });
+          if (error) throw error;
+          return data;
+        }
       },
       ExtractDataFromUploadedFile: async () => ({ parsed_data: [] })
     }
