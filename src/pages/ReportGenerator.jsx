@@ -160,8 +160,8 @@ Forneça:
         date_from: dateFrom,
         date_to: dateTo,
         filters_applied: JSON.stringify({ dateFrom, dateTo }),
-        summary: reportData.summary,
-        data_points: reportData.total_orders,
+        // summary: reportData.summary,
+        // data_points: reportData.total_orders,
       });
 
       setGeneratedReport({ ...reportData, id: report.id });
