@@ -20,17 +20,48 @@ export default function ImportBOMs() {
 
   const handleDownloadTemplate = () => {
     const rows = [
-      { product_sku: 'PROD-001', component_sku: 'COMP-001', quantity: 2, sequence: 1 },
-      { product_sku: 'PROD-001', component_sku: 'COMP-002', quantity: 1, sequence: 2 },
-      { product_sku: 'PROD-001', component_sku: 'COMP-003', quantity: 4, sequence: 3 },
-      { product_sku: 'PROD-002', component_sku: 'COMP-001', quantity: 1, sequence: 1 },
-      { product_sku: 'PROD-002', component_sku: 'COMP-004', quantity: 3, sequence: 2 },
+      { 
+        product_sku: 'PROD-001', 
+        component_sku: 'COMP-001', 
+        quantity: 2, 
+        sequence: 1,
+        step_sequence: 1,
+        step_name: 'Corte',
+        step_description: 'Cortar barras de aço',
+        resource_code: 'MAQ-01',
+        estimated_time: 15
+      },
+      { 
+        product_sku: 'PROD-001', 
+        component_sku: 'COMP-002', 
+        quantity: 1, 
+        sequence: 2,
+        step_sequence: 2,
+        step_name: 'Soldagem',
+        step_description: 'Soldar estrutura principal',
+        resource_code: 'SOL-02',
+        estimated_time: 30
+      },
+      { 
+        product_sku: 'PROD-001', 
+        component_sku: '', 
+        quantity: 0, 
+        sequence: 0,
+        step_sequence: 3,
+        step_name: 'Montagem Final',
+        step_description: 'Montagem dos acessórios',
+        resource_code: 'LAB-01',
+        estimated_time: 45
+      },
     ];
     const ws = XLSX.utils.json_to_sheet(rows);
-    ws['!cols'] = [{ wch: 20 }, { wch: 20 }, { wch: 15 }, { wch: 12 }];
+    ws['!cols'] = [
+      { wch: 15 }, { wch: 15 }, { wch: 10 }, { wch: 10 }, 
+      { wch: 12 }, { wch: 15 }, { wch: 25 }, { wch: 15 }, { wch: 12 }
+    ];
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'BOMs');
-    XLSX.writeFile(wb, 'modelo_importacao_bom.xlsx');
+    XLSX.utils.book_append_sheet(wb, ws, 'BOM_e_Roteiros');
+    XLSX.writeFile(wb, 'modelo_importacao_bom_roteiros.xlsx');
   };
 
   const handleFileChange = (e) => {
@@ -65,11 +96,17 @@ export default function ImportBOMs() {
         }
         return {
           product_sku: String(normalized['product_sku'] || '').trim(),
-          component_sku: String(normalized['component_sku'] || '').trim(),
-          quantity: parseFloat(normalized['quantity']) || 1,
-          sequence: parseInt(normalized['sequence']) || 1,
+          component_sku: String(normalized['component_sku'] || String(normalized['item_sku'] || '')).trim(),
+          quantity: parseFloat(normalized['quantity']) || 0,
+          sequence: parseInt(normalized['sequence']) || 0,
+          // Routing columns
+          step_sequence: parseInt(normalized['step_sequence']) || 0,
+          step_name: String(normalized['step_name'] || '').trim(),
+          step_description: String(normalized['step_description'] || '').trim(),
+          resource_code: String(normalized['resource_code'] || '').trim(),
+          estimated_time: parseFloat(normalized['estimated_time']) || 0,
         };
-      }).filter(r => r.product_sku && r.component_sku);
+      }).filter(r => r.product_sku); // Permitir linhas sem component se tiver step_name
 
       if (bomData.length === 0) {
         setResults({ success: false, error: 'Nenhuma linha válida encontrada no arquivo. Verifique se as colunas estão corretas: product_sku, component_sku, quantity, sequence.' });
@@ -99,6 +136,11 @@ export default function ImportBOMs() {
       const productMap = {};
       // Mapear por SKU normalizado (uppercase, sem espaços) para tolerância a diferenças de caixa
       allProducts.forEach(p => { productMap[p.sku.trim().toUpperCase()] = p; });
+
+      // Buscar recursos para o roteiro
+      const resources = await base44.entities.Resource.filter({ company_id: companyId, active: true });
+      const resourceMap = {};
+      resources.forEach(r => { resourceMap[r.code?.trim().toUpperCase()] = r; });
 
       setProgress(55);
 
@@ -172,24 +214,88 @@ export default function ImportBOMs() {
             current_version_number: newVersionNumber
           });
 
-          // Adicionar itens
-          for (const item of items) {
-            const component = productMap[item.component_sku.toUpperCase()];
-            if (!component) {
-              errors.push(`Componente ${item.component_sku} não encontrado para ${productSku}`);
-              continue;
+          // Processar Itens de BOM e Roteiros
+          const bomItemsToCreate = [];
+          const routeStepsToCreate = [];
+
+          items.forEach(item => {
+            // Se tem componente, adiciona à BOM
+            if (item.component_sku) {
+              const component = productMap[item.component_sku.toUpperCase()];
+              if (component) {
+                bomItemsToCreate.push({
+                  company_id: companyId,
+                  bom_id: bom.id,
+                  bom_version_id: newVersion.id,
+                  component_id: component.id,
+                  component_sku: component.sku,
+                  component_name: component.name,
+                  quantity: item.quantity || 1,
+                  sequence: item.sequence || bomItemsToCreate.length + 1,
+                  unit: component.unit || 'UN'
+                });
+              } else {
+                errors.push(`Componente ${item.component_sku} não encontrado para ${productSku}`);
+              }
             }
 
-            await base44.entities.BOMItem.create({
-              company_id: companyId,
-              bom_id: bom.id,
-              bom_version_id: newVersion.id,
-              component_id: component.id,
-              component_sku: component.sku,
-              component_name: component.name,
-              quantity: item.quantity,
-              sequence: item.sequence || 1,
-              unit: component.unit || 'UN'
+            // Se tem etapa, adiciona ao Roteiro
+            if (item.step_name) {
+              const resource = item.resource_code ? resourceMap[item.resource_code.toUpperCase()] : null;
+              routeStepsToCreate.push({
+                sequence: item.step_sequence || routeStepsToCreate.length + 1,
+                name: item.step_name,
+                description: item.step_description || '',
+                resource_id: resource?.id || '',
+                estimated_time: item.estimated_time || 0
+              });
+            }
+          });
+
+          // Criar itens da BOM
+          for (const bomItem of bomItemsToCreate) {
+            await base44.entities.BOMItem.create(bomItem);
+          }
+
+          // Criar roteiro na ProductionRoute (Entidade global de roteiros)
+          if (routeStepsToCreate.length > 0) {
+            // Verificar se roteiro já existe
+            const existingRoutes = await base44.entities.ProductionRoute.filter({ product_id: product.id });
+            let routeId;
+
+            if (existingRoutes.length > 0) {
+              routeId = existingRoutes[0].id;
+              // Deletar etapas antigas
+              const oldSteps = await base44.entities.ProductionRouteStep.filter({ route_id: routeId });
+              for (const s of oldSteps) await base44.entities.ProductionRouteStep.delete(s.id);
+            } else {
+              const newRoute = await base44.entities.ProductionRoute.create({
+                company_id: companyId,
+                product_id: product.id,
+                code: 'PADRAO',
+                name: 'Roteiro de Produção Padrão',
+                active: true
+              });
+              routeId = newRoute.id;
+            }
+
+            // Criar novas etapas e salvar no JSON do BOMVersion para redundância/consistência
+            const stepsWithIds = [];
+            for (const stepData of routeStepsToCreate) {
+              const createdStep = await base44.entities.ProductionRouteStep.create({
+                ...stepData,
+                route_id: routeId,
+                company_id: companyId
+              });
+              stepsWithIds.push({
+                ...stepData,
+                id: createdStep.id
+              });
+            }
+
+            // Atualizar JSON de roteiros na Versão da BOM
+            await base44.entities.BOMVersion.update(newVersion.id, {
+              routes: JSON.stringify(stepsWithIds)
             });
           }
 
@@ -265,21 +371,45 @@ export default function ImportBOMs() {
                 <tr className="bg-slate-50">
                   <td className="px-3 py-2 border border-slate-200 font-mono text-indigo-600">component_sku</td>
                   <td className="px-3 py-2 border border-slate-200 text-slate-600">SKU do componente/material</td>
-                  <td className="px-3 py-2 border border-slate-200 text-green-600 font-medium">Sim</td>
+                  <td className="px-3 py-2 border border-slate-200 text-slate-400">Não*</td>
                 </tr>
                 <tr>
                   <td className="px-3 py-2 border border-slate-200 font-mono text-indigo-600">quantity</td>
-                  <td className="px-3 py-2 border border-slate-200 text-slate-600">Quantidade necessária do componente</td>
-                  <td className="px-3 py-2 border border-slate-200 text-green-600 font-medium">Sim</td>
+                  <td className="px-3 py-2 border border-slate-200 text-slate-600">Quantidade do componente</td>
+                  <td className="px-3 py-2 border border-slate-200 text-slate-400">Não*</td>
                 </tr>
                 <tr className="bg-slate-50">
-                  <td className="px-3 py-2 border border-slate-200 font-mono text-indigo-600">sequence</td>
-                  <td className="px-3 py-2 border border-slate-200 text-slate-600">Ordem de montagem (ex: 1, 2, 3...)</td>
+                  <td className="px-3 py-2 border border-slate-200 font-mono text-slate-400">sequence</td>
+                  <td className="px-3 py-2 border border-slate-200 text-slate-600">Sequência do componente na BOM</td>
+                  <td className="px-3 py-2 border border-slate-200 text-slate-400">Não</td>
+                </tr>
+                <tr className="bg-indigo-50/50">
+                  <td className="px-3 py-2 border border-slate-200 font-mono text-indigo-900 font-semibold">step_name</td>
+                  <td className="px-3 py-2 border border-slate-200 text-slate-600 font-medium">Nome da etapa (Roteiro)</td>
+                  <td className="px-3 py-2 border border-slate-200 text-slate-400">Não*</td>
+                </tr>
+                <tr className="bg-indigo-50/50">
+                  <td className="px-3 py-2 border border-slate-200 font-mono text-indigo-700">resource_code</td>
+                  <td className="px-3 py-2 border border-slate-200 text-slate-600">Código do Recurso (Máquina/Posto)</td>
+                  <td className="px-3 py-2 border border-slate-200 text-slate-400">Não</td>
+                </tr>
+                <tr className="bg-indigo-50/50">
+                  <td className="px-3 py-2 border border-slate-200 font-mono text-indigo-700">step_sequence</td>
+                  <td className="px-3 py-2 border border-slate-200 text-slate-600">Sequência da etapa no roteiro</td>
+                  <td className="px-3 py-2 border border-slate-200 text-slate-400">Não</td>
+                </tr>
+                <tr className="bg-indigo-50/50">
+                  <td className="px-3 py-2 border border-slate-200 font-mono text-indigo-700">estimated_time</td>
+                  <td className="px-3 py-2 border border-slate-200 text-slate-600">Tempo estimado (minutos)</td>
                   <td className="px-3 py-2 border border-slate-200 text-slate-400">Não</td>
                 </tr>
               </tbody>
             </table>
           </div>
+          <p className="text-xs text-slate-500 mt-2 italic">
+            * Cada linha deve ter ao menos um <b>component_sku</b> (para BOM) ou um <b>step_name</b> (para Roteiro), ou ambos se o componente for montado naquela etapa específica.
+          </p>
+
           <p className="text-sm text-slate-500">
             Todos os produtos e componentes devem estar previamente cadastrados no sistema. Repita o <strong>product_sku</strong> em cada linha para cada componente do mesmo produto.
           </p>
