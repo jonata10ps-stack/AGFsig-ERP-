@@ -75,6 +75,13 @@ export default function ProductionSchedule() {
   const [editResourceId, setEditResourceId] = useState('');
   const [isSavingStep, setIsSavingStep] = useState(false);
   const [viewMode, setViewMode] = useState('list'); // 'list' | 'gantt'
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 20;
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter, activeKPI]);
 
   const { data: steps = [], isLoading, refetch } = useQuery({
     queryKey: ['productionSteps', companyId],
@@ -189,6 +196,13 @@ export default function ProductionSchedule() {
       return 0;
     });
   }, [grouped, ordersMap, searchTerm, statusFilter, activeKPI]);
+
+  const paginatedOPIds = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredOPIds.slice(start, start + pageSize);
+  }, [filteredOPIds, currentPage, pageSize]);
+
+  const totalPages = Math.ceil(filteredOPIds.length / pageSize);
 
   const invalidateAll = () => {
     queryClient.invalidateQueries({ queryKey: ['productionSteps', companyId] });
@@ -407,7 +421,7 @@ export default function ProductionSchedule() {
               {filteredOPIds.length === 0 && (
                 <p className="text-center text-slate-400 py-8 text-sm">Nenhuma OP encontrada</p>
               )}
-              {filteredOPIds.map(opId => {
+              {paginatedOPIds.map(opId => {
                 const op = ordersMap[opId];
                 const opSteps = grouped[opId] || [];
                 const cfg = OP_STATUS_CONFIG[op?.status];
@@ -438,6 +452,15 @@ export default function ProductionSchedule() {
               </div>
             </div>
           </CardContent>
+          {totalPages > 1 && (
+            <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between gap-4">
+              <span className="text-sm text-slate-500">Página {currentPage} de {totalPages} · {filteredOPIds.length} Total</span>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>Anterior</Button>
+                <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>Próxima</Button>
+              </div>
+            </div>
+          )}
         </Card>
       )}
 
@@ -453,7 +476,7 @@ export default function ProductionSchedule() {
               </CardContent>
             </Card>
           ) : (
-            filteredOPIds.map(opId => {
+            paginatedOPIds.map(opId => {
               const op = ordersMap[opId];
               const opSteps = grouped[opId] || [];
               const isExpanded = expandedOPs[opId];
@@ -590,6 +613,16 @@ export default function ProductionSchedule() {
                 </Card>
               );
             })
+          )}
+          
+          {totalPages > 1 && (
+            <div className="py-6 flex items-center justify-between gap-4">
+              <span className="text-sm text-slate-500">Página {currentPage} de {totalPages} · {filteredOPIds.length} OPs</span>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>Anterior</Button>
+                <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>Próxima</Button>
+              </div>
+            </div>
           )}
         </div>
       )}
