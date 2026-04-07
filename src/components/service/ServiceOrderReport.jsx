@@ -14,147 +14,168 @@ export default function ServiceOrderReport({ order, history, onClose }) {
   const handlePrint = () => {
     const printWindow = window.open('', '_blank');
     
-    // Preparar fotos para o print
     const photoHtml = (order.service_photos || []).map(url => 
-      `<img src="${url}" style="width: 100%; max-height: 350px; object-fit: contain; margin-bottom: 20px; border: 1px solid #ddd; border-radius: 8px;">`
-    ).join('') || '<p style="color: #999; font-style: italic;">Nenhuma foto do serviço anexada.</p>';
+      `<div class="photo-card"><img src="${url}"></div>`
+    ).join('') || '<div class="empty-state">Nenhuma foto anexada</div>';
 
     const signatureHtml = order.client_signature 
-      ? `<img src="${order.client_signature}" style="max-height: 120px; display: block; margin: 0 auto;">`
-      : '<p style="color: #999; font-style: italic; border-bottom: 1px solid #ccc; width: 250px; margin: 20px auto;"></p><p style="text-align: center; color: #999; font-size: 10px;">Assinatura não coletada</p>';
+      ? `<img src="${order.client_signature}" class="signature-img">`
+      : '<div class="signature-placeholder">Assinatura Pendente</div>';
 
-    // Preparar histórico para o print
     const historyHtml = (history || []).map(h => `
-      <div style="margin-bottom: 8px; border-left: 2px solid #ddd; padding-left: 10px; font-size: 11px;">
-        <strong>${format(new Date(h.created_at || h.created_date), 'dd/MM/yyyy HH:mm')}</strong> - 
-        De: ${h.from_technician_name || 'Não atribuído'} p/ ${h.to_technician_name}
-        <br/><span style="color: #666;">Motivo: ${h.reason || '-'}</span>
+      <div class="history-item">
+        <div class="history-dot"></div>
+        <div class="history-content">
+          <div class="history-meta">${format(new Date(h.created_at || h.created_date), 'dd/MM/yyyy HH:mm')}</div>
+          <div class="history-text">Técnico: <strong>${h.to_technician_name}</strong></div>
+          <div class="history-reason">${h.reason || 'Alteração de rotina'}</div>
+        </div>
       </div>
-    `).join('') || '<p>Sem histórico de trocas técnicas.</p>';
+    `).join('');
 
     printWindow.document.write(`
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Relatório de Serviço - OS ${order.os_number}</title>
+        <title>OS ${order.os_number} - Relatório Técnico</title>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
         <style>
-          @page { size: A4; margin: 15mm; }
-          body { font-family: 'Inter', system-ui, sans-serif; color: #333; line-height: 1.4; margin: 0; padding: 0; }
-          .report-container { padding: 10px; }
-          .header { border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: flex-end; }
-          .title { font-size: 22px; font-weight: bold; text-transform: uppercase; }
-          .order-info { text-align: right; }
-          .section { margin-bottom: 20px; }
-          .section-title { font-size: 12px; font-weight: bold; background: #f4f4f5; padding: 4px 8px; border-left: 3px solid #333; margin-bottom: 10px; text-transform: uppercase; }
-          .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
-          .field-label { font-size: 10px; text-transform: uppercase; color: #666; font-weight: bold; }
-          .field-value { font-size: 12px; font-weight: 500; }
-          .content-box { font-size: 11px; white-space: pre-wrap; background: #fff; border: 1px solid #eee; padding: 10px; border-radius: 4px; }
-          .footer { margin-top: 30px; border-top: 1px solid #ddd; padding-top: 5px; font-size: 9px; color: #999; text-align: center; }
+          @page { size: A4; margin: 12mm; }
+          * { box-sizing: border-box; }
+          body { 
+            font-family: 'Inter', sans-serif; 
+            color: #1e293b; 
+            background: #fff;
+            margin: 0; padding: 0; 
+            font-size: 11px;
+            line-height: 1.5;
+          }
+          .container { max-width: 800px; margin: 0 auto; }
+          
+          /* Header Styling */
+          .header { 
+            display: flex; justify-content: space-between; align-items: center; 
+            padding: 20px 0; border-bottom: 2px solid #f1f5f9; margin-bottom: 30px; 
+          }
+          .logo-text { font-size: 24px; font-weight: 800; color: #4f46e5; letter-spacing: -1px; }
+          .os-badge { 
+            background: #f1f5f9; padding: 10px 20px; border-radius: 12px; text-align: right; 
+          }
+          .os-number { font-size: 18px; font-weight: 800; color: #1e293b; display: block; }
+          .os-status { font-size: 9px; font-weight: 700; color: #64748b; text-transform: uppercase; margin-top: 2px; }
+
+          /* Cards Layout */
+          .section-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; margin-bottom: 25px; }
+          .card { 
+            background: #fff; border: 1px solid #e2e8f0; border-radius: 14px; 
+            padding: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+          }
+          .card-label { font-size: 8px; font-weight: 800; color: #94a3b8; text-transform: uppercase; margin-bottom: 8px; letter-spacing: 0.5px; }
+          .card-value { font-weight: 600; color: #0f172a; word-break: break-word; }
+          .card-sub { font-size: 10px; color: #64748b; margin-top: 4px; }
+
+          /* Content Sections */
+          .full-section { margin-bottom: 25px; }
+          .section-title { 
+            font-size: 10px; font-weight: 800; color: #4f46e5; 
+            text-transform: uppercase; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;
+          }
+          .section-title::after { content: ''; flex: 1; height: 1px; background: #e2e8f0; }
+          .text-content { background: #f8fafc; border-radius: 12px; padding: 15px; font-size: 11px; color: #334155; border: 1px solid #f1f5f9; }
+          .text-solution { color: #059669; font-weight: 500; }
+
+          /* Photo Gallery */
+          .photo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+          .photo-card { border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; height: 180px; }
+          .photo-card img { width: 100%; height: 100%; object-fit: cover; }
+          .empty-state { text-align: center; padding: 40px; color: #94a3b8; background: #f8fafc; border-radius: 12px; font-style: italic; }
+
+          /* History */
+          .history-container { background: #fff; border-radius: 12px; border: 1px solid #e2e8f0; padding: 15px; }
+          .history-item { display: flex; gap: 12px; margin-bottom: 12px; position: relative; }
+          .history-dot { width: 8px; height: 8px; background: #4f46e5; border-radius: 50%; margin-top: 4px; }
+          .history-meta { font-size: 9px; color: #94a3b8; font-weight: 600; }
+          .history-text { font-size: 11px; }
+
+          /* Footer / Signature */
+          .signature-section { 
+            margin-top: 40px; border-top: 1px solid #e2e8f0; pt: 30px; 
+            display: flex; justify-content: center; text-align: center; 
+          }
+          .signature-box { width: 300px; }
+          .signature-img { max-height: 100px; width: auto; margin-bottom: 15px; }
+          .signature-line { border-top: 2px solid #1e293b; margin-top: 5px; padding-top: 5px; font-weight: 700; }
+          .footer-note { font-size: 8px; color: #94a3b8; text-align: center; margin-top: 40px; }
+
+          .page-break { page-break-before: always; }
           @media print {
-            button { display: none; }
-            .page-break { page-break-before: always; }
+            .no-print { display: none; }
           }
         </style>
       </head>
       <body>
-        <div class="report-container">
-          <div class="header">
-            <div class="title">Relatório Técnico de Serviço</div>
-            <div class="order-info">
-              <div style="font-size: 16px; font-weight: bold;">OS: ${order.os_number}</div>
-              <div style="font-size: 11px;">Status: ${order.status}</div>
+        <div class="container">
+          <header class="header">
+            <div class="logo-text">AGFsig <span style="font-weight: 400; color: #94a3b8">ERP</span></div>
+            <div class="os-badge">
+              <span class="os-number">OS ${order.os_number}</span>
+              <span class="os-status">${order.status} • ${order.type}</span>
+            </div>
+          </header>
+
+          <div class="section-grid">
+            <div class="card">
+              <div class="card-label">Dados do Cliente</div>
+              <div class="card-value">${order.client_name}</div>
+            </div>
+            <div class="card">
+              <div class="card-label">Técnico Responsável</div>
+              <div class="card-value">${order.technician_name || 'Não atribuído'}</div>
+              <div class="card-sub">${order.scheduled_date ? format(new Date(order.scheduled_date), 'dd/MM/yyyy') : 'Sem data'}</div>
+            </div>
+            <div class="card">
+              <div class="card-label">Investimento Total</div>
+              <div class="card-value" style="color: #4f46e5; font-size: 14px;">R$ ${(order.total_cost || 0).toFixed(2)}</div>
+              <div class="card-sub">${order.labor_hours || 0}h de labor</div>
             </div>
           </div>
 
-          <div class="section">
-            <div class="section-title">Dados Gerais</div>
-            <div class="grid">
-              <div>
-                <div class="field-label">Cliente</div>
-                <div class="field-value">${order.client_name}</div>
-              </div>
-              <div>
-                <div class="field-label">Tipo de Serviço</div>
-                <div class="field-value">${order.type}</div>
-              </div>
-              <div>
-                <div class="field-label">Técnico Responsável</div>
-                <div class="field-value">${order.technician_name || 'Não atribuído'}</div>
-              </div>
-              <div>
-                <div class="field-label">Data Agendada</div>
-                <div class="field-value">${order.scheduled_date ? format(new Date(order.scheduled_date), 'dd/MM/yyyy') : '-'}</div>
-              </div>
-            </div>
-          </div>
-
-          <div class="section">
-            <div class="section-title">Descrição do Problema / Solicitação</div>
-            <div class="content-box">${order.description || 'Não informado.'}</div>
-          </div>
-
-          <div class="section">
+          <div class="full-section">
             <div class="section-title">Diagnóstico Técnico</div>
-            <div class="content-box">${order.diagnosis || 'Pendente.'}</div>
+            <div class="text-content italic">${order.diagnosis || 'Nenhum diagnóstico registrado.'}</div>
           </div>
 
-          <div class="section">
-            <div class="section-title">Solução Realizada</div>
-            <div class="content-box">${order.solution || 'Pendente.'}</div>
+          <div class="full-section">
+            <div class="section-title">Solução Aplicada</div>
+            <div class="text-content text-solution">${order.solution || 'Pendente de finalização.'}</div>
           </div>
 
-          <div class="section">
-            <div class="section-title">Peças / Materiais Utilizados</div>
-            <div class="content-box">${order.parts_used || 'Nenhuma peça informada.'}</div>
-          </div>
-
-          <div class="section">
-            <div class="section-title">Custos e Tempo</div>
-            <div class="grid">
-              <div>
-                <div class="field-label">Horas Trabalhadas</div>
-                <div class="field-value">${order.labor_hours || 0}h</div>
-              </div>
-              <div>
-                <div class="field-label">Custo Total</div>
-                <div class="field-value">R$ ${(order.total_cost || 0).toFixed(2)}</div>
-              </div>
+          <div class="full-section">
+            <div class="section-title">Relatório Fotográfico</div>
+            <div class="photo-grid">
+              ${photoHtml}
             </div>
           </div>
 
           <div class="page-break"></div>
 
-          <div class="section">
-            <div class="section-title">Histórico de Movimentação Técnica</div>
-            ${historyHtml}
-          </div>
-
-          <div class="section">
-            <div class="section-title">Relatório Fotográfico</div>
-            <div style="display: grid; grid-template-columns: 1fr; gap: 20px;">
-              ${photoHtml}
+          <div class="full-section">
+            <div class="section-title">Histórico de Movimentação</div>
+            <div class="history-container">
+              ${historyHtml || '<div class="empty-state">Sem histórico registrado</div>'}
             </div>
           </div>
 
-          <div class="page-break" style="margin-top: 40px;"></div>
-
-          <div class="section" style="margin-top: 50px;">
-            <div class="section-title">Conformidade e Assinatura</div>
-            <p style="font-size: 10px; color: #666; margin-bottom: 30px;">
-              Declaro que os serviços acima descritos foram realizados e o equipamento/instalação encontra-se em conformidade.
-            </p>
-            <div style="width: 300px; margin: 40px auto; text-align: center;">
+          <div class="signature-section">
+            <div class="signature-box">
               ${signatureHtml}
-              <div style="border-top: 1px solid #333; padding-top: 5px; font-size: 11px; font-weight: bold; margin-top: 5px;">
-                Assinatura do Cliente
-              </div>
-              <div style="font-size: 10px; color: #666;">${order.client_name}</div>
+              <div class="signature-line">ASSINATURA DO CLIENTE</div>
+              <div style="font-size: 10px; color: #64748b; font-weight: 500;">${order.client_name}</div>
             </div>
           </div>
 
-          <div class="footer">
-            Gerado em ${format(new Date(), 'dd/MM/yyyy HH:mm')} pelo sistema AGFSig ERP
+          <div class="footer-note">
+            Este relatório foi gerado digitalmente em ${format(new Date(), "dd/MM/yyyy 'às' HH:mm")} • Autenticidade garantida por AGFsig ERP
           </div>
         </div>
       </body>
@@ -163,7 +184,7 @@ export default function ServiceOrderReport({ order, history, onClose }) {
     printWindow.document.close();
     setTimeout(() => {
       printWindow.print();
-    }, 500);
+    }, 800);
   };
 
   return (
