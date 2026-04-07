@@ -19,21 +19,26 @@ import { createClient } from '@supabase/supabase-js';
  */
 
 // Setup connection to Supabase
-const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-const supabaseUrl = isLocal 
-  ? window.location.origin 
-  : (import.meta.env?.VITE_SUPABASE_URL || '');
-const supabaseKey = import.meta.env?.VITE_SUPABASE_ANON_KEY || '';
-const sbServiceKey = import.meta.env?.VITE_SUPABASE_SERVICE_ROLE_KEY || '';
+const getSupabaseConfig = () => {
+  const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  const url = isLocal 
+    ? window.location.origin 
+    : (import.meta.env?.VITE_SUPABASE_URL || '');
+  const key = import.meta.env?.VITE_SUPABASE_ANON_KEY || '';
+  const adminKey = import.meta.env?.VITE_SUPABASE_SERVICE_ROLE_KEY || '';
+  return { url, key, adminKey };
+};
 
-// Singleton pattern to prevent "Multiple GoTrueClient instances" warnings
-if (!window._supabaseInstance) {
-  window._supabaseInstance = createClient(supabaseUrl, supabaseKey);
+const config = getSupabaseConfig();
+
+// Explicitly use window to store the singletons and cross-check
+if (!window._supabaseInstance && config.url && config.key) {
+  window._supabaseInstance = createClient(config.url, config.key);
 }
 export const supabase = window._supabaseInstance;
 
-if (!window._supabaseAdminInstance && supabaseUrl && sbServiceKey) {
-  window._supabaseAdminInstance = createClient(supabaseUrl, sbServiceKey);
+if (!window._supabaseAdminInstance && config.url && config.adminKey) {
+  window._supabaseAdminInstance = createClient(config.url, config.adminKey);
 }
 export const supabaseAdmin = window._supabaseAdminInstance;
 
