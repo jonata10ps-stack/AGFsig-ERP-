@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Eraser, Download } from 'lucide-react';
+import { Eraser } from 'lucide-react';
 
 export default function SignatureCanvas({ onSave, initialSignature }) {
   const canvasRef = useRef(null);
@@ -28,30 +28,35 @@ export default function SignatureCanvas({ onSave, initialSignature }) {
     }
   }, [initialSignature]);
 
-  const startDrawing = (e) => {
+  const getPos = (e) => {
     const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
     const rect = canvas.getBoundingClientRect();
     
+    // Suporte para Mouse e Touch
+    const clientX = e.clientX ?? e.touches?.[0]?.clientX;
+    const clientY = e.clientY ?? e.touches?.[0]?.clientY;
+
+    return {
+      x: clientX - rect.left,
+      y: clientY - rect.top
+    };
+  };
+
+  const startDrawing = (e) => {
+    if (e.type === 'touchstart') e.preventDefault(); // Evita rolar a página no mobile
+    const pos = getPos(e);
+    const ctx = canvasRef.current.getContext('2d');
     ctx.beginPath();
-    ctx.moveTo(
-      e.clientX - rect.left,
-      e.clientY - rect.top
-    );
+    ctx.moveTo(pos.x, pos.y);
     setIsDrawing(true);
   };
 
   const draw = (e) => {
     if (!isDrawing) return;
-
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    const rect = canvas.getBoundingClientRect();
-
-    ctx.lineTo(
-      e.clientX - rect.left,
-      e.clientY - rect.top
-    );
+    if (e.type === 'touchmove') e.preventDefault(); // Evita rolar a página no mobile
+    const pos = getPos(e);
+    const ctx = canvasRef.current.getContext('2d');
+    ctx.lineTo(pos.x, pos.y);
     ctx.stroke();
   };
 
@@ -78,20 +83,24 @@ export default function SignatureCanvas({ onSave, initialSignature }) {
   };
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2 text-left">
       <Label>Assinatura do Gestor</Label>
-      <div className="border-2 border-dashed border-slate-300 rounded-lg p-2 bg-white">
+      <div className="border-2 border-dashed border-slate-300 rounded-lg p-2 bg-white flex flex-col items-center">
         <canvas
           ref={canvasRef}
           width={500}
           height={200}
+          style={{ touchAction: 'none' }} // Crucial para mobile
           className="border border-slate-200 rounded cursor-crosshair w-full"
           onMouseDown={startDrawing}
           onMouseMove={draw}
           onMouseUp={stopDrawing}
           onMouseLeave={stopDrawing}
+          onTouchStart={startDrawing}
+          onTouchMove={draw}
+          onTouchEnd={stopDrawing}
         />
-        <div className="flex gap-2 mt-2">
+        <div className="flex gap-2 mt-2 w-full">
           <Button
             type="button"
             variant="outline"
