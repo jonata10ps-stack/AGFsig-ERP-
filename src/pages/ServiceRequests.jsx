@@ -309,7 +309,7 @@ export default function ServiceRequests() {
                               <Button variant="ghost" size="sm">•••</Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              {req.status === 'ABERTA' && (
+                              {req.status === 'ABERTA' && !serviceOrders?.some(so => so.request_id === req.id) && (
                                 <DropdownMenuItem onClick={() => createOSMutation.mutate(req)}>
                                   <Wrench className="h-4 w-4 mr-2" />
                                   Criar OS
@@ -367,7 +367,7 @@ export default function ServiceRequests() {
                           </div>
                         </div>
 
-                        {req.status === 'ABERTA' && (
+                        {req.status === 'ABERTA' && !serviceOrders?.some(so => so.request_id === req.id) && (
                           <Button
                             onClick={() => createOSMutation.mutate(req)}
                             disabled={createOSMutation.isPending}
