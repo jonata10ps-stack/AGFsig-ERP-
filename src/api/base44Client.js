@@ -30,8 +30,10 @@ const getSupabaseConfig = () => {
 };
 
 const config = getSupabaseConfig();
+export const supabaseUrl = config.url;
+export const supabaseKey = config.key;
 
-// Explicitly use window to store the singletons and cross-check
+// Singleton pattern using window to persist cross-HMR
 if (!window._supabaseInstance && config.url && config.key) {
   window._supabaseInstance = createClient(config.url, config.key);
 }
@@ -123,14 +125,12 @@ const createEntityHandler = (entityName) => {
       let hasMore = true;
 
       while (hasMore) {
-        console.info(`[base44] Fetching ${entityName} - Skip: ${currentSkip}`);
         const { data: page, count } = await this.queryPaginated(conditions, sort, CHUNK_SIZE, currentSkip);
         
         if (!page || page.length === 0) {
           hasMore = false;
         } else {
           allData = [...allData, ...page];
-          console.info(`[base44] Found ${page.length} items (Total so far: ${allData.length} of ${count})`);
           if (page.length < CHUNK_SIZE || allData.length >= count) {
             hasMore = false;
           } else {
@@ -253,7 +253,6 @@ export const base44 = {
       if (!session) throw new Error('Não autenticado');
       const { error } = await supabase.from('User').update(data).eq('email', session.user.email);
       if (error) throw error;
-      // Corrigir: Limpar cache após atualização
       if (typeof base44.auth.me.clearCache === 'function') {
         base44.auth.me.clearCache();
       }
@@ -306,6 +305,13 @@ export const base44 = {
           console.error('Erro no UploadFile:', err);
           throw err;
         }
+      },
+      InvokeLLM: async (body) => {
+        const { data, error } = await supabase.functions.invoke('generate-report-insights', {
+          body
+        });
+        if (error) throw error;
+        return data;
       },
       ExtractDataFromUploadedFile: async () => ({ parsed_data: [] })
     }
