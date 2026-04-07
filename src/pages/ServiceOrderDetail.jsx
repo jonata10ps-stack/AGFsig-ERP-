@@ -531,7 +531,6 @@ export default function ServiceOrderDetail() {
                     <input
                       type="file"
                       accept="image/*"
-                      capture="environment"
                       className="absolute inset-0 opacity-0 cursor-pointer"
                       onChange={handleImageCapture}
                     />
