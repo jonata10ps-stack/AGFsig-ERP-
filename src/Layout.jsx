@@ -318,8 +318,21 @@ export default function Layout({ children, currentPageName }) {
           {/* Navigation */}
           <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
             {navigation.filter(item => {
+              // Get user permissions safely
+              const userRole = user?.role;
+              const rawModules = user?.allowed_modules;
+              
+              // Utility to parse array/JSON
+              const parseModules = (val) => {
+                if (!val) return [];
+                if (Array.isArray(val)) return val;
+                try { return JSON.parse(val); } catch { return []; }
+              };
+              
+              const allowedModules = parseModules(rawModules);
+
               // Admin sees everything
-              if (user?.role === 'admin') return true;
+              if (userRole === 'admin') return true;
               
               // Admin-only items for admins only
               if (item.adminOnly) return false;
@@ -329,7 +342,6 @@ export default function Layout({ children, currentPageName }) {
               
               // Check module permissions
               if (item.moduleId) {
-                const allowedModules = user?.allowed_modules || [];
                 return allowedModules.includes(item.moduleId);
               }
               
