@@ -32,9 +32,11 @@ export const AuthProvider = ({ children }) => {
       const profiles = await base44.entities.User.filter({ email: currentUser.email });
       const userProfile = profiles?.[0];
       
-      // BLOQUEIO APENAS SE FOR EXPLICITAMENTE PENDENTE
-      // Se não tiver perfil ainda (usuário antigo ou primeiro admin), liberamos o acesso
-      if (userProfile && userProfile.account_status === 'PENDENTE') {
+      const isAdminEmail = currentUser.email.toLowerCase() === 'jonata.santos@agfequipamentos.com.br';
+
+      // SEGURANÇA REFORÇADA: Só entra se estiver APROVADO
+      // Exceção apenas para o e-mail do Jonata (Admin principal)
+      if (!isAdminEmail && (!userProfile || userProfile.account_status !== 'APROVADO')) {
         throw new Error('PENDING_APPROVAL');
       }
 
