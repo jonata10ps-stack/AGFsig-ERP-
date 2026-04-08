@@ -206,23 +206,42 @@ export default function UserManagement() {
 
   const syncUsersMutation = useMutation({
     mutationFn: async () => {
-      toast.loading('Iniciando sincronização...');
+      toast.loading('Analizando usuários do sistema...');
       try {
-        // 1. Listar usuários do Auth via Admin SDK
-        const { data: { users: authUsers }, error } = await supabaseAdmin.auth.admin.listUsers();
-        if (error) throw error;
+        // 1. Listar TODOS os usuários do Auth via Admin SDK (lidando com paginação)
+        let allAuthUsers = [];
+        let page = 1;
+        let hasMore = true;
+        
+        while (hasMore) {
+          const { data: { users, nextCursor }, error } = await supabaseAdmin.auth.admin.listUsers({
+            page,
+            perPage: 1000
+          });
+          
+          if (error) throw error;
+          allAuthUsers = [...allAuthUsers, ...users];
+          
+          if (users.length < 1000) hasMore = false;
+          else page++;
+        }
+
+        console.log(`Total de usuários no Auth: ${allAuthUsers.length}`);
 
         // 2. Buscar usuários já registrados na entidade User
-        const existingUsers = await base44.entities.User.list();
-        const existingEmails = new Set(existingUsers.map(u => u.email.toLowerCase()));
+        const { data: existingUsers, error: fetchError } = await supabaseAdmin.from('User').select('email');
+        if (fetchError) throw fetchError;
+        
+        const existingEmails = new Set(existingUsers.map(u => u.email?.toLowerCase()));
 
         let createdCount = 0;
         
-        // 3. Para cada usuário no Auth que não está na entidade User, criar o perfil
-        for (const authUser of authUsers) {
-          const email = authUser.email.toLowerCase();
-          if (!existingEmails.has(email)) {
-            await base44.entities.User.create({
+        // 3. Criar perfis faltantes usando supabaseAdmin para BYPASS de RLS
+        for (const authUser of allAuthUsers) {
+          const email = authUser.email?.toLowerCase();
+          if (email && !existingEmails.has(email)) {
+            console.log(`Criando perfil para usuário órfão: ${email}`);
+            const { error: insertError } = await supabaseAdmin.from('User').insert({
               email: authUser.email,
               full_name: authUser.user_metadata?.full_name || 'Usuário Auto-Cadastrado',
               allowed_modules: JSON.stringify([]),
@@ -232,14 +251,20 @@ export default function UserManagement() {
               account_status: 'PENDENTE',
               role: 'user',
               active: true,
+              created_at: authUser.created_at
             });
-            createdCount++;
+            
+            if (insertError) {
+              console.error(`Erro ao criar perfil para ${email}:`, insertError);
+            } else {
+              createdCount++;
+            }
           }
         }
 
         return createdCount;
       } catch (err) {
-        console.error('Erro na sincronização:', err);
+        console.error('Falha crítica na sincronização:', err);
         throw err;
       }
     },
@@ -247,14 +272,14 @@ export default function UserManagement() {
       toast.dismiss();
       queryClient.invalidateQueries({ queryKey: ['users-management'] });
       if (count > 0) {
-        toast.success(`${count} usuários novos foram encontrados e adicionados para aprovação!`);
+        toast.success(`Sincronização completa! ${count} novos usuários pendentes foram encontrados.`);
       } else {
-        toast.info('Sincronização concluída. Nenhum usuário novo encontrado.');
+        toast.info('Sincronização concluída. Todos os usuários já estão na lista.');
       }
     },
     onError: (error) => {
       toast.dismiss();
-      toast.error('Erro ao sincronizar usuários: ' + error.message);
+      toast.error('Erro na sincronização: ' + (error.message || 'Falha de conexão'));
     }
   });
 
