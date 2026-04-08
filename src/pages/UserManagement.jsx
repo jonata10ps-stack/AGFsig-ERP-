@@ -79,10 +79,10 @@ export default function UserManagement() {
         approved_by: status === 'APROVADO' ? currentUser?.email : null,
       };
       if (modules !== undefined) {
-        updateData.allowed_modules = modules;
+        updateData.allowed_modules = JSON.stringify(modules);
       }
       if (company_ids !== undefined) {
-        updateData.company_ids = company_ids;
+        updateData.company_ids = JSON.stringify(company_ids);
       }
       await base44.entities.User.update(userId, updateData);
     },
