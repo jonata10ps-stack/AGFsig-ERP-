@@ -58,7 +58,10 @@ export default function ServiceOrderDetail() {
 
   const { data: order, isLoading } = useQuery({
     queryKey: ['service-order', orderId],
-    queryFn: () => orderId ? base44.entities.ServiceOrder.get(orderId) : null,
+    queryFn: async () => {
+      const data = await base44.entities.ServiceOrder.filter({ id: orderId });
+      return data?.[0] || null;
+    },
     enabled: !!orderId,
   });
 
