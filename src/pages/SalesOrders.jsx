@@ -347,6 +347,7 @@ export default function SalesOrders() {
       );
     },
     enabled: !!companyId,
+    staleTime: 30000, // Cache de 30 segundos para evitar recarregamento ao navegar
   });
 
   const orders = result?.data || [];

@@ -206,7 +206,7 @@ export default function NotificationsPanel({ open, onClose }) {
     };
 
     fetchNotifications();
-    const interval = setInterval(fetchNotifications, 60000);
+    const interval = setInterval(fetchNotifications, 300000); // A cada 5 minutos para economizar recursos
     return () => clearInterval(interval);
   }, [companyId]);
 

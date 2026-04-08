@@ -145,14 +145,14 @@ export default function Separation() {
       return base44.entities.SalesOrderItem.filter({ order_id: orderIds });
     },
     enabled: !!companyId,
-    refetchInterval: 5000, // Atualizar a cada 5s para auto-avanço funcionar melhor
+    refetchInterval: 15000, // Aumentado para 15s para reduzir carga no banco
   });
 
   const { data: rawOrders, isLoading } = useQuery({
     queryKey: ['orders-for-separation-raw', companyId],
     queryFn: () => companyId ? base44.entities.SalesOrder.filter({ company_id: companyId, status: ['CONFIRMADO', 'RESERVADO', 'SEPARANDO', 'SEPARADO'] }) : Promise.resolve([]),
     enabled: !!companyId,
-    refetchInterval: 5000,
+    refetchInterval: 15000,
   });
 
   // Filtrar pedidos que possuem ao menos um item físico
