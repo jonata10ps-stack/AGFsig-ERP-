@@ -636,14 +636,14 @@ export default function ServiceOrderDetail() {
               <p className="text-2xl font-bold text-indigo-600">
                 R$ {(Number(formData.labor_cost || 0) + Number(formData.parts_cost || 0)).toFixed(2)}
               </p>
-              {order.order_number && (
+              {formData.notes?.includes('ORC-') && (
                 <p className="text-xs font-medium text-emerald-600 mt-1">
-                  Orçamento vinculado: {order.order_number}
+                  Orçamento vinculado: {formData.notes.match(/ORC-\d+/)?.[0]}
                 </p>
               )}
             </div>
             <div className="flex gap-2">
-              {!order.order_number && (
+              {!formData.notes?.includes('ORC-') && (
                 <Button
                   variant="outline"
                   onClick={async () => {
@@ -651,7 +651,7 @@ export default function ServiceOrderDetail() {
                       const confirm = window.confirm("Deseja gerar um orçamento a partir desta OS?");
                       if (!confirm) return;
 
-                      // 1. Gerar número do orçamento (padrão do sistema)
+                      // 1. Gerar número do orçamento
                       const allQuotes = await base44.entities.Quote.filter({ company_id: companyId }, '-created_date');
                       let nextNumber = 1;
                       if (allQuotes && allQuotes.length > 0) {
@@ -664,7 +664,7 @@ export default function ServiceOrderDetail() {
                       const quoteNumber = `ORC-${String(nextNumber).padStart(6, '0')}`;
 
                       // 2. Criar orçamento
-                      const quote = await base44.entities.Quote.create({
+                      await base44.entities.Quote.create({
                         company_id: companyId,
                         client_id: order.client_id,
                         client_name: order.client_name,
@@ -674,11 +674,16 @@ export default function ServiceOrderDetail() {
                         total_amount: Number(formData.labor_cost || 0) + Number(formData.parts_cost || 0)
                       });
 
-                      // 3. Vincular orçamento na OS (usando order_number como campo de ref)
+                      // 3. Vincular na OS usando o campo 'notes' (já que order_number falhou)
+                      const newNotes = formData.notes 
+                        ? `${formData.notes}\n[ORC-VINCULADO: ${quoteNumber}]`
+                        : `[ORC-VINCULADO: ${quoteNumber}]`;
+                      
                       await base44.entities.ServiceOrder.update(orderId, {
-                        order_number: quoteNumber
+                        notes: newNotes
                       });
 
+                      setFormData(prev => ({ ...prev, notes: newNotes }));
                       toast.success(`Orçamento ${quoteNumber} gerado com sucesso!`);
                       queryClient.invalidateQueries({ queryKey: ['service-order', orderId] });
                     } catch (err) {
