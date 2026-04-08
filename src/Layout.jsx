@@ -326,26 +326,31 @@ export default function Layout({ children, currentPageName }) {
               const parseModules = (val) => {
                 if (!val) return [];
                 if (Array.isArray(val)) return val;
-                try { return JSON.parse(val); } catch { return []; }
+                if (typeof val === 'string' && val.startsWith('[')) {
+                  try { return JSON.parse(val); } catch (e) { return []; }
+                }
+                if (typeof val === 'string') return val.split(',').map(s => s.trim());
+                return [];
               };
               
-              const allowedModules = parseModules(rawModules);
+              const allowedModules = parseModules(rawModules).map(m => String(m).toLowerCase());
+
+              // LOG DE DEBUG (Aparecerá no F12 do Carlos)
+              if (item.moduleId) {
+                console.log(`DEBUG ACESSO [${user?.email}]: Módulo ${item.moduleId} -> Permissões:`, allowedModules);
+              }
 
               // Admin sees everything
-              if (userRole === 'admin') return true;
+              if (String(userRole).toLowerCase() === 'admin') return true;
               
               // Admin-only items for admins only
               if (item.adminOnly) return false;
               
-              // Dashboard is always visible
-              if (item.page === 'Dashboard') return true;
+              // Dashboard and always visible items
+              if (item.page === 'Dashboard' || !item.moduleId) return true;
               
-              // Check module permissions
-              if (item.moduleId) {
-                return allowedModules.includes(item.moduleId);
-              }
-              
-              return true;
+              // Check module permissions (case insensitive)
+              return allowedModules.includes(String(item.moduleId).toLowerCase());
             }).map((item, index) => (
               <NavItem key={`${item.name}-${item.page || index}`} item={item} mobile />
             ))}
