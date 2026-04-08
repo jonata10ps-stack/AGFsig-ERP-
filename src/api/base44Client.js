@@ -246,7 +246,7 @@ export const base44 = {
         const now = Date.now();
         if (!force && cachedUser && (now - lastFetch < CACHE_TTL)) return cachedUser;
         
-        const { data: profile } = await supabase.from('User').select('*').eq('email', session.user.email).maybeSingle();
+        const { data: profile } = await supabase.from('User').select('*').ilike('email', session.user.email.toLowerCase()).maybeSingle();
         cachedUser = {
           id: session.user.id,
           email: session.user.email,
