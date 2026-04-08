@@ -588,23 +588,112 @@ export default function ServiceOrderDetail() {
             </div>
           </div>
 
-          <div className="flex justify-between items-center pt-6 border-t mt-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 border-t">
             <div>
+              <label className="text-sm font-medium text-slate-700">Horas Trabalhadas</label>
+              <Input
+                type="text"
+                value={formData.labor_hours || ''}
+                onChange={(e) => setFormData({ ...formData, labor_hours: e.target.value })}
+                placeholder="Ex: 2.5"
+                className="mt-1"
+                disabled={order.status === 'CONCLUIDA' || order.status === 'CANCELADA'}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-slate-700">Custo Mão de Obra (R$)</label>
+              <Input
+                type="number"
+                value={formData.labor_cost || 0}
+                onChange={(e) => setFormData({ ...formData, labor_cost: e.target.value })}
+                className="mt-1"
+                disabled={order.status === 'CONCLUIDA' || order.status === 'CANCELADA'}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-slate-700">Custo Peças (R$)</label>
+              <Input
+                type="number"
+                value={formData.parts_cost || 0}
+                onChange={(e) => setFormData({ ...formData, parts_cost: e.target.value })}
+                className="mt-1"
+                disabled={order.status === 'CONCLUIDA' || order.status === 'CANCELADA'}
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-between items-center pt-6 border-t mt-6">
+            <div className="flex flex-col">
               <p className="text-sm text-slate-500">Custo Total</p>
               <p className="text-2xl font-bold text-indigo-600">
                 R$ {(Number(formData.labor_cost || 0) + Number(formData.parts_cost || 0)).toFixed(2)}
               </p>
+              {order.order_number && (
+                <p className="text-xs font-medium text-emerald-600 mt-1">
+                  Orçamento vinculado: {order.order_number}
+                </p>
+              )}
             </div>
-            {order.status !== 'CONCLUIDA' && order.status !== 'CANCELADA' && (
-              <Button 
-                onClick={handleSave} 
-                disabled={updateMutation.isPending}
-                className="bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-100"
-              >
-                <Save className="h-4 w-4 mr-2" />
-                Salvar Alterações
-              </Button>
-            )}
+            <div className="flex gap-2">
+              {!order.order_number && (
+                <Button
+                  variant="outline"
+                  onClick={async () => {
+                    try {
+                      const confirm = window.confirm("Deseja gerar um orçamento a partir desta OS?");
+                      if (!confirm) return;
+
+                      // 1. Gerar número do orçamento (padrão do sistema)
+                      const allQuotes = await base44.entities.Quote.filter({ company_id: companyId }, '-created_date');
+                      let nextNumber = 1;
+                      if (allQuotes && allQuotes.length > 0) {
+                        const lastQuote = allQuotes[0];
+                        if (lastQuote.quote_number) {
+                          const match = lastQuote.quote_number.match(/ORC-(\d+)/);
+                          if (match) nextNumber = parseInt(match[1]) + 1;
+                        }
+                      }
+                      const quoteNumber = `ORC-${String(nextNumber).padStart(6, '0')}`;
+
+                      // 2. Criar orçamento
+                      const quote = await base44.entities.Quote.create({
+                        company_id: companyId,
+                        client_id: order.client_id,
+                        client_name: order.client_name,
+                        quote_number: quoteNumber,
+                        status: 'RASCUNHO',
+                        notes: `Gerado a partir da OS ${order.os_number}. Diagnóstico: ${formData.diagnosis || ''}`,
+                        total_amount: Number(formData.labor_cost || 0) + Number(formData.parts_cost || 0)
+                      });
+
+                      // 3. Vincular orçamento na OS (usando order_number como campo de ref)
+                      await base44.entities.ServiceOrder.update(orderId, {
+                        order_number: quoteNumber
+                      });
+
+                      toast.success(`Orçamento ${quoteNumber} gerado com sucesso!`);
+                      queryClient.invalidateQueries({ queryKey: ['service-order', orderId] });
+                    } catch (err) {
+                      toast.error("Erro ao gerar orçamento: " + err.message);
+                    }
+                  }}
+                  className="border-amber-200 text-amber-700 hover:bg-amber-50"
+                >
+                  <FileText className="h-4 w-4 mr-2" />
+                  Gerar Orçamento
+                </Button>
+              )}
+              {order.status !== 'CONCLUIDA' && order.status !== 'CANCELADA' && (
+                <Button 
+                  onClick={handleSave} 
+                  disabled={updateMutation.isPending}
+                  className="bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-100"
+                >
+                  <Save className="h-4 w-4 mr-2" />
+                  Salvar Alterações
+                </Button>
+              )}
+            </div>
           </div>
         </CardContent>
       </Card>
