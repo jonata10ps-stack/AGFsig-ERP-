@@ -636,14 +636,14 @@ export default function ServiceOrderDetail() {
               <p className="text-2xl font-bold text-indigo-600">
                 R$ {(Number(formData.labor_cost || 0) + Number(formData.parts_cost || 0)).toFixed(2)}
               </p>
-              {formData.notes?.includes('ORC-') && (
+              {formData.description?.includes('ORC-') && (
                 <p className="text-xs font-medium text-emerald-600 mt-1">
-                  Orçamento vinculado: {formData.notes.match(/ORC-\d+/)?.[0]}
+                  Orçamento vinculado: {formData.description.match(/ORC-\d+/)?.[0]}
                 </p>
               )}
             </div>
             <div className="flex gap-2">
-              {!formData.notes?.includes('ORC-') && (
+              {!formData.description?.includes('ORC-') && (
                 <Button
                   variant="outline"
                   onClick={async () => {
@@ -674,16 +674,16 @@ export default function ServiceOrderDetail() {
                         total_amount: Number(formData.labor_cost || 0) + Number(formData.parts_cost || 0)
                       });
 
-                      // 3. Vincular na OS usando o campo 'notes' (já que order_number falhou)
-                      const newNotes = formData.notes 
-                        ? `${formData.notes}\n[ORC-VINCULADO: ${quoteNumber}]`
-                        : `[ORC-VINCULADO: ${quoteNumber}]`;
+                      // 3. Vincular na OS usando o campo 'description'
+                      const newDesc = formData.description 
+                        ? `${formData.description}\n[VINCULO: ${quoteNumber}]`
+                        : `[VINCULO: ${quoteNumber}]`;
                       
                       await base44.entities.ServiceOrder.update(orderId, {
-                        notes: newNotes
+                        description: newDesc
                       });
 
-                      setFormData(prev => ({ ...prev, notes: newNotes }));
+                      setFormData(prev => ({ ...prev, description: newDesc }));
                       toast.success(`Orçamento ${quoteNumber} gerado com sucesso!`);
                       queryClient.invalidateQueries({ queryKey: ['service-order', orderId] });
                     } catch (err) {
