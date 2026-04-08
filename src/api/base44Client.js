@@ -246,10 +246,21 @@ export const base44 = {
         const now = Date.now();
         if (!force && cachedUser && (now - lastFetch < CACHE_TTL)) return cachedUser;
         
-        const { data: profile } = await supabase.from('User').select('*').ilike('email', session.user.email.toLowerCase()).maybeSingle();
+        // Busca o perfil mais completo (caso existam duplicados por erro de cadastro)
+        const { data: profiles } = await supabase
+          .from('User')
+          .select('*')
+          .ilike('email', session.user.email.toLowerCase())
+          .order('updated_at', { ascending: false });
+        
+        // Pega o primeiro perfil que tiver módulos, ou o mais recente
+        const profile = profiles?.find(p => p.allowed_modules && p.allowed_modules.length > 5) || profiles?.[0];
+        
         cachedUser = {
           id: session.user.id,
           email: session.user.email,
+          ...profile,
+          ...session.user.user_metadata,
           full_name: profile?.full_name || session.user.user_metadata?.full_name || 'Autenticado(a)',
           role: profile?.role || 'admin',
           company_id: profile?.company_id || '00000000-0000-0000-0000-000000000000',
