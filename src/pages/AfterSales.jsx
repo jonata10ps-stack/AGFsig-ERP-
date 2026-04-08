@@ -39,18 +39,6 @@ export default function AfterSales() {
     enabled: !!companyId,
   });
 
-  // Analysis for Management
-  const criticalRequests = useMemo(() => {
-    if (!serviceRequests) return [];
-    return serviceRequests
-      .filter(r => {
-        const s = String(r.status || '').toUpperCase();
-        return s === 'ABERTA' || s === 'EM_ANDAMENTO';
-      })
-      .sort((a, b) => moment(a.created_date).diff(moment(b.created_date)))
-      .slice(0, 5);
-  }, [serviceRequests]);
-
   const kpis = useMemo(() => {
     const total = serviceRequests?.length || 0;
     const pending = serviceRequests?.filter(r => String(r.status || '').toUpperCase() === 'ABERTA').length || 0;
@@ -60,6 +48,35 @@ export default function AfterSales() {
     
     return { total, pending, inProgress, completed, efficiency };
   }, [serviceRequests]);
+
+  const technicalOperations = useMemo(() => {
+    const combined = [
+        ...(serviceRequests?.map(r => ({ ...r, _type: 'SR' })) || []),
+        ...(serviceOrders?.map(o => ({ ...o, _type: 'OS' })) || [])
+    ].filter(item => {
+        // Filter by Type
+        if (typeFilter !== 'all' && item._type !== typeFilter) return false;
+        
+        // Filter by Status logic
+        const s = String(item.status || '').toUpperCase();
+        if (statusFilter === 'active') {
+            return s === 'ABERTA' || s === 'PENDENTE';
+        }
+        if (statusFilter === 'progress') {
+            return s === 'EM_ANDAMENTO' || s === 'EM_ATENDIMENTO';
+        }
+        if (statusFilter === 'done') {
+            return s === 'ENCERRADA' || s === 'CONCLUIDA' || s === 'FINALIZADA';
+        }
+        return true;
+    }).sort((a, b) => {
+        const dateA = a.created_date || a.created_at || a.date_from;
+        const dateB = b.created_date || b.created_at || b.date_from;
+        return moment(dateB).diff(moment(dateA));
+    })
+    .slice(0, 15);
+    return combined;
+  }, [serviceRequests, serviceOrders, typeFilter, statusFilter]);
 
   return (
     <div className="p-6 bg-white min-h-screen space-y-6">
@@ -175,68 +192,45 @@ export default function AfterSales() {
                         </tr>
                     </thead>
                     <tbody>
-                        {useMemo(() => {
-                            const combined = [
-                                ...(serviceRequests?.map(r => ({ ...r, _type: 'SR' })) || []),
-                                ...(serviceOrders?.map(o => ({ ...o, _type: 'OS' })) || [])
-                            ].filter(item => {
-                                // Filter by Type
-                                if (typeFilter !== 'all' && item._type !== typeFilter) return false;
-                                
-                                // Filter by Status logic
-                                const s = String(item.status || '').toUpperCase();
-                                if (statusFilter === 'active') {
-                                    return s === 'ABERTA' || s === 'PENDENTE';
-                                }
-                                if (statusFilter === 'progress') {
-                                    return s === 'EM_ANDAMENTO' || s === 'EM_ATENDIMENTO';
-                                }
-                                if (statusFilter === 'done') {
-                                    return s === 'ENCERRADA' || s === 'CONCLUIDA' || s === 'FINALIZADA';
-                                }
-                                return true;
-                            }).sort((a, b) => {
-                                const dateA = a.created_date || a.created_at || a.date_from;
-                                const dateB = b.created_date || b.created_at || b.date_from;
-                                return moment(dateB).diff(moment(dateA));
-                            })
-                            .slice(0, 15);
-
-                            return combined.map((item, i) => (
-                                <tr key={i} className="hover:bg-slate-50 border-b last:border-0">
-                                    <td className="px-4 py-3">
-                                        <Badge variant="outline" className={item._type === 'SR' ? 'border-blue-200 text-blue-700 bg-blue-50' : 'border-indigo-200 text-indigo-700 bg-indigo-50'}>
-                                            {item._type}
-                                        </Badge>
-                                    </td>
-                                    <td className="px-4 py-3 font-semibold text-slate-700">
-                                        {item._type === 'SR' ? item.request_number : item.os_number}
-                                    </td>
-                                    <td className="px-4 py-3 text-slate-600 truncate max-w-[180px]">
-                                        {item.client_name || 'Desconhecido'}
-                                    </td>
-                                    <td className="px-4 py-3 text-slate-500">
-                                        {item._type === 'OS' ? (item.technician_name || 'Pendente') : '-'}
-                                    </td>
-                                    <td className="px-4 py-3">
-                                        <Badge variant={String(item.status || '').toUpperCase() === 'ABERTA' || String(item.status || '').toUpperCase() === 'PENDENTE' ? 'destructive' : 'default'} className="text-[10px]">
-                                            {item.status}
-                                        </Badge>
-                                    </td>
-                                    <td className="px-4 py-3 text-right">
-                                        {item._type === 'SR' ? (
-                                            <Link to={createPageUrl(`ServiceRequests?search=${item.request_number}`)}>
-                                                <Button variant="outline" size="sm" className="h-8 text-[10px] font-bold uppercase">Abrir</Button>
-                                            </Link>
-                                        ) : (
-                                            <Link to={createPageUrl(`ServiceOrders?search=${item.os_number}`)}>
-                                                <Button variant="outline" size="sm" className="h-8 text-[10px] font-bold uppercase">Abrir</Button>
-                                            </Link>
-                                        )}
-                                    </td>
-                                </tr>
-                            ));
-                        }, [serviceRequests, serviceOrders, typeFilter, statusFilter])}
+                        {technicalOperations.map((item, i) => (
+                            <tr key={i} className="hover:bg-slate-50 border-b last:border-0">
+                                <td className="px-4 py-3">
+                                    <Badge variant="outline" className={item._type === 'SR' ? 'border-blue-200 text-blue-700 bg-blue-50' : 'border-indigo-200 text-indigo-700 bg-indigo-50'}>
+                                        {item._type}
+                                    </Badge>
+                                </td>
+                                <td className="px-4 py-3 font-semibold text-slate-700">
+                                    {item._type === 'SR' ? item.request_number : item.os_number}
+                                </td>
+                                <td className="px-4 py-3 text-slate-600 truncate max-w-[180px]">
+                                    {item.client_name || 'Desconhecido'}
+                                </td>
+                                <td className="px-4 py-3 text-slate-500">
+                                    {item._type === 'OS' ? (item.technician_name || 'Pendente') : '-'}
+                                </td>
+                                <td className="px-4 py-3">
+                                    <Badge variant={String(item.status || '').toUpperCase() === 'ABERTA' || String(item.status || '').toUpperCase() === 'PENDENTE' ? 'destructive' : 'default'} className="text-[10px]">
+                                        {item.status}
+                                    </Badge>
+                                </td>
+                                <td className="px-4 py-3 text-right">
+                                    {item._type === 'SR' ? (
+                                        <Link to={createPageUrl(`ServiceRequests?search=${item.request_number}`)}>
+                                            <Button variant="outline" size="sm" className="h-8 text-[10px] font-bold uppercase">Abrir</Button>
+                                        </Link>
+                                    ) : (
+                                        <Link to={createPageUrl(`ServiceOrders?search=${item.os_number}`)}>
+                                            <Button variant="outline" size="sm" className="h-8 text-[10px] font-bold uppercase">Abrir</Button>
+                                        </Link>
+                                    )}
+                                </td>
+                            </tr>
+                        ))}
+                        {technicalOperations.length === 0 && (
+                            <tr>
+                                <td colSpan={6} className="p-8 text-center text-slate-400">Nenhum registro encontrado</td>
+                            </tr>
+                        )}
                     </tbody>
                 </table>
             </div>
