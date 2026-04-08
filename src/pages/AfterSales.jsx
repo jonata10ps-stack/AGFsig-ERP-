@@ -40,16 +40,19 @@ export default function AfterSales() {
   const criticalRequests = useMemo(() => {
     if (!serviceRequests) return [];
     return serviceRequests
-      .filter(r => r.status === 'ABERTA' || r.status === 'EM_ANDAMENTO')
+      .filter(r => {
+        const s = String(r.status || '').toUpperCase();
+        return s === 'ABERTA' || s === 'EM_ANDAMENTO';
+      })
       .sort((a, b) => moment(a.created_date).diff(moment(b.created_date)))
       .slice(0, 5);
   }, [serviceRequests]);
 
   const kpis = useMemo(() => {
     const total = serviceRequests?.length || 0;
-    const pending = serviceRequests?.filter(r => r.status === 'ABERTA').length || 0;
-    const inProgress = serviceRequests?.filter(r => r.status === 'EM_ANDAMENTO').length || 0;
-    const completed = serviceRequests?.filter(r => r.status === 'FINALIZADA').length || 0;
+    const pending = serviceRequests?.filter(r => String(r.status || '').toUpperCase() === 'ABERTA').length || 0;
+    const inProgress = serviceRequests?.filter(r => String(r.status || '').toUpperCase() === 'EM_ANDAMENTO').length || 0;
+    const completed = serviceRequests?.filter(r => String(r.status || '').toUpperCase() === 'ENCERRADA').length || 0;
     const efficiency = total > 0 ? Math.round((completed / total) * 100) : 0;
     
     return { total, pending, inProgress, completed, efficiency };
