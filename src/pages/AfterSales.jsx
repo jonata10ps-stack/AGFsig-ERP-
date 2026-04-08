@@ -16,7 +16,9 @@ import moment from 'moment';
 
 export default function AfterSales() {
   const { companyId } = useCompanyId();
-  const [search, setSearch] = useState('');
+  const [searchParams] = React.useMemo(() => [new URLSearchParams(window.location.search)], []);
+  const [search, setSearch] = useState(searchParams.get('search') || '');
+  const [statusFilter, setStatusFilter] = useState('all');
 
   const { data: serviceRequests } = useQuery({
     queryKey: ['as-requests-clean', companyId],
@@ -140,7 +142,11 @@ export default function AfterSales() {
                                 </Badge>
                             </td>
                             <td className="px-4 py-3 text-right">
-                                <Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4 text-slate-400" /></Button>
+                                <Link to={createPageUrl(`ServiceRequests?search=${req.request_number}`)}>
+                                    <Button variant="outline" size="sm" className="h-8 text-[10px] font-bold uppercase tracking-wider">
+                                        Abrir
+                                    </Button>
+                                </Link>
                             </td>
                         </tr>
                     ))}
