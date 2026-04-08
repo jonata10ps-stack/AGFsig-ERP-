@@ -649,10 +649,16 @@ export default function ServiceOrderDetail() {
 
           <div className="flex justify-between items-center pt-6 border-t mt-6">
             <div className="flex flex-col">
-              <p className="text-sm text-slate-500">Custo Total</p>
-              <p className="text-2xl font-bold text-indigo-600">
-                R$ {(Number(formData.labor_cost || 0) + Number(formData.parts_cost || 0)).toFixed(2)}
-              </p>
+              <p className="text-sm text-slate-500">Custo Total (Orçamentos)</p>
+              <div className="text-2xl font-bold text-indigo-600">
+                {activeQuote || (linkedQuotes && linkedQuotes.length > 0) ? (
+                  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
+                    linkedQuotes.reduce((acc, q) => acc + (q.status !== 'REJEITADO' ? (Number(q.total_amount) || 0) : 0), 0)
+                  )
+                ) : (
+                  <span className="text-amber-600 text-lg uppercase tracking-tight italic">A definir</span>
+                )}
+              </div>
               {/* Listagem de Orçamentos Vinculados */}
               {hasLinkedQuotes && (
                 <div className="space-y-2 mb-4">

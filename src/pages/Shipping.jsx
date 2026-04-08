@@ -86,7 +86,12 @@ export default function Shipping() {
     enabled: !!companyId,
   });
 
-  const { data: items, isLoading: loadingItems } = useQuery({
+  const { data: products } = useQuery({
+    queryKey: ['products'],
+    queryFn: () => base44.entities.Product.filter({ active: true }),
+  });
+
+  const { data: rawItems, isLoading: loadingItems } = useQuery({
     queryKey: ['order-items-shipping', selectedOrder?.id, companyId],
     queryFn: async () => {
       if (!selectedOrder || !companyId) return [];
@@ -118,10 +123,24 @@ export default function Shipping() {
     enabled: !!selectedOrder && !!companyId,
   });
 
+  const items = React.useMemo(() => {
+    if (!rawItems || !products) return rawItems;
+    return rawItems.filter(item => {
+      const product = products.find(p => p.id === item.product_id);
+      return product?.category !== 'SV';
+    });
+  }, [rawItems, products]);
+
   const shipOrderMutation = useMutation({
     mutationFn: async (order) => {
-      // 1. Buscar itens do pedido
-      const orderItems = await base44.entities.SalesOrderItem.filter({ order_id: order.id });
+      // 1. Buscar itens do pedido (filtrando serviços)
+      const allItems = await base44.entities.SalesOrderItem.filter({ order_id: order.id });
+      const products = await base44.entities.Product.filter({ company_id: companyId });
+      
+      const orderItems = allItems.filter(i => {
+         const p = products.find(prod => prod.id === i.product_id);
+         return p?.category !== 'SV';
+      });
 
       // 2. Buscar movimentações existentes de SEPARACAO, SAIDA e ESTORNO
       const moves = await base44.entities.InventoryMove.filter({ related_id: order.id });
@@ -288,8 +307,14 @@ export default function Shipping() {
 
   const cancelShippingMutation = useMutation({
     mutationFn: async (order) => {
-      // 1. Buscar os itens do pedido
-      const orderItems = await base44.entities.SalesOrderItem.filter({ order_id: order.id });
+      // 1. Buscar itens do pedido (filtrando serviços)
+      const allItems = await base44.entities.SalesOrderItem.filter({ order_id: order.id });
+      const products = await base44.entities.Product.filter({ company_id: companyId });
+      
+      const orderItems = allItems.filter(i => {
+         const p = products.find(prod => prod.id === i.product_id);
+         return p?.category !== 'SV';
+      });
       
       // 2. Buscar movimentações existentes para calcular o estorno correto (Idempotência)
       const moves = await base44.entities.InventoryMove.filter({ related_id: order.id });

@@ -117,11 +117,24 @@ export default function Separation() {
     enabled: !!companyId,
   });
 
-  const { data: items, isLoading: loadingItems } = useQuery({
+  const { data: products } = useQuery({
+    queryKey: ['products'],
+    queryFn: () => base44.entities.Product.filter({ active: true }),
+  });
+
+  const { data: rawItems, isLoading: loadingItems } = useQuery({
     queryKey: ['order-items', selectedOrder?.id],
     queryFn: () => base44.entities.SalesOrderItem.filter({ order_id: selectedOrder.id }),
     enabled: !!selectedOrder,
   });
+
+  const items = React.useMemo(() => {
+    if (!rawItems || !products) return rawItems;
+    return rawItems.filter(item => {
+      const product = products.find(p => p.id === item.product_id);
+      return product?.category !== 'SV';
+    });
+  }, [rawItems, products]);
 
   const startSeparationMutation = useMutation({
     mutationFn: async (order) => {
@@ -157,14 +170,21 @@ export default function Separation() {
         qty_separated: newSeparated 
       });
 
-      // Checar se o pedido todo foi separado
+      // Checar se o pedido todo foi separado (ignorando serviços)
       const allItems = await base44.entities.SalesOrderItem.filter({ order_id: item.order_id });
-      const overallComplete = allItems.every(i => {
+      const products = await base44.entities.Product.filter({ company_id: companyId });
+      
+      const physicalItems = allItems.filter(i => {
+         const p = products.find(prod => prod.id === i.product_id);
+         return p?.category !== 'SV';
+      });
+
+      const overallComplete = physicalItems.every(i => {
          if (i.id === item.id) return (newSeparated >= i.qty);
          return (i.qty_separated || 0) >= i.qty;
       });
 
-      if (overallComplete) {
+      if (overallComplete && physicalItems.length > 0) {
          await base44.entities.SalesOrder.update(item.order_id, { status: 'SEPARADO' });
       }
     },

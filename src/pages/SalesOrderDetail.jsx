@@ -936,7 +936,10 @@ export default function SalesOrderDetail() {
           open={reservationDialogOpen}
           onClose={() => setReservationDialogOpen(false)}
           order={order}
-          items={items || []}
+          items={items?.filter(item => {
+            const product = products?.find(p => p.id === item.product_id);
+            return product?.category !== 'SV';
+          })}
         />
 
         {/* Cancel Order Dialog */}

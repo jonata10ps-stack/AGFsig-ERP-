@@ -59,10 +59,19 @@ export default function PendingItemsReport() {
       // Batch fetch items if there are many orders to avoid URL length issues
       const BATCH_SIZE = 50;
       let allItems = [];
+      const products = await base44.entities.Product.filter({ company_id: companyId });
+
       for (let i = 0; i < orderIds.length; i += BATCH_SIZE) {
         const batch = orderIds.slice(i, i + BATCH_SIZE);
         const results = await base44.entities.SalesOrderItem.filter({ order_id: batch });
-        allItems = [...allItems, ...results];
+        
+        // Filtrar apenas itens físicos (não SV)
+        const physical = results.filter(item => {
+          const p = products.find(prod => prod.id === item.product_id);
+          return p?.category !== 'SV';
+        });
+
+        allItems = [...allItems, ...physical];
       }
       return allItems;
     },
