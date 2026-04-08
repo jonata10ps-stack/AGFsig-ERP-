@@ -111,16 +111,53 @@ export default function Separation() {
   const [scanDestLoc, setScanDestLoc] = useState('');
   const [pickQty, setPickQty] = useState(0);
 
-  const { data: orders, isLoading } = useQuery({
-    queryKey: ['orders-for-separation', companyId],
-    queryFn: () => companyId ? base44.entities.SalesOrder.filter({ company_id: companyId, status: ['CONFIRMADO', 'RESERVADO', 'SEPARANDO', 'SEPARADO'] }) : Promise.resolve([]),
-    enabled: !!companyId,
-  });
+  const isProductService = (p) => {
+    if (!p) return false;
+    return p.category === 'SV' || 
+           p.name?.toUpperCase().includes('ASSISTENCIA TECNICA') || 
+           p.name?.toUpperCase().includes('SERVIÇO') ||
+           p.sku?.toUpperCase().startsWith('SV-');
+  };
 
   const { data: products } = useQuery({
     queryKey: ['products'],
     queryFn: () => base44.entities.Product.filter({ active: true }),
   });
+
+  const { data: allItems } = useQuery({
+    queryKey: ['all-active-items', companyId],
+    queryFn: async () => {
+      if (!companyId) return [];
+      // Buscar itens de todos os pedidos que podem estar na tela
+      const activeOrders = await base44.entities.SalesOrder.filter({ 
+        company_id: companyId, 
+        status: ['CONFIRMADO', 'RESERVADO', 'SEPARANDO', 'SEPARADO'] 
+      });
+      const orderIds = activeOrders.map(o => o.id);
+      if (orderIds.length === 0) return [];
+      return base44.entities.SalesOrderItem.filter({ order_id: orderIds });
+    },
+    enabled: !!companyId,
+  });
+
+  const { data: rawOrders, isLoading } = useQuery({
+    queryKey: ['orders-for-separation-raw', companyId],
+    queryFn: () => companyId ? base44.entities.SalesOrder.filter({ company_id: companyId, status: ['CONFIRMADO', 'RESERVADO', 'SEPARANDO', 'SEPARADO'] }) : Promise.resolve([]),
+    enabled: !!companyId,
+  });
+
+  // Filtrar pedidos que possuem ao menos um item físico
+  const orders = React.useMemo(() => {
+    if (!rawOrders || !allItems || !products) return rawOrders;
+    return rawOrders.filter(order => {
+      const orderItems = allItems.filter(item => item.order_id === order.id);
+      const hasPhysicalItem = orderItems.some(item => {
+        const p = products.find(prod => prod.id === item.product_id);
+        return !isProductService(p);
+      });
+      return hasPhysicalItem;
+    });
+  }, [rawOrders, allItems, products]);
 
   const { data: rawItems, isLoading: loadingItems } = useQuery({
     queryKey: ['order-items', selectedOrder?.id],
@@ -132,27 +169,38 @@ export default function Separation() {
     if (!rawItems || !products) return rawItems;
     return rawItems.filter(item => {
       const product = products.find(p => p.id === item.product_id);
-      if (!product) return true;
-      // Tratar como serviço (SV) se a categoria for SV ou se for Assistência Técnica (conforme solicitado pelo usuário para PED-16665781)
-      const isService = product.category === 'SV' || 
-                       product.name?.toUpperCase().includes('ASSISTENCIA TECNICA') || 
-                       product.name?.toUpperCase().includes('SERVIÇO');
-      return !isService;
+      return !isProductService(product);
     });
   }, [rawItems, products]);
 
-  // Auto-avançar pedidos que só possuem itens de serviço
+  // Auto-avançar pedidos que só possuem itens de serviço em background
   React.useEffect(() => {
-    if (selectedOrder?.status === 'CONFIRMADO' && rawItems?.length > 0 && items?.length === 0) {
-      startSeparationMutation.mutate(selectedOrder);
-    }
-  }, [selectedOrder?.id, rawItems, items]);
+    if (!rawOrders || !allItems || !products) return;
+    
+    const advanceOrders = async () => {
+      for (const order of rawOrders) {
+        if (order.status !== 'CONFIRMADO' && order.status !== 'SEPARANDO') continue;
+        
+        const orderItems = allItems.filter(item => item.order_id === order.id);
+        if (orderItems.length === 0) continue;
+        
+        const hasPhysical = orderItems.some(item => {
+          const p = products.find(prod => prod.id === item.product_id);
+          return !isProductService(p);
+        });
 
-  React.useEffect(() => {
-    if (selectedOrder?.status === 'SEPARANDO' && rawItems?.length > 0 && items?.length === 0) {
-      completeSeparationMutation.mutate(selectedOrder);
-    }
-  }, [selectedOrder?.status, rawItems, items]);
+        if (!hasPhysical) {
+          if (order.status === 'CONFIRMADO') {
+            await startSeparationMutation.mutateAsync(order);
+          } else if (order.status === 'SEPARANDO') {
+            await completeSeparationMutation.mutateAsync(order);
+          }
+        }
+      }
+    };
+
+    advanceOrders();
+  }, [rawOrders, allItems, products]);
 
   const startSeparationMutation = useMutation({
     mutationFn: async (order) => {
