@@ -48,6 +48,7 @@ export default function ServiceOrderDetail() {
   const urlParams = new URLSearchParams(window.location.search);
   const orderId = urlParams.get('id');
 
+  const [isGeneratingQuote, setIsGeneratingQuote] = useState(false);
   const [formData, setFormData] = useState({});
   const [changeTechDialogOpen, setChangeTechDialogOpen] = useState(false);
   const [selectedTechnicianId, setSelectedTechnicianId] = useState('');
@@ -646,11 +647,13 @@ export default function ServiceOrderDetail() {
               {!formData.description?.includes('ORC-') && (
                 <Button
                   variant="outline"
+                  disabled={isGeneratingQuote}
                   onClick={async () => {
                     try {
                       const confirm = window.confirm("Deseja gerar um orçamento a partir desta OS?");
                       if (!confirm) return;
 
+                      setIsGeneratingQuote(true);
                       // 1. Gerar número do orçamento
                       const allQuotes = await base44.entities.Quote.filter({ company_id: companyId }, '-created_date');
                       let nextNumber = 1;
@@ -688,12 +691,18 @@ export default function ServiceOrderDetail() {
                       queryClient.invalidateQueries({ queryKey: ['service-order', orderId] });
                     } catch (err) {
                       toast.error("Erro ao gerar orçamento: " + err.message);
+                    } finally {
+                      setIsGeneratingQuote(false);
                     }
                   }}
                   className="border-amber-200 text-amber-700 hover:bg-amber-50"
                 >
-                  <FileText className="h-4 w-4 mr-2" />
-                  Gerar Orçamento
+                  {isGeneratingQuote ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <FileText className="h-4 w-4 mr-2" />
+                  )}
+                  {isGeneratingQuote ? 'Gerando...' : 'Gerar Orçamento'}
                 </Button>
               )}
               {order.status !== 'CONCLUIDA' && order.status !== 'CANCELADA' && (
