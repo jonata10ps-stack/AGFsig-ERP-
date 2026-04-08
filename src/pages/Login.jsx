@@ -78,12 +78,19 @@ export default function Login() {
 
     try {
       setIsLoading(true);
-      await base44.auth.requestPasswordReset(email);
-      toast.success('Link de recuperação enviado! Verifique sua caixa de entrada.');
+      console.log('Solicitando reset de senha para:', email);
+      const result = await base44.auth.requestPasswordReset(email);
+      console.log('Resposta do Supabase:', result);
+      toast.success('Link de recuperação enviado! Verifique sua caixa de entrada e SPAM.');
       setView('login');
     } catch (error) {
-      console.error(error);
-      toast.error('Erro ao solicitar recuperação: ' + (error.message || 'E-mail não encontrado'));
+      console.error('Erro detalhado no reset:', error);
+      let msg = 'Erro ao solicitar recuperação. ';
+      if (error.message === 'Rate limit exceeded') msg += 'Muitas tentativas. Tente novamente em 24h.';
+      else if (error.status === 429) msg += 'Limite de e-mails atingido pelo servidor.';
+      else msg += error.message || 'E-mail pode não estar cadastrado.';
+      
+      toast.error(msg, { duration: 6000 });
     } finally {
       setIsLoading(false);
     }

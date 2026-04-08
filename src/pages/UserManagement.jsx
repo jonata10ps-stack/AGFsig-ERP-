@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { 
   Users, CheckCircle, XCircle, Clock, Search, Mail, Calendar,
-  UserCheck, Shield, Settings, Ban, UserPlus, Building2
+  UserCheck, Shield, Settings, Ban, UserPlus, Building2, Key
 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
@@ -50,6 +50,8 @@ export default function UserManagement() {
   const [selectedCompanies, setSelectedCompanies] = useState([]);
   const [inviteDialog, setInviteDialog] = useState(false);
   const [inviteForm, setInviteForm] = useState({ email: '', full_name: '', modules: [], is_seller: false, company_ids: [] });
+  const [resetPasswordDialog, setResetPasswordDialog] = useState(null);
+  const [newPassword, setNewPassword] = useState('');
 
   const { data: users = [], isLoading } = useQuery({
     queryKey: ['users-management'],
@@ -93,6 +95,27 @@ export default function UserManagement() {
     onError: (error) => {
       toast.error('Erro ao atualizar usuário: ' + error.message);
     },
+  });
+  
+  const resetPasswordMutation = useMutation({
+    mutationFn: async ({ userId, password }) => {
+      if (!supabaseAdmin) throw new Error('Serviço de administração não disponível');
+      
+      const { error } = await supabaseAdmin.auth.admin.updateUserById(
+        userId,
+        { password: password }
+      );
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Senha atualizada com sucesso!');
+      setResetPasswordDialog(null);
+      setNewPassword('');
+    },
+    onError: (error) => {
+      toast.error('Erro ao resetar senha: ' + error.message);
+    }
   });
 
   const handleApprove = (user) => {
@@ -397,6 +420,17 @@ export default function UserManagement() {
                     ) : null}
                     
                     <Button 
+                      onClick={() => setResetPasswordDialog(user)}
+                      variant="outline"
+                      size="sm"
+                      className="flex-1 sm:flex-initial text-amber-600 border-amber-200 hover:bg-amber-50"
+                      title="Resetar Senha"
+                    >
+                      <Key className="h-4 w-4 mr-1" />
+                      Senha
+                    </Button>
+                    
+                    <Button 
                       onClick={() => toggleUserActive(user)}
                       variant="outline"
                       size="sm"
@@ -606,6 +640,45 @@ export default function UserManagement() {
             </Button>
             <Button onClick={savePermissions}>
               Salvar Permissões
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {/* Reset Password Dialog */}
+      <Dialog open={!!resetPasswordDialog} onOpenChange={() => setResetPasswordDialog(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Resetar Senha Manualmente</DialogTitle>
+            <DialogDescription>
+              Defina uma nova senha para {resetPasswordDialog?.full_name || resetPasswordDialog?.email}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Nova Senha Provisória</label>
+              <Input 
+                type="text" 
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="Ex: AGF@123456"
+              />
+              <p className="text-[10px] text-slate-500">O usuário deverá usar esta senha para entrar. Avise-o após o reset.</p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setResetPasswordDialog(null)}>Cancelar</Button>
+            <Button 
+              className="bg-amber-600 hover:bg-amber-700"
+              onClick={() => {
+                if (newPassword.length < 6) {
+                  toast.error('A senha deve ter pelo menos 6 caracteres');
+                  return;
+                }
+                resetPasswordMutation.mutate({ userId: resetPasswordDialog.id, password: newPassword });
+              }}
+              disabled={resetPasswordMutation.isLoading}
+            >
+              Confirmar Reset
             </Button>
           </DialogFooter>
         </DialogContent>
