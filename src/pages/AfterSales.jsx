@@ -119,22 +119,46 @@ export default function AfterSales() {
                 <Activity className="h-4 w-4 text-indigo-500" />
                 Operações Técnicas
             </CardTitle>
-            <div className="flex bg-slate-100 p-1 rounded-lg">
-                <Button 
-                    variant={typeFilter === 'all' ? 'secondary' : 'ghost'} 
-                    size="sm" className="h-7 text-[10px] px-2"
-                    onClick={() => setTypeFilter('all')}
-                >Todas</Button>
-                <Button 
-                    variant={typeFilter === 'SR' ? 'secondary' : 'ghost'} 
-                    size="sm" className="h-7 text-[10px] px-2"
-                    onClick={() => setTypeFilter('SR')}
-                >Solicitações</Button>
-                <Button 
-                    variant={typeFilter === 'OS' ? 'secondary' : 'ghost'} 
-                    size="sm" className="h-7 text-[10px] px-2"
-                    onClick={() => setTypeFilter('OS')}
-                >Ordens (OS)</Button>
+            <div className="flex flex-col gap-2">
+                <div className="flex bg-slate-100 p-1 rounded-lg self-end">
+                    <Button 
+                        variant={typeFilter === 'all' ? 'secondary' : 'ghost'} 
+                        size="sm" className="h-7 text-[10px] px-2"
+                        onClick={() => setTypeFilter('all')}
+                    >Todas</Button>
+                    <Button 
+                        variant={typeFilter === 'SR' ? 'secondary' : 'ghost'} 
+                        size="sm" className="h-7 text-[10px] px-2"
+                        onClick={() => setTypeFilter('SR')}
+                    >Solicitações</Button>
+                    <Button 
+                        variant={typeFilter === 'OS' ? 'secondary' : 'ghost'} 
+                        size="sm" className="h-7 text-[10px] px-2"
+                        onClick={() => setTypeFilter('OS')}
+                    >Ordens (OS)</Button>
+                </div>
+                <div className="flex bg-slate-100 p-1 rounded-lg self-end scale-90 origin-right">
+                    <Button 
+                        variant={statusFilter === 'all' ? 'secondary' : 'ghost'} 
+                        size="sm" className="h-7 text-[10px] px-2"
+                        onClick={() => setStatusFilter('all')}
+                    >Todos Status</Button>
+                    <Button 
+                        variant={statusFilter === 'active' ? 'secondary' : 'ghost'} 
+                        size="sm" className="h-7 text-[10px] px-2 text-red-600"
+                        onClick={() => setStatusFilter('active')}
+                    >Abertas/Pendentes</Button>
+                    <Button 
+                        variant={statusFilter === 'progress' ? 'secondary' : 'ghost'} 
+                        size="sm" className="h-7 text-[10px] px-2 text-blue-600"
+                        onClick={() => setStatusFilter('progress')}
+                    >Em Andamento</Button>
+                    <Button 
+                        variant={statusFilter === 'done' ? 'secondary' : 'ghost'} 
+                        size="sm" className="h-7 text-[10px] px-2 text-emerald-600"
+                        onClick={() => setStatusFilter('done')}
+                    >Encerradas</Button>
+                </div>
             </div>
           </CardHeader>
           <CardContent className="p-0">
@@ -156,11 +180,23 @@ export default function AfterSales() {
                                 ...(serviceRequests?.map(r => ({ ...r, _type: 'SR' })) || []),
                                 ...(serviceOrders?.map(o => ({ ...o, _type: 'OS' })) || [])
                             ].filter(item => {
-                                if (typeFilter === 'SR') return item._type === 'SR';
-                                if (typeFilter === 'OS') return item._type === 'OS';
+                                // Filter by Type
+                                if (typeFilter !== 'all' && item._type !== typeFilter) return false;
+                                
+                                // Filter by Status logic
+                                const s = String(item.status || '').toUpperCase();
+                                if (statusFilter === 'active') {
+                                    return s === 'ABERTA' || s === 'PENDENTE';
+                                }
+                                if (statusFilter === 'progress') {
+                                    return s === 'EM_ANDAMENTO' || s === 'EM_ATENDIMENTO';
+                                }
+                                if (statusFilter === 'done') {
+                                    return s === 'ENCERRADA' || s === 'CONCLUIDA' || s === 'FINALIZADA';
+                                }
                                 return true;
                             }).sort((a, b) => moment(b.created_date).diff(moment(a.created_date)))
-                            .slice(0, 10);
+                            .slice(0, 15);
 
                             return combined.map((item, i) => (
                                 <tr key={i} className="hover:bg-slate-50 border-b last:border-0">
