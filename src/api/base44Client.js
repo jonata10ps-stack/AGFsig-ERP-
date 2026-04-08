@@ -293,6 +293,20 @@ export const base44 = {
     logout: async () => {
       await supabase.auth.signOut();
       window.location.href = '/login';
+    },
+    requestPasswordReset: async (email) => {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/login?type=recovery`,
+      });
+      if (error) throw error;
+      return true;
+    },
+    updatePassword: async (newPassword) => {
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword
+      });
+      if (error) throw error;
+      return true;
     }
   },
   integrations: {
