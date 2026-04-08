@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { Link, useNavigate } from 'react-router-dom';
@@ -58,16 +58,29 @@ export default function ServiceOrderDetail() {
 
   const { data: order, isLoading } = useQuery({
     queryKey: ['service-order', orderId],
-    queryFn: async () => {
-      const data = await base44.entities.ServiceOrder.filter({ id: orderId });
-      const orderData = data?.[0];
-      if (orderData) {
-        setFormData(orderData);
-      }
-      return orderData;
-    },
+    queryFn: () => orderId ? base44.entities.ServiceOrder.get(orderId) : null,
     enabled: !!orderId,
   });
+
+  const { data: linkedQuotes } = useQuery({
+    queryKey: ['service-order-quotes', order?.os_number],
+    queryFn: async () => {
+      if (!order?.os_number) return [];
+      const all = await base44.entities.Quote.filter({ company_id: companyId });
+      return (all || []).filter(q => q.notes?.includes(order.os_number));
+    },
+    enabled: !!order?.os_number,
+  });
+
+  useEffect(() => {
+    if (order) {
+      setFormData(order);
+    }
+  }, [order]);
+
+  const activeQuote = linkedQuotes?.find(q => q.status !== 'REJEITADO');
+  const hasLinkedQuotes = linkedQuotes && linkedQuotes.length > 0;
+  const hasOnlyRejected = hasLinkedQuotes && !activeQuote;
 
   const { data: technicians } = useQuery({
     queryKey: ['technicians'],
@@ -637,20 +650,43 @@ export default function ServiceOrderDetail() {
               <p className="text-2xl font-bold text-indigo-600">
                 R$ {(Number(formData.labor_cost || 0) + Number(formData.parts_cost || 0)).toFixed(2)}
               </p>
-              {formData.description?.includes('ORC-') && (
-                <p className="text-xs font-medium text-emerald-600 mt-1">
-                  Orçamento vinculado: {formData.description.match(/ORC-\d+/)?.[0]}
-                </p>
+              {/* Listagem de Orçamentos Vinculados */}
+              {hasLinkedQuotes && (
+                <div className="space-y-2 mb-4">
+                  <p className="text-sm font-semibold text-slate-700">Orçamentos Vinculados:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {linkedQuotes.map(q => (
+                      <Link 
+                        key={q.id} 
+                        to={createPageUrl(`QuoteDetail?id=${q.id}`)}
+                        className="flex items-center gap-2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-md hover:bg-indigo-50 hover:border-indigo-200 transition-colors"
+                      >
+                        <FileText className="h-3 w-3 text-indigo-600" />
+                        <span className="text-xs font-mono font-medium">{q.quote_number}</span>
+                        <Badge variant="outline" className={`text-[10px] px-1 py-0 ${
+                          q.status === 'REJEITADO' ? 'bg-red-50 text-red-600 border-red-100' : 
+                          q.status === 'CONVERTIDO' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
+                          'bg-blue-50 text-blue-600 border-blue-100'
+                        }`}>
+                          {q.status}
+                        </Badge>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
               )}
-            </div>
-            <div className="flex gap-2">
-              {!formData.description?.includes('ORC-') && (
+
+              <div className="flex gap-2">
                 <Button
                   variant="outline"
                   disabled={isGeneratingQuote}
                   onClick={async () => {
                     try {
-                      const confirm = window.confirm("Deseja gerar um orçamento a partir desta OS?");
+                      const confirm = window.confirm(
+                        activeQuote 
+                          ? "Já existe um orçamento ativo para esta OS. Deseja gerar um ORÇAMENTO COMPLEMENTAR?"
+                          : "Deseja gerar um orçamento a partir desta OS?"
+                      );
                       if (!confirm) return;
 
                       setIsGeneratingQuote(true);
@@ -673,14 +709,14 @@ export default function ServiceOrderDetail() {
                         client_name: order.client_name,
                         quote_number: quoteNumber,
                         status: 'RASCUNHO',
-                        notes: `Gerado a partir da OS ${order.os_number}. Diagnóstico: ${formData.diagnosis || ''}`,
+                        notes: `Gerado a partir da OS ${order.os_number}. ${activeQuote ? '[COMPLEMENTAR]' : ''} Diagnóstico: ${formData.diagnosis || ''}`,
                         total_amount: Number(formData.labor_cost || 0) + Number(formData.parts_cost || 0)
                       });
 
-                      // 3. Vincular na OS usando o campo 'description'
+                      // 3. Vincular na OS usando o campo 'description' (histórico)
                       const newDesc = formData.description 
-                        ? `${formData.description}\n[VINCULO: ${quoteNumber}]`
-                        : `[VINCULO: ${quoteNumber}]`;
+                        ? `${formData.description}\n[VINCULO ${activeQuote ? 'COMPLEMENTAR' : ''}: ${quoteNumber}]`
+                        : `[VINCULO ${activeQuote ? 'COMPLEMENTAR' : ''}: ${quoteNumber}]`;
                       
                       await base44.entities.ServiceOrder.update(orderId, {
                         description: newDesc
@@ -688,7 +724,7 @@ export default function ServiceOrderDetail() {
 
                       setFormData(prev => ({ ...prev, description: newDesc }));
                       toast.success(`Orçamento ${quoteNumber} gerado com sucesso!`);
-                      queryClient.invalidateQueries({ queryKey: ['service-order', orderId] });
+                      queryClient.invalidateQueries({ queryKey: ['service-order-quotes', order.os_number] });
                     } catch (err) {
                       toast.error("Erro ao gerar orçamento: " + err.message);
                     } finally {
@@ -702,9 +738,16 @@ export default function ServiceOrderDetail() {
                   ) : (
                     <FileText className="h-4 w-4 mr-2" />
                   )}
-                  {isGeneratingQuote ? 'Gerando...' : 'Gerar Orçamento'}
+                  {isGeneratingQuote 
+                    ? 'Gerando...' 
+                    : activeQuote 
+                      ? 'Orçamento Complementar' 
+                      : hasOnlyRejected 
+                        ? 'Gerar Novo Orçamento' 
+                        : 'Gerar Orçamento'
+                  }
                 </Button>
-              )}
+              </div>
               {order.status !== 'CONCLUIDA' && order.status !== 'CANCELADA' && (
                 <Button 
                   onClick={handleSave} 

@@ -403,9 +403,41 @@ export default function Quotes() {
                               Ver Detalhes
                             </Link>
                           </DropdownMenuItem>
+                          
+                          {/* Opção de Cancelar (Rejeitar) */}
+                          {quote.status !== 'REJEITADO' && quote.status !== 'CONVERTIDO' && (
+                            <DropdownMenuItem 
+                              onClick={async () => {
+                                if (window.confirm("Deseja realmente CANCELAR este orçamento?")) {
+                                  try {
+                                    await base44.entities.Quote.update(quote.id, { status: 'REJEITADO' });
+                                    queryClient.invalidateQueries({ queryKey: ['quotes'] });
+                                    toast.success("Orçamento cancelado");
+                                  } catch (err) {
+                                    toast.error("Erro ao cancelar: " + err.message);
+                                  }
+                                }
+                              }}
+                              className="text-amber-600"
+                            >
+                              <FileText className="h-4 w-4 mr-2" />
+                              Cancelar Orçamento
+                            </DropdownMenuItem>
+                          )}
+
                           <DropdownMenuSeparator />
                           {quote.status !== 'CONVERTIDO' && (
-                            <DropdownMenuItem onClick={() => setDeleteConfirm(quote)} className="text-red-600">
+                            <DropdownMenuItem 
+                              disabled={quote.notes?.includes('Gerado a partir da OS')}
+                              onClick={() => {
+                                if (quote.notes?.includes('Gerado a partir da OS')) {
+                                  toast.error("Orçamentos vinculados a OS não podem ser excluídos, apenas cancelados.");
+                                  return;
+                                }
+                                setDeleteConfirm(quote);
+                              }} 
+                              className={quote.notes?.includes('Gerado a partir da OS') ? "text-slate-400 opacity-50 cursor-not-allowed" : "text-red-600"}
+                            >
                               <Trash2 className="h-4 w-4 mr-2" />
                               Excluir
                             </DropdownMenuItem>
