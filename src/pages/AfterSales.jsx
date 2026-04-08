@@ -236,7 +236,7 @@ export default function AfterSales() {
                                     </td>
                                 </tr>
                             ));
-                        }, [serviceRequests, serviceOrders, typeFilter])}
+                        }, [serviceRequests, serviceOrders, typeFilter, statusFilter])}
                     </tbody>
                 </table>
             </div>
@@ -258,7 +258,7 @@ export default function AfterSales() {
                             <span className="font-bold text-sm tracking-tight">{link.title}</span>
                         </div>
                         <div className="flex items-center gap-2">
-                            {link.count > 0 && <Badge className="bg-white/50 text-current border-none">{link.count}</Badge>}
+                            {link.count > 0 && <Badge variant="secondary" className="bg-white/50 text-current border-none">{link.count}</Badge>}
                             <ArrowRight className="h-4 w-4 opacity-40 group-hover:translate-x-1 transition-transform" />
                         </div>
                     </div>
