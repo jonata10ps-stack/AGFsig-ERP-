@@ -112,6 +112,18 @@ export default function ProductionOrderDetail() {
     enabled: !!opId && !!companyId,
   });
 
+  // Scroll to anchor on load
+  useEffect(() => {
+    if (window.location.hash === '#etapas' && !stepsLoading && steps.length > 0) {
+      setTimeout(() => {
+        const element = document.getElementById('etapas');
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 500); // Wait for rendering
+    }
+  }, [stepsLoading, steps.length]);
+
   // Real-time subscription for step updates - disabled during initialization
   useEffect(() => {
     if (initializingRef.current) return; // Skip subscription during initialization
@@ -1119,7 +1131,7 @@ export default function ProductionOrderDetail() {
           </Card>
 
           {/* Etapas */}
-          <Card>
+          <Card id="etapas">
             <CardHeader>
               <div className="flex justify-between items-center">
                 <CardTitle className="text-lg">Etapas de Produção</CardTitle>

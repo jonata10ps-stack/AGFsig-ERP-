@@ -1,6 +1,8 @@
 import React, { useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
+import { createPageUrl } from '@/utils';
 import { useCompanyId } from '@/components/useCompanyId';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -31,6 +33,7 @@ const STATUS_LABELS = {
 export default function FactoryDashboard() {
   const { companyId } = useCompanyId();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   // Real-time subscriptions
   useEffect(() => {
@@ -311,7 +314,12 @@ export default function FactoryDashboard() {
                     const daysLate = displayDateStr ? Math.floor((today.getTime() - new Date(displayDateStr).getTime()) / 86400000) : 0;
 
                     return (
-                      <tr key={op.id} className="border-b last:border-0 hover:bg-red-50/50">
+                      <tr 
+                        key={op.id} 
+                        className="border-b last:border-0 hover:bg-red-50/50 cursor-pointer transition-colors"
+                        onDoubleClick={() => navigate(createPageUrl(`ProductionSchedule?search=${op.numero_op_externo || op.op_number}`))}
+                        title="Duplo clique para abrir no Cronograma"
+                      >
                         <td className="py-3 pr-4 font-mono font-semibold text-slate-800 align-top">{op.numero_op_externo || op.op_number}</td>
                         <td className="py-3 pr-4 align-top">
                           <p className="font-medium text-slate-700">{op.product_name}</p>

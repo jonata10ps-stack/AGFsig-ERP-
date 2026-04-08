@@ -83,6 +83,15 @@ export default function ProductionSchedule() {
     setCurrentPage(1);
   }, [searchTerm, statusFilter, activeKPI]);
 
+  // Handle URL search param
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlSearch = params.get('search');
+    if (urlSearch && !searchTerm) {
+      setSearchTerm(urlSearch);
+    }
+  }, [searchTerm]);
+
   const { data: steps = [], isLoading, refetch } = useQuery({
     queryKey: ['productionSteps', companyId],
     queryFn: () => companyId ? base44.entities.ProductionStep.filter({ company_id: companyId }, '-created_date', 2000) : [],
@@ -196,6 +205,14 @@ export default function ProductionSchedule() {
       return 0;
     });
   }, [grouped, ordersMap, searchTerm, statusFilter, activeKPI]);
+
+  // Auto-expand single result when searching
+  useEffect(() => {
+    if (searchTerm && filteredOPIds.length > 0) {
+      const opIdToExpand = filteredOPIds[0];
+      setExpandedOPs(prev => ({ ...prev, [opIdToExpand]: true }));
+    }
+  }, [searchTerm, filteredOPIds]);
 
   const paginatedOPIds = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
