@@ -33,8 +33,16 @@ export default function ServiceOrderReport({ order, history, quotes, onClose }) 
     : '<div class="signature-placeholder">Assinatura Pendente</div>';
 
   const handlePrint = () => {
-    const printWindow = window.open('', '_blank');
-    
+    // Para mobile/tablet, o window.open pode causar crash ou fechar o app.
+    // Usar um iframe oculto é a solução mais estável.
+    let iframe = document.getElementById('print-iframe');
+    if (!iframe) {
+      iframe = document.createElement('iframe');
+      iframe.id = 'print-iframe';
+      iframe.style.display = 'none';
+      document.body.appendChild(iframe);
+    }
+
     const historyHtml = (history || []).map(h => `
       <div class="history-item">
         <div class="history-dot"></div>
@@ -46,7 +54,9 @@ export default function ServiceOrderReport({ order, history, quotes, onClose }) 
       </div>
     `).join('');
 
-    printWindow.document.write(`
+    const doc = iframe.contentWindow.document;
+    doc.open();
+    doc.write(`
       <!DOCTYPE html>
       <html>
       <head>
@@ -214,10 +224,13 @@ export default function ServiceOrderReport({ order, history, quotes, onClose }) 
       </body>
       </html>
     `);
-    printWindow.document.close();
+    doc.close();
+
+    // Aguardar o carregamento do conteúdo e fontes antes de imprimir
     setTimeout(() => {
-      printWindow.print();
-    }, 800);
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+    }, 1000);
   };
 
   return (
