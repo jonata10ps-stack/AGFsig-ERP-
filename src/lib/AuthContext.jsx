@@ -32,7 +32,9 @@ export const AuthProvider = ({ children }) => {
       const profiles = await base44.entities.User.filter({ email: currentUser.email });
       const userProfile = profiles?.[0];
       
-      if (!userProfile || userProfile.account_status === 'PENDENTE') {
+      // BLOQUEIO APENAS SE FOR EXPLICITAMENTE PENDENTE
+      // Se não tiver perfil ainda (usuário antigo ou primeiro admin), liberamos o acesso
+      if (userProfile && userProfile.account_status === 'PENDENTE') {
         throw new Error('PENDING_APPROVAL');
       }
 
