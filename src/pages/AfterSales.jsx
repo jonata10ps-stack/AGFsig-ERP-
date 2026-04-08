@@ -240,9 +240,11 @@ export default function AfterSales() {
                                           {(item.status || 'Pendente').toUpperCase()}
                                       </Badge>
                                   </td>
-                                  <td className="px-4 py-3 text-right">
-                                      <Link to={createPageUrl(item._type === 'SR' ? `ServiceRequests?search=${item.request_number}` : `ServiceOrders?search=${item.os_number}`)}>
-                                          <Button variant="outline" size="sm" className="h-7 px-3 font-black text-[9px] rounded-lg hover:bg-slate-900 hover:text-white transition-all">ABRIR</Button>
+                                  <td className="px-5 py-4 text-right">
+                                      <Link to={createPageUrl(item._type === 'SR' ? `ServiceRequests?id=${item.id}` : `ServiceOrderDetail?id=${item.id}`)}>
+                                          <Button variant="ghost" size="sm" className="h-9 w-9 p-0 rounded-xl hover:bg-slate-900 hover:text-white transition-all">
+                                            <ArrowRight className="h-4 w-4" />
+                                          </Button>
                                       </Link>
                                   </td>
                               </tr>
