@@ -138,13 +138,20 @@ export default function ServiceRequests() {
 
   const checkAndCloseRequestsMutation = useMutation({
     mutationFn: async () => {
-      const allServiceOrders = await base44.entities.ServiceOrder.list('-created_date', 1000);
+      // Filtrar OSs especificamente por empresa e sem limite restrito para garantir sincronia
+      const allServiceOrders = await base44.entities.ServiceOrder.filter({ company_id: companyId });
       const requestsToClose = [];
 
       requests?.forEach(req => {
         if (req.status !== 'ENCERRADA' && req.status !== 'CANCELADA') {
-          const requestOrders = allServiceOrders.filter(so => so.request_id === req.id);
-          if (requestOrders.length > 0 && requestOrders.every(so => so.status === 'CONCLUIDA')) {
+          // Busca vínculo tanto por ID quanto por Número (retrocompatibilidade)
+          const requestOrders = allServiceOrders.filter(so => 
+            (so.request_id === req.id) || 
+            (so.request_number === req.request_number && req.request_number)
+          );
+          
+          // Se houver OS(s) e TODAS estiverem CONCLUIDA ou CANCELADA
+          if (requestOrders.length > 0 && requestOrders.every(so => so.status === 'CONCLUIDA' || so.status === 'CANCELADA')) {
             requestsToClose.push(req.id);
           }
         }
