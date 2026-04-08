@@ -113,16 +113,17 @@ export default function Separation() {
 
   const isProductService = (p) => {
     if (!p) return false;
-    const name = (p.name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, "").toUpperCase();
-    const category = (p.category || '').toUpperCase();
-    const sku = (p.sku || '').toUpperCase();
+    // Aceita tanto objeto Produto (name) quanto Item de Pedido (product_name)
+    const nameStr = (p.name || p.product_name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, "").toUpperCase();
+    const categoryStr = (p.category || '').toUpperCase();
+    const skuStr = (p.sku || p.product_sku || '').toUpperCase();
     
-    return category === 'SV' || 
-           category === 'SERVICO' ||
-           name.includes('ASSISTENCIA TECNICA') || 
-           name.includes('SERVICO') ||
-           name.includes('MAO DE OBRA') ||
-           sku.startsWith('SV-');
+    return categoryStr === 'SV' || 
+           categoryStr === 'SERVICO' ||
+           nameStr.includes('ASSISTENCIA TECNICA') || 
+           nameStr.includes('SERVICO') ||
+           nameStr.includes('MAO DE OBRA') ||
+           skuStr.startsWith('SV-');
   };
 
   const { data: products } = useQuery({
@@ -163,7 +164,8 @@ export default function Separation() {
       
       const hasPhysicalItem = orderItems.some(item => {
         const p = products.find(prod => prod.id === item.product_id);
-        return !isProductService(p);
+        // Fallback: se não achar o produto (p), tenta identificar pelo próprio item (item)
+        return !isProductService(p || item);
       });
       return hasPhysicalItem;
     });

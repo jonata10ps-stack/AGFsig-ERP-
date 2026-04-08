@@ -125,23 +125,24 @@ export default function Shipping() {
 
   const isProductService = (p) => {
     if (!p) return false;
-    const name = (p.name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, "").toUpperCase();
-    const category = (p.category || '').toUpperCase();
-    const sku = (p.sku || '').toUpperCase();
+    // Aceita tanto objeto Produto (name) quanto Item de Pedido (product_name)
+    const nameStr = (p.name || p.product_name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, "").toUpperCase();
+    const categoryStr = (p.category || '').toUpperCase();
+    const skuStr = (p.sku || p.product_sku || '').toUpperCase();
     
-    return category === 'SV' || 
-           category === 'SERVICO' ||
-           name.includes('ASSISTENCIA TECNICA') || 
-           name.includes('SERVICO') ||
-           name.includes('MAO DE OBRA') ||
-           sku.startsWith('SV-');
+    return categoryStr === 'SV' || 
+           categoryStr === 'SERVICO' ||
+           nameStr.includes('ASSISTENCIA TECNICA') || 
+           nameStr.includes('SERVICO') ||
+           nameStr.includes('MAO DE OBRA') ||
+           skuStr.startsWith('SV-');
   };
 
   const items = React.useMemo(() => {
     if (!rawItems || !products) return rawItems;
     return rawItems.filter(item => {
       const product = products.find(p => p.id === item.product_id);
-      return !isProductService(product);
+      return !isProductService(product || item);
     });
   }, [rawItems, products]);
 
@@ -153,7 +154,7 @@ export default function Shipping() {
       
       const orderItems = allItems.filter(i => {
          const p = products.find(prod => prod.id === i.product_id);
-         return p?.category !== 'SV';
+         return !isProductService(p || i);
       });
 
       // 2. Buscar movimentações existentes de SEPARACAO, SAIDA e ESTORNO
