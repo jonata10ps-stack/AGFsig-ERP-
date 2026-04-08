@@ -50,34 +50,54 @@ export default function AfterSales() {
 
   const kpis = useMemo(() => {
     const sReqs = Array.isArray(serviceRequests) ? serviceRequests : [];
-    const total = sReqs.length;
-    const pending = sReqs.filter(r => String(r?.status || '').toUpperCase() === 'ABERTA').length;
-    const inProgress = sReqs.filter(r => String(r?.status || '').toUpperCase() === 'EM_ANDAMENTO').length;
-    const completed = sReqs.filter(r => String(r?.status || '').toUpperCase() === 'ENCERRADA').length;
-    const efficiency = total > 0 ? Math.round((completed / total) * 100) : 0;
+    const sOrds = Array.isArray(serviceOrders) ? serviceOrders : [];
     
-    return { total, pending, inProgress, completed, efficiency };
-  }, [serviceRequests]);
+    // 1. All Items with metadata
+    const allItems = [
+        ...sReqs.map(r => ({ ...r, _type: 'SR', _status: String(r?.status || '').trim().toUpperCase() })),
+        ...sOrds.map(o => ({ ...o, _type: 'OS', _status: String(o?.status || '').trim().toUpperCase() }))
+    ];
+
+    // 2. Global category set (respects only Type Filter) for Efficiency
+    const categorySet = allItems.filter(item => typeFilter === 'all' || item._type === typeFilter);
+    const categoryTotal = categorySet.length;
+    const categoryCompleted = categorySet.filter(i => ['ENCERRADA', 'CONCLUIDA', 'FINALIZADA'].includes(i._status)).length;
+    const globalEfficiency = categoryTotal > 0 ? Math.round((categoryCompleted / categoryTotal) * 100) : 0;
+
+    // 3. Filtered subset (respects Type AND Status) for counts
+    const filteredSubset = allItems.filter(item => {
+        if (typeFilter !== 'all' && item._type !== typeFilter) return false;
+        if (statusFilter === 'active') return item._status === 'ABERTA' || item._status === 'PENDENTE';
+        if (statusFilter === 'progress') return ['EM_ANDAMENTO', 'EM_ATENDIMENTO', 'PAUSADA', 'AGUARDANDO_PECA'].includes(item._status);
+        if (statusFilter === 'done') return ['ENCERRADA', 'CONCLUIDA', 'FINALIZADA'].includes(item._status);
+        return true;
+    });
+
+    return { 
+        total: filteredSubset.length, 
+        pending: filteredSubset.filter(i => i._status === 'ABERTA' || i._status === 'PENDENTE').length, 
+        inProgress: filteredSubset.filter(i => ['EM_ANDAMENTO', 'EM_ATENDIMENTO', 'PAUSADA', 'AGUARDANDO_PECA'].includes(i._status)).length, 
+        efficiency: globalEfficiency 
+    };
+  }, [serviceRequests, serviceOrders, typeFilter, statusFilter]);
 
   const technicalOperations = useMemo(() => {
     const sReqs = Array.isArray(serviceRequests) ? serviceRequests : [];
     const sOrds = Array.isArray(serviceOrders) ? serviceOrders : [];
-    
-    return [
-        ...sReqs.map(r => ({ ...r, _type: 'SR' })),
-        ...sOrds.map(o => ({ ...o, _type: 'OS' }))
-    ].filter(item => {
+      if (!serviceRequests || !serviceOrders) return [];
+      const combined = [
+          ...serviceRequests.map(sr => ({ ...sr, _type: 'SR', date: sr.created_date || sr.created_at, status: sr.status || 'Aberta' })),
+          ...serviceOrders.map(so => ({ ...so, _type: 'OS', date: so.created_date || so.created_at, status: so.status || 'Pendente' }))
+      ];
+      combined.sort((a, b) => moment(b.date).valueOf() - moment(a.date).valueOf());
+      return combined.filter(item => {
         if (typeFilter !== 'all' && item._type !== typeFilter) return false;
         const s = String(item?.status || '').toUpperCase();
         if (statusFilter === 'active') return s === 'ABERTA' || s === 'PENDENTE';
-        if (statusFilter === 'progress') return s === 'EM_ANDAMENTO' || s === 'EM_ATENDIMENTO';
+        if (statusFilter === 'progress') return ['EM_ANDAMENTO', 'EM_ATENDIMENTO', 'PAUSADA', 'AGUARDANDO_PECA'].includes(s);
         if (statusFilter === 'done') return s === 'ENCERRADA' || s === 'CONCLUIDA' || s === 'FINALIZADA';
         return true;
-    }).sort((a, b) => {
-        const dateA = a.created_date || a.created_at || a.date_from;
-        const dateB = b.created_date || b.created_at || b.date_from;
-        return moment(dateB).diff(moment(dateA));
-    }).slice(0, 15);
+      }).slice(0, 50);
   }, [serviceRequests, serviceOrders, typeFilter, statusFilter]);
 
   return (

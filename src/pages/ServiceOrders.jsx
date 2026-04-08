@@ -30,10 +30,38 @@ export default function ServiceOrders() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
 
+  // Buscamos o usuário atual para saber se é técnico
+  const { data: user } = useQuery({
+    queryKey: ['current-user'],
+    queryFn: () => base44.auth.me(),
+  });
+
+  // Se for técnico, precisamos do seu registro de técnico para filtrar
+  const { data: currentTechnician } = useQuery({
+    queryKey: ['technician-by-user', user?.email],
+    queryFn: async () => {
+        if (!user?.is_technician || !user?.email) return null;
+        const techs = await base44.entities.Technician.filter({ email: user.email });
+        return techs?.[0] || null;
+    },
+    enabled: !!user?.is_technician && !!user?.email,
+  });
+
   const { data: orders, isLoading } = useQuery({
-    queryKey: ['service-orders', companyId],
-    queryFn: () => companyId ? base44.entities.ServiceOrder.filter({ company_id: companyId }, '-created_date') : Promise.resolve([]),
-    enabled: !!companyId,
+    queryKey: ['service-orders', companyId, currentTechnician?.id],
+    queryFn: async () => {
+        if (!companyId) return [];
+        const filters = { company_id: companyId };
+        
+        // Se for técnico, filtra apenas pelas dele
+        if (user?.is_technician) {
+            if (!currentTechnician) return []; // Ainda carregando ou não encontrado
+            filters.technician_id = currentTechnician.id;
+        }
+        
+        return await base44.entities.ServiceOrder.filter(filters, '-created_date');
+    },
+    enabled: !!companyId && (!user?.is_technician || !!currentTechnician),
   });
 
   const filteredOrders = orders?.filter(order => {

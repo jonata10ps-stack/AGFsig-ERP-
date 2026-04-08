@@ -317,43 +317,50 @@ export default function Layout({ children, currentPageName }) {
 
           {/* Navigation */}
           <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
-            {navigation.filter(item => {
-              // Get user permissions safely
-              const userRole = user?.role;
-              const rawModules = user?.allowed_modules;
-              
-              // Utility to parse array/JSON
-              const parseModules = (val) => {
-                if (!val) return [];
-                if (Array.isArray(val)) return val;
-                if (typeof val === 'string' && val.startsWith('[')) {
-                  try { return JSON.parse(val); } catch (e) { return []; }
+            {navigation
+              .map(item => {
+                // If user is technician, prune children of Pós-Vendas
+                if (user?.is_technician && item.moduleId === 'PosVendas') {
+                  const techAllowedPages = ['ServiceSchedule', 'ServiceOrders'];
+                  return {
+                    ...item,
+                    children: item.children?.filter(child => techAllowedPages.includes(child.page))
+                  };
                 }
-                if (typeof val === 'string') return val.split(',').map(s => s.trim());
-                return [];
-              };
-              
-              const allowedModules = parseModules(rawModules).map(m => String(m).toLowerCase());
+                return item;
+              })
+              .filter(item => {
+                // Get user permissions safely
+                const userRole = user?.role;
+                const rawModules = user?.allowed_modules;
+                
+                // Utility to parse array/JSON
+                const parseModules = (val) => {
+                  if (!val) return [];
+                  if (Array.isArray(val)) return val;
+                  if (typeof val === 'string' && val.startsWith('[')) {
+                    try { return JSON.parse(val); } catch (e) { return []; }
+                  }
+                  if (typeof val === 'string') return val.split(',').map(s => s.trim());
+                  return [];
+                };
+                
+                const allowedModules = parseModules(rawModules).map(m => String(m).toLowerCase());
 
-              // LOG DE DEBUG (Aparecerá no F12 do Carlos)
-              if (item.moduleId) {
-                console.log(`DEBUG ACESSO [${user?.email}]: Módulo ${item.moduleId} -> Permissões:`, allowedModules);
-              }
-
-              // Admin sees everything
-              if (String(userRole).toLowerCase() === 'admin') return true;
-              
-              // Admin-only items for admins only
-              if (item.adminOnly) return false;
-              
-              // Dashboard and always visible items
-              if (item.page === 'Dashboard' || !item.moduleId) return true;
-              
-              // Check module permissions (case insensitive)
-              return allowedModules.includes(String(item.moduleId).toLowerCase());
-            }).map((item, index) => (
-              <NavItem key={`${item.name}-${item.page || index}`} item={item} mobile />
-            ))}
+                // Admin sees everything
+                if (String(userRole).toLowerCase() === 'admin') return true;
+                
+                // Admin-only items for admins only
+                if (item.adminOnly) return false;
+                
+                // Dashboard and always visible items
+                if (item.page === 'Dashboard' || !item.moduleId) return true;
+                
+                // Check module permissions (case insensitive)
+                return allowedModules.includes(String(item.moduleId).toLowerCase());
+              }).map((item, index) => (
+                <NavItem key={`${item.name}-${item.page || index}`} item={item} mobile />
+              ))}
           </nav>
 
           {/* User section */}

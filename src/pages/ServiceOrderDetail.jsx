@@ -5,7 +5,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { useCompanyId } from '@/components/useCompanyId';
 import {
-  ArrowLeft, Save, Clock, CheckCircle, XCircle, Pause, Play, Wrench, User, Calendar, DollarSign, UserCog, History, Loader2, Camera, Trash2, FileText, ImageIcon, Clipboard, Printer
+  ArrowLeft, Save, Clock, CheckCircle, XCircle, AlertCircle, Pause, Play, Wrench, User, Calendar, DollarSign, UserCog, History, Loader2, Camera, Trash2, FileText, ImageIcon, Clipboard, Printer
 } from 'lucide-react';
 import SignatureCanvas from '@/components/inventory/SignatureCanvas';
 import ServiceOrderReport from '@/components/service/ServiceOrderReport';
@@ -85,6 +85,19 @@ export default function ServiceOrderDetail() {
   const hasLinkedQuotes = linkedQuotes && linkedQuotes.length > 0;
   const hasOnlyRejected = hasLinkedQuotes && !activeQuote;
 
+  const { data: user, isLoading: userLoading } = useQuery({
+    queryKey: ['current-user'],
+    queryFn: async () => {
+      try {
+        return await base44.auth.me();
+      } catch (err) {
+        console.error('Erro ao buscar perfil do usuário:', err);
+        return { role: 'user', is_technician: false }; // Fallback seguro
+      }
+    },
+    retry: 1,
+  });
+
   const { data: technicians } = useQuery({
     queryKey: ['technicians'],
     queryFn: () => base44.entities.Technician.filter({ active: true }),
@@ -94,6 +107,16 @@ export default function ServiceOrderDetail() {
     queryKey: ['technician-history', orderId],
     queryFn: () => base44.entities.TechnicianHistory.filter({ service_order_id: orderId }, '-created_date'),
     enabled: !!orderId,
+  });
+
+  const { data: currentTechnician, isLoading: techLoading } = useQuery({
+    queryKey: ['technician-by-user', user?.email],
+    queryFn: async () => {
+        if (!user?.is_technician || !user?.email) return null;
+        const techs = await base44.entities.Technician.filter({ email: user.email });
+        return techs?.[0] || null;
+    },
+    enabled: !!user?.is_technician && !!user?.email,
   });
 
   const updateMutation = useMutation({
@@ -258,11 +281,11 @@ export default function ServiceOrderDetail() {
     }
   });
 
-  if (isLoading) {
+  if (isLoading || userLoading) {
     return (
-      <div className="space-y-6">
-        <Skeleton className="h-8 w-64" />
-        <Skeleton className="h-96 w-full" />
+      <div className="flex flex-col items-center justify-center min-h-[400px] space-y-4">
+        <Loader2 className="h-12 w-12 animate-spin text-indigo-600" />
+        <p className="text-slate-500 animate-pulse">Carregando dados da ordem...</p>
       </div>
     );
   }
@@ -270,15 +293,33 @@ export default function ServiceOrderDetail() {
   if (!order) {
     return (
       <div className="text-center py-12">
-        <p className="text-slate-500">Ordem de serviço não encontrada</p>
+        <XCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+        <p className="text-slate-500 text-lg font-medium">Ordem de serviço não encontrada</p>
         <Link to={createPageUrl('ServiceOrders')}>
           <Button variant="outline" className="mt-4">
             <ArrowLeft className="h-4 w-4 mr-2" />
-            Voltar
+            Voltar para Listagem
           </Button>
         </Link>
       </div>
     );
+  }
+
+  // Verificação de Propriedade (Segurança para Técnicos)
+  if (user?.is_technician && currentTechnician && order.technician_id && order.technician_id !== currentTechnician.id) {
+    return (
+        <div className="text-center py-12">
+          <AlertCircle className="h-12 w-12 text-amber-500 mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-slate-900 mb-2">Acesso Negado</h2>
+          <p className="text-slate-500 max-w-md mx-auto">Esta ordem de serviço não está atribuída a você. Caso acredite que isso seja um erro, entre em contato com seu gestor.</p>
+          <Link to={createPageUrl('ServiceOrders')}>
+            <Button variant="outline" className="mt-6">
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Voltar para Minhas Ordens
+            </Button>
+          </Link>
+        </div>
+      );
   }
 
   return (
@@ -362,7 +403,7 @@ export default function ServiceOrderDetail() {
                 <p className="text-sm text-slate-500">Técnico</p>
                 <div className="flex items-center gap-2">
                   <p className="font-medium">{order.technician_name || 'Não atribuído'}</p>
-                  {order.status !== 'CONCLUIDA' && order.status !== 'CANCELADA' && (
+                  {order.status !== 'CONCLUIDA' && order.status !== 'CANCELADA' && !user?.is_technician && (
                     <Button 
                       size="sm" 
                       variant="ghost" 

@@ -44,10 +44,38 @@ export default function ServiceSchedule() {
   const [technicianFilter, setTechnicianFilter] = useState('all');
   const [clientFilter, setClientFilter] = useState('all');
 
+  // Buscamos o usuário atual
+  const { data: user } = useQuery({
+    queryKey: ['current-user'],
+    queryFn: () => base44.auth.me(),
+  });
+
+  // Se for técnico, buscamos seu registro
+  const { data: currentTechnician } = useQuery({
+    queryKey: ['technician-by-user', user?.email],
+    queryFn: async () => {
+        if (!user?.is_technician || !user?.email) return null;
+        const techs = await base44.entities.Technician.filter({ email: user.email });
+        return techs?.[0] || null;
+    },
+    enabled: !!user?.is_technician && !!user?.email,
+  });
+
   const { data: serviceOrders, isLoading: loadingOrders } = useQuery({
-    queryKey: ['service-orders', companyId],
-    queryFn: () => companyId ? base44.entities.ServiceOrder.filter({ company_id: companyId }, '-created_date') : Promise.resolve([]),
-    enabled: !!companyId,
+    queryKey: ['service-orders', companyId, currentTechnician?.id],
+    queryFn: async () => {
+        if (!companyId) return [];
+        const filters = { company_id: companyId };
+        
+        // Se for técnico, filtra apenas pelas dele
+        if (user?.is_technician) {
+            if (!currentTechnician) return [];
+            filters.technician_id = currentTechnician.id;
+        }
+        
+        return await base44.entities.ServiceOrder.filter(filters, '-created_date');
+    },
+    enabled: !!companyId && (!user?.is_technician || !!currentTechnician),
   });
 
   const { data: technicians } = useQuery({
@@ -64,10 +92,16 @@ export default function ServiceSchedule() {
     if (!serviceOrders) return [];
     return serviceOrders.filter(order => {
       if (!order.scheduled_date) return false;
-      const matchTechnician = technicianFilter === 'all' || order.technician_id === technicianFilter;
-      return matchTechnician;
+      
+      // Se for gestor, respeita o filtro de técnico selecionado
+      if (!user?.is_technician) {
+          const matchTechnician = technicianFilter === 'all' || order.technician_id === technicianFilter;
+          return matchTechnician;
+      }
+      
+      return true; // Se for técnico, já vem filtrado da query
     });
-  }, [serviceOrders, technicianFilter]);
+  }, [serviceOrders, technicianFilter, user?.is_technician]);
 
   const selectedDayOrders = useMemo(() => {
     return filteredOrders.filter(order => {
@@ -171,22 +205,24 @@ export default function ServiceSchedule() {
               <CardTitle className="text-lg">Filtros</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-700">Técnico</label>
-                  <Select value={technicianFilter} onValueChange={setTechnicianFilter}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Todos os técnicos" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todos os técnicos</SelectItem>
-                      {technicians?.map(tech => (
-                        <SelectItem key={tech.id} value={tech.id}>{tech.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+              {!user?.is_technician && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-700">Técnico</label>
+                    <Select value={technicianFilter} onValueChange={setTechnicianFilter}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Todos os técnicos" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos os técnicos</SelectItem>
+                        {technicians?.map(tech => (
+                          <SelectItem key={tech.id} value={tech.id}>{tech.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
-              </div>
+              )}
             </CardContent>
           </Card>
 

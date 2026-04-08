@@ -48,8 +48,9 @@ export default function UserManagement() {
   const [permissionsDialog, setPermissionsDialog] = useState(null);
   const [selectedModules, setSelectedModules] = useState([]);
   const [selectedCompanies, setSelectedCompanies] = useState([]);
+  const [selectedIsTechnician, setSelectedIsTechnician] = useState(false);
   const [inviteDialog, setInviteDialog] = useState(false);
-  const [inviteForm, setInviteForm] = useState({ email: '', full_name: '', modules: [], is_seller: false, company_ids: [] });
+  const [inviteForm, setInviteForm] = useState({ email: '', full_name: '', modules: [], is_seller: false, is_technician: false, company_ids: [] });
   const [resetPasswordDialog, setResetPasswordDialog] = useState(null);
   const [newPassword, setNewPassword] = useState('');
 
@@ -72,7 +73,7 @@ export default function UserManagement() {
   });
 
   const updateUserMutation = useMutation({
-    mutationFn: async ({ userId, status, modules, company_ids }) => {
+    mutationFn: async ({ userId, status, modules, company_ids, is_technician }) => {
       const updateData = {
         account_status: status,
         approved_at: status === 'APROVADO' ? new Date().toISOString() : null,
@@ -84,7 +85,32 @@ export default function UserManagement() {
       if (company_ids !== undefined) {
         updateData.company_ids = JSON.stringify(company_ids);
       }
-      await base44.entities.User.update(userId, updateData);
+      if (is_technician !== undefined) {
+        updateData.is_technician = is_technician;
+      }
+      
+      const updatedUser = await base44.entities.User.update(userId, updateData);
+
+      // Se virou técnico agora e não era, cria os registros nas empresas associadas
+      if (is_technician && updatedUser.email) {
+          const companiesToSync = company_ids || parseArr(updatedUser.company_ids);
+          for (const companyId of companiesToSync) {
+              const existing = await base44.entities.Technician.filter({ 
+                  email: updatedUser.email,
+                  company_id: companyId 
+              });
+              if (existing.length === 0) {
+                  await base44.entities.Technician.create({
+                      code: `TEC-${updatedUser.email.split('@')[0].toUpperCase()}`,
+                      name: updatedUser.full_name,
+                      email: updatedUser.email,
+                      company_id: companyId,
+                      active: true,
+                      specialties: []
+                  });
+              }
+          }
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users-management'] });
@@ -155,6 +181,7 @@ export default function UserManagement() {
     setPermissionsDialog(user);
     setSelectedModules(parseArr(user.allowed_modules));
     setSelectedCompanies(parseArr(user.company_ids));
+    setSelectedIsTechnician(user.is_technician === true);
   };
 
   const savePermissions = () => {
@@ -165,6 +192,7 @@ export default function UserManagement() {
       status: permissionsDialog.account_status || 'PENDENTE',
       modules: selectedModules,
       company_ids: selectedCompanies,
+      is_technician: selectedIsTechnician,
     });
   };
 
@@ -208,6 +236,7 @@ export default function UserManagement() {
         allowed_modules: JSON.stringify(inviteForm.modules),
         company_ids: JSON.stringify(inviteForm.company_ids),
         is_seller: inviteForm.is_seller,
+        is_technician: inviteForm.is_technician,
         account_status: 'PENDENTE',
         role: 'user',
         active: true,
@@ -222,12 +251,27 @@ export default function UserManagement() {
           active: true,
         });
       }
+      
+      // 4. Se for técnico, cria o registro de técnico também
+      if (inviteForm.is_technician) {
+        // Create for each selected company
+        for (const companyId of inviteForm.company_ids) {
+            await base44.entities.Technician.create({
+                code: `TEC-${inviteForm.email.split('@')[0].toUpperCase()}`,
+                name: inviteForm.full_name,
+                email: inviteForm.email,
+                active: true,
+                company_id: companyId,
+                specialties: []
+            });
+        }
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users-management'] });
       toast.success(`✉️ Usuário ${inviteForm.email} pré-autorizado! Peça para ele acessar o sistema e "Criar Conta" para ativar o acesso.`);
       setInviteDialog(false);
-      setInviteForm({ email: '', full_name: '', modules: [], is_seller: false, company_ids: [] });
+      setInviteForm({ email: '', full_name: '', modules: [], is_seller: false, is_technician: false, company_ids: [] });
     },
     onError: (error) => {
       toast.error('Erro ao enviar convite: ' + error.message);
@@ -550,6 +594,17 @@ export default function UserManagement() {
                 É Vendedor?
               </label>
             </div>
+
+            <div className="flex items-center space-x-3 p-3 rounded-lg border border-slate-200 hover:bg-slate-50">
+              <Checkbox
+                id="invite-is_technician"
+                checked={inviteForm.is_technician}
+                onCheckedChange={(checked) => setInviteForm({...inviteForm, is_technician: checked})}
+              />
+              <label htmlFor="invite-is_technician" className="text-sm font-medium text-slate-900 cursor-pointer flex-1">
+                É Técnico?
+              </label>
+            </div>
           </div>
 
           <DialogFooter>
@@ -646,6 +701,17 @@ export default function UserManagement() {
                   </div>
                 ))}
               </div>
+            </div>
+
+            <div className="flex items-center space-x-3 p-3 rounded-lg border border-slate-200 hover:bg-slate-50">
+              <Checkbox
+                id="perm-is_technician"
+                checked={selectedIsTechnician}
+                onCheckedChange={(checked) => setSelectedIsTechnician(checked)}
+              />
+              <label htmlFor="perm-is_technician" className="text-sm font-medium text-slate-900 cursor-pointer flex-1">
+                É Técnico?
+              </label>
             </div>
           </div>
 
