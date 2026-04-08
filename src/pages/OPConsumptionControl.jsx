@@ -102,9 +102,10 @@ export default function OPConsumptionControl() {
     queryKey: ['products', companyId],
     queryFn: async () => {
       if (!companyId) return [];
-      return await base44.entities.Product.filter({ company_id: companyId });
+      return await base44.entities.Product.listAll({ company_id: companyId });
     },
     enabled: !!companyId,
+    staleTime: 300000,
   });
 
   const { data: inventoryMoves = [] } = useQuery({

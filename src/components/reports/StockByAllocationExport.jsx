@@ -15,8 +15,9 @@ export default function StockByAllocationExport({ companyId }) {
 
   const { data: products = [] } = useQuery({
     queryKey: ['products', companyId],
-    queryFn: () => companyId ? base44.entities.Product.filter({ company_id: companyId }) : Promise.resolve([]),
+    queryFn: () => companyId ? base44.entities.Product.listAll({ company_id: companyId }) : Promise.resolve([]),
     enabled: !!companyId,
+    staleTime: 300000,
   });
 
   const { data: warehouses = [] } = useQuery({

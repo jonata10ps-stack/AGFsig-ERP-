@@ -40,7 +40,7 @@ export default function ShipmentReturns() {
         company_id: companyId, 
         is_shipment: true,
         requires_return: true
-      }, '-created_date');
+      }, '-created_date', 300);
       
       return (all || []).filter(s => 
         ['EXPEDIDO', 'FATURADO'].includes(s.status) && 

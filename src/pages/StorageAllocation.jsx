@@ -137,7 +137,8 @@ export default function StorageAllocation() {
         ...pr,
         qty: pr.qty || 0,
         isFromProduction: true,
-        product_name: pr.product_name || 'Produto Produzido'
+        product_name: pr.product_name || 'Produto Produzido',
+        product_sku: pr.product_sku || ''
       })).filter(item => item.qty > 0);
       
       // 3 e 4. Saldos em estoque (Limbo ou Doca) - CONSOLIDADO
@@ -168,10 +169,11 @@ export default function StorageAllocation() {
     enabled: !!companyId,
   });
 
-  const { data: products } = useQuery({
+  const { data: products = [] } = useQuery({
     queryKey: ['products', companyId],
-    queryFn: () => companyId ? base44.entities.Product.filter({ company_id: companyId, active: true }) : Promise.resolve([]),
+    queryFn: () => companyId ? base44.entities.Product.listAll({ company_id: companyId }) : Promise.resolve([]),
     enabled: !!companyId,
+    staleTime: 300000,
   });
 
   const { data: locations } = useQuery({
@@ -557,10 +559,10 @@ export default function StorageAllocation() {
                       >
                         <div className="flex-1 min-w-0">
                           <p className="font-mono text-sm text-indigo-600 font-bold">
-                            {item.product_sku || (products?.find(p => p.id === item.product_id)?.sku)}
+                            {item.product_sku || (products?.find(p => p.id === item.product_id)?.sku) || 'Buscando SKU...'}
                           </p>
                           <p className="font-medium text-sm truncate">
-                            {item.product_name || (products?.find(p => p.id === item.product_id)?.name)}
+                            {item.product_name || (products?.find(p => p.id === item.product_id)?.name) || 'Buscando Descrição...'}
                           </p>
                           <div className="flex flex-wrap items-center gap-2 mt-1">
                             {item.isFromProduction ? (
