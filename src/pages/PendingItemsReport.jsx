@@ -69,9 +69,16 @@ export default function PendingItemsReport() {
         const physical = results.filter(item => {
           const p = products.find(prod => prod.id === item.product_id);
           if (!p) return true;
-          const isService = p.category === 'SV' || 
-                           p.name?.toUpperCase().includes('ASSISTENCIA TECNICA') || 
-                           p.name?.toUpperCase().includes('SERVIÇO');
+          const name = (p.name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, "").toUpperCase();
+          const category = (p.category || '').toUpperCase();
+          const sku = (p.sku || '').toUpperCase();
+          
+          const isService = category === 'SV' || 
+                           category === 'SERVICO' ||
+                           name.includes('ASSISTENCIA TECNICA') || 
+                           name.includes('SERVICO') ||
+                           name.includes('MAO DE OBRA') ||
+                           sku.startsWith('SV-');
           return !isService;
         });
 

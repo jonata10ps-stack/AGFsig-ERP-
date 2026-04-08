@@ -123,15 +123,25 @@ export default function Shipping() {
     enabled: !!selectedOrder && !!companyId,
   });
 
+  const isProductService = (p) => {
+    if (!p) return false;
+    const name = (p.name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, "").toUpperCase();
+    const category = (p.category || '').toUpperCase();
+    const sku = (p.sku || '').toUpperCase();
+    
+    return category === 'SV' || 
+           category === 'SERVICO' ||
+           name.includes('ASSISTENCIA TECNICA') || 
+           name.includes('SERVICO') ||
+           name.includes('MAO DE OBRA') ||
+           sku.startsWith('SV-');
+  };
+
   const items = React.useMemo(() => {
     if (!rawItems || !products) return rawItems;
     return rawItems.filter(item => {
       const product = products.find(p => p.id === item.product_id);
-      if (!product) return true;
-      const isService = product.category === 'SV' || 
-                       product.name?.toUpperCase().includes('ASSISTENCIA TECNICA') || 
-                       product.name?.toUpperCase().includes('SERVIÇO');
-      return !isService;
+      return !isProductService(product);
     });
   }, [rawItems, products]);
 

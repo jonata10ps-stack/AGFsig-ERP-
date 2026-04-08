@@ -122,8 +122,7 @@ export default function Separation() {
            name.includes('ASSISTENCIA TECNICA') || 
            name.includes('SERVICO') ||
            name.includes('MAO DE OBRA') ||
-           sku.startsWith('SV-') ||
-           sku === '1402'; // Forçamento manual para o item citado pelo usuário
+           sku.startsWith('SV-');
   };
 
   const { data: products } = useQuery({

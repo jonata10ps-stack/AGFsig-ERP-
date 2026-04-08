@@ -277,9 +277,16 @@ export default function SalesOrderDetail() {
         const hasOnlyServices = items.every(item => {
           const p = productsList.find(prod => prod.id === item.product_id);
           if (!p) return false;
-          return p.category === 'SV' || 
-                 p.name?.toUpperCase().includes('ASSISTENCIA TECNICA') || 
-                 p.name?.toUpperCase().includes('SERVIÇO');
+          const name = (p.name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, "").toUpperCase();
+          const category = (p.category || '').toUpperCase();
+          const sku = (p.sku || '').toUpperCase();
+          
+          return category === 'SV' || 
+                 category === 'SERVICO' ||
+                 name.includes('ASSISTENCIA TECNICA') || 
+                 name.includes('SERVICO') ||
+                 name.includes('MAO DE OBRA') ||
+                 sku.startsWith('SV-');
         });
 
         if (hasOnlyServices && items.length > 0) {
