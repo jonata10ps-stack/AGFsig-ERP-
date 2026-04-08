@@ -106,6 +106,7 @@ export default function UserManagement() {
       });
 
       if (!rpcError && data?.success) return data;
+      if (!rpcError && data && !data.success) throw new Error(data.message || 'O banco de dados negou o acesso.');
 
       // 2. Fallback para supabaseAdmin (caso a função RPC não exista e a chave esteja disponível)
       if (supabaseAdmin) {
@@ -126,7 +127,9 @@ export default function UserManagement() {
     },
     onError: (error) => {
       console.error('Erro no reset:', error);
-      toast.error('Erro ao resetar senha: ' + (error.message || 'Erro desconhecido'));
+      // Extrai a mensagem de erro de forma mais agressiva
+      const friendlyMsg = error.message || 'Erro desconhecido';
+      toast.error(`Reset falhou: ${friendlyMsg}`, { duration: 8000 });
     }
   });
 
