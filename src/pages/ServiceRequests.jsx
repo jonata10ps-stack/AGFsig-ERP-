@@ -58,22 +58,6 @@ export default function ServiceRequests() {
     scheduled_date: ''
   });
 
-  // Deep linking: check for id in URL to open detail modal
-  const urlParams = new URLSearchParams(window.location.search);
-  const deepLinkedId = urlParams.get('id');
-  const [selectedRequest, setSelectedRequest] = useState(null);
-  const [showDetailDialog, setShowDetailDialog] = useState(false);
-
-  React.useEffect(() => {
-    if (deepLinkedId && requests && requests.length > 0) {
-      const found = requests.find(r => r.id === deepLinkedId);
-      if (found) {
-        setSelectedRequest(found);
-        setShowDetailDialog(true);
-      }
-    }
-  }, [deepLinkedId, requests]);
-
   const { data: requests, isLoading } = useQuery({
     queryKey: ['service-requests', companyId],
     queryFn: () => companyId ? base44.entities.ServiceRequest.filter({ company_id: companyId }, '-created_date') : Promise.resolve([]),
@@ -535,71 +519,6 @@ export default function ServiceRequests() {
               </Button>
             </DialogFooter>
           </form>
-        </DialogContent>
-      </Dialog>
-      {/* Detail Dialog */}
-      <Dialog open={showDetailDialog} onOpenChange={setShowDetailDialog}>
-        <DialogContent className="max-w-xl">
-          <DialogHeader>
-            <DialogTitle className="flex justify-between items-center">
-              <span>Solicitação {selectedRequest?.request_number}</span>
-              <Badge className={statusColors[selectedRequest?.status || 'ABERTA']}>
-                {selectedRequest?.status}
-              </Badge>
-            </DialogTitle>
-          </DialogHeader>
-          {selectedRequest && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <Label className="text-slate-500">Cliente</Label>
-                  <p className="font-bold text-slate-900">{selectedRequest.client_name}</p>
-                </div>
-                <div>
-                  <Label className="text-slate-500">Tipo</Label>
-                  <p className="font-bold text-slate-900">{selectedRequest.type}</p>
-                </div>
-                <div>
-                  <Label className="text-slate-500">Produto</Label>
-                  <p className="font-bold text-slate-900">{selectedRequest.product_name || '-'}</p>
-                </div>
-                <div>
-                  <Label className="text-slate-500">Prioridade</Label>
-                  <p className="font-bold text-slate-900">{selectedRequest.priority}</p>
-                </div>
-              </div>
-              <div>
-                <Label className="text-slate-500">Descrição</Label>
-                <div className="p-3 bg-slate-50 rounded-lg text-sm border">
-                  {selectedRequest.description}
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <Label className="text-slate-500">Contato</Label>
-                  <p className="font-medium">{selectedRequest.contact_phone || '-'}</p>
-                </div>
-                <div>
-                  <Label className="text-slate-500">Agendamento</Label>
-                  <p className="font-medium">
-                    {selectedRequest.scheduled_date ? format(new Date(selectedRequest.scheduled_date), 'dd/MM/yyyy') : '-'}
-                  </p>
-                </div>
-              </div>
-              {selectedRequest.status === 'ABERTA' && !serviceOrders?.some(so => so.request_id === selectedRequest.id) && (
-                <Button 
-                  onClick={() => createOSMutation.mutate(selectedRequest)} 
-                  className="w-full bg-indigo-600"
-                >
-                  <Wrench className="h-4 w-4 mr-2" />
-                  Gerar Ordem de Serviço
-                </Button>
-              )}
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDetailDialog(false)}>Fechar</Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

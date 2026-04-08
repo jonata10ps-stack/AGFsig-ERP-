@@ -234,14 +234,14 @@ export default function AfterSales() {
                                         variant={['ABERTA', 'PENDENTE'].includes(String(item.status || '').toUpperCase()) ? 'destructive' : 'default'} 
                                         className={`text-[8px] font-black px-2 py-0.5 rounded shadow-sm ${
                                             String(item.status || '').toUpperCase() === 'EM_ANDAMENTO' ? 'bg-blue-600' : 
-                                            ['ENCERRADA', 'CONCLUIDA'].includes(String(item.status || '').toUpperCase()) ? 'bg-emerald-600' : ''
+                                            ['ENCERRADA', 'CONCLUIDA', 'FINALIZADA'].includes(String(item.status || '').toUpperCase()) ? 'bg-emerald-600' : 'bg-slate-400'
                                         }`}
                                       >
                                           {(item.status || 'Pendente').toUpperCase()}
                                       </Badge>
                                   </td>
                                   <td className="px-5 py-4 text-right">
-                                      <Link to={createPageUrl(item._type === 'SR' ? `ServiceRequests?id=${item.id}` : `ServiceOrderDetail?id=${item.id}`)}>
+                                      <Link to={createPageUrl(item._type === 'SR' ? `ServiceRequests?search=${item.request_number}` : `ServiceOrderDetail?id=${item.id}`)}>
                                           <Button variant="ghost" size="sm" className="h-9 w-9 p-0 rounded-xl hover:bg-slate-900 hover:text-white transition-all">
                                             <ArrowRight className="h-4 w-4" />
                                           </Button>
