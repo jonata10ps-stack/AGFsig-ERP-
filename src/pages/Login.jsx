@@ -51,7 +51,6 @@ export default function Login() {
 
   const handleSignUp = async (e) => {
     e.preventDefault();
-    console.log('Botão Criar Conta clicado!');
     if (!email || !password || !fullName) {
       toast.error('Preencha todos os campos para criar sua conta');
       return;
@@ -59,15 +58,14 @@ export default function Login() {
 
     try {
       setIsLoading(true);
-      alert('Iniciando cadastro no sistema... por favor aguarde.');
-      const result = await base44.auth.signUp(email, password, { full_name: fullName });
-      console.log('Sucesso no cadastro:', result);
-      toast.success('Conta criada com sucesso! Você já pode entrar.');
-      alert('Conta criada com sucesso! Agora você será redirecionado para o login.');
+      alert('Iniciando cadastro... Isso pode levar alguns segundos.');
+      await base44.auth.signUp(email, password, { full_name: fullName });
+      alert('Conta iniciada! Agora você já pode entrar no sistema.');
+      toast.success('Conta criada com sucesso!');
       setView('login');
     } catch (error) {
-      console.error('Erro no cadastro:', error);
-      alert('Erro ao criar conta: ' + (error.message || 'Erro desconhecido'));
+      console.error(error);
+      alert('Erro ao criar conta: ' + (error.message || 'Erro de rede ou servidor'));
       toast.error('Erro ao criar conta: ' + (error.message || 'Erro desconhecido'));
     } finally {
       setIsLoading(false);
@@ -83,19 +81,12 @@ export default function Login() {
 
     try {
       setIsLoading(true);
-      console.log('Solicitando reset de senha para:', email);
-      const result = await base44.auth.requestPasswordReset(email);
-      console.log('Resposta do Supabase:', result);
-      toast.success('Link de recuperação enviado! Verifique sua caixa de entrada e SPAM.');
+      await base44.auth.requestPasswordReset(email);
+      toast.success('Link de recuperação enviado! Verifique sua caixa de entrada.');
       setView('login');
     } catch (error) {
-      console.error('Erro detalhado no reset:', error);
-      let msg = 'Erro ao solicitar recuperação. ';
-      if (error.message === 'Rate limit exceeded') msg += 'Muitas tentativas. Tente novamente em 24h.';
-      else if (error.status === 429) msg += 'Limite de e-mails atingido pelo servidor.';
-      else msg += error.message || 'E-mail pode não estar cadastrado.';
-      
-      toast.error(msg, { duration: 6000 });
+      console.error(error);
+      toast.error('Erro ao solicitar recuperação: ' + (error.message || 'Erro desconhecido'));
     } finally {
       setIsLoading(false);
     }
@@ -117,11 +108,10 @@ export default function Login() {
       await base44.auth.updatePassword(password);
       toast.success('Senha alterada com sucesso! Você já pode entrar.');
       setView('login');
-      // Limpa a URL
       navigate('/login', { replace: true });
     } catch (error) {
       console.error(error);
-      toast.error('Erro ao alterar senha: ' + (error.message || 'Link expirado ou inválido'));
+      toast.error('Erro ao alterar senha: ' + (error.message || 'Link expirado'));
     } finally {
       setIsLoading(false);
     }
@@ -132,36 +122,28 @@ export default function Login() {
       return (
         <form onSubmit={handleUpdatePassword} className="space-y-6">
           <div className="space-y-2">
-            <Label className="text-slate-300">Nova Senha</Label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-2.5 h-5 w-5 text-slate-500" />
-              <Input 
-                type="password" 
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Mínimo 6 caracteres"
-                className="pl-10 bg-slate-950 border-slate-800 text-white placeholder:text-slate-600 focus-visible:ring-indigo-500 h-11"
-                required
-              />
-            </div>
+            <label className="text-sm font-medium text-slate-300">Nova Senha</label>
+            <input 
+              type="password" 
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full px-4 py-2 bg-slate-950 border border-slate-800 rounded-md text-white h-11"
+              required
+            />
           </div>
           <div className="space-y-2">
-            <Label className="text-slate-300">Confirmar Nova Senha</Label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-2.5 h-5 w-5 text-slate-500" />
-              <Input 
-                type="password" 
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Repita a nova senha"
-                className="pl-10 bg-slate-950 border-slate-800 text-white placeholder:text-slate-600 focus-visible:ring-indigo-500 h-11"
-                required
-              />
-            </div>
+            <label className="text-sm font-medium text-slate-300">Confirmar Nova Senha</label>
+            <input 
+              type="password" 
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              className="w-full px-4 py-2 bg-slate-950 border border-slate-800 rounded-md text-white h-11"
+              required
+            />
           </div>
-          <Button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700 text-white h-11 shadow-lg shadow-emerald-600/20" disabled={isLoading}>
-            {isLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : 'Salvar Nova Senha'}
-          </Button>
+          <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-11 rounded-md" disabled={isLoading}>
+            {isLoading ? 'Salvando...' : 'Salvar Nova Senha'}
+          </button>
         </form>
       );
     }
@@ -170,25 +152,66 @@ export default function Login() {
       return (
         <form onSubmit={handleRecovery} className="space-y-6">
           <div className="space-y-2">
-            <Label className="text-slate-300">E-mail Cadastrado</Label>
-            <div className="relative">
-              <Mail className="absolute left-3 top-2.5 h-5 w-5 text-slate-500" />
-              <Input 
-                type="email" 
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="seu@email.com"
-                className="pl-10 bg-slate-950 border-slate-800 text-white placeholder:text-slate-600 focus-visible:ring-indigo-500 h-11"
-                required
-              />
-            </div>
+            <label className="text-sm font-medium text-slate-300">E-mail Cadastrado</label>
+            <input 
+              type="email" 
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full px-4 py-2 bg-slate-950 border border-slate-800 rounded-md text-white h-11"
+              required
+            />
           </div>
-          <Button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white h-11" disabled={isLoading}>
-            {isLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : 'Enviar Link de Recuperação'}
-          </Button>
+          <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold h-11 rounded-md" disabled={isLoading}>
+            {isLoading ? 'Enviando...' : 'Enviar Link de Recuperação'}
+          </button>
           <div className="text-center">
-            <button onClick={() => setView('login')} className="text-slate-400 hover:text-white text-sm flex items-center justify-center mx-auto gap-2">
-              <ArrowLeft className="h-4 w-4" /> Voltar para o Login
+            <button type="button" onClick={() => setView('login')} className="text-slate-400 hover:text-white text-sm">
+              Voltar para o Login
+            </button>
+          </div>
+        </form>
+      );
+    }
+
+    if (view === 'signup') {
+      return (
+        <form onSubmit={handleSignUp} className="space-y-6">
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-slate-300">Nome Completo</label>
+            <input 
+              type="text" 
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              className="w-full px-4 py-2 bg-slate-950 border border-slate-800 rounded-md text-white h-11"
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-slate-300">E-mail</label>
+            <input 
+              type="email" 
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full px-4 py-2 bg-slate-950 border border-slate-800 rounded-md text-white h-11"
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-slate-300">Senha</label>
+            <input 
+              type="password" 
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full px-4 py-2 bg-slate-950 border border-slate-800 rounded-md text-white h-11"
+              required
+            />
+          </div>
+          <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold h-11 rounded-md" disabled={isLoading}>
+            {isLoading ? 'Criando...' : 'Criar Minha Conta'}
+          </button>
+          <div className="text-center">
+            <button type="button" onClick={() => setView('login')} className="text-indigo-400 text-sm">
+              Já tem uma conta? Entrar agora
             </button>
           </div>
         </form>
@@ -196,21 +219,7 @@ export default function Login() {
     }
 
     return (
-      <form onSubmit={view === 'signup' ? handleSignUp : handleLogin} className="space-y-6">
-        {view === 'signup' && (
-          <div className="space-y-2">
-            <Label className="text-slate-300">Nome Completo</Label>
-            <Input 
-              type="text" 
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              placeholder="Seu nome"
-              className="bg-slate-950 border-slate-800 text-white placeholder:text-slate-600 h-11"
-              required
-            />
-          </div>
-        )}
-
+      <form onSubmit={handleLogin} className="space-y-6">
         <div className="space-y-2">
           <Label className="text-slate-300">E-mail</Label>
           <div className="relative">
@@ -220,7 +229,7 @@ export default function Login() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="seu@email.com"
-              className="pl-10 bg-slate-950 border-slate-800 text-white placeholder:text-slate-600 h-11"
+              className="pl-10 bg-slate-950 border-slate-800 text-white h-11"
               required
             />
           </div>
@@ -229,15 +238,9 @@ export default function Login() {
         <div className="space-y-2">
           <div className="flex justify-between items-center">
             <Label className="text-slate-300">Senha</Label>
-            {view === 'login' && (
-              <button 
-                type="button" 
-                onClick={() => setView('recover')}
-                className="text-xs text-indigo-400 hover:text-indigo-300 font-medium"
-              >
-                Esqueci minha senha
-              </button>
-            )}
+            <button type="button" onClick={() => setView('recover')} className="text-xs text-indigo-400">
+              Esqueci minha senha
+            </button>
           </div>
           <div className="relative">
             <Lock className="absolute left-3 top-2.5 h-5 w-5 text-slate-500" />
@@ -245,20 +248,19 @@ export default function Login() {
               type="password" 
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              className="pl-10 bg-slate-950 border-slate-800 text-white placeholder:text-slate-600 h-11"
+              className="pl-10 bg-slate-950 border-slate-800 text-white h-11"
               required
             />
           </div>
         </div>
 
-        <Button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white h-11 shadow-lg shadow-indigo-600/20" disabled={isLoading}>
-          {isLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : (view === 'signup' ? 'Criar Minha Conta' : 'Entrar no Sistema')}
+        <Button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 text-white h-11" disabled={isLoading}>
+          {isLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : 'Entrar no Sistema'}
         </Button>
 
         <div className="text-center">
-          <button type="button" onClick={() => setView(view === 'signup' ? 'login' : 'signup')} className="text-indigo-400 hover:text-indigo-300 text-sm font-medium transition-colors">
-            {view === 'signup' ? 'Já tem uma conta? Entrar agora' : 'Ainda não tem conta? Clique aqui'}
+          <button type="button" onClick={() => setView('signup')} className="text-indigo-400 text-sm">
+            Ainda não tem conta? Clique aqui
           </button>
         </div>
       </form>
@@ -268,10 +270,8 @@ export default function Login() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-950 px-4 relative overflow-hidden">
       <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-indigo-600/20 rounded-full blur-[120px] pointer-events-none"></div>
-      <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-violet-600/20 rounded-full blur-[120px] pointer-events-none"></div>
-
-      <div className="w-full max-w-md bg-slate-900 border border-slate-800 p-8 rounded-2xl shadow-2xl z-10 relative backdrop-blur-sm">
-        <div className="flex justify-center mb-8 h-16 w-16 bg-indigo-600 rounded-2xl items-center mx-auto shadow-lg shadow-indigo-600/30">
+      <div className="w-full max-w-md bg-slate-900 border border-slate-800 p-8 rounded-2xl shadow-2xl z-10 relative">
+        <div className="flex justify-center mb-8 h-16 w-16 bg-indigo-600 rounded-2xl items-center mx-auto">
           {view === 'changePassword' ? <ShieldCheck className="h-8 w-8 text-white" /> : <Factory className="h-8 w-8 text-white" />}
         </div>
         
