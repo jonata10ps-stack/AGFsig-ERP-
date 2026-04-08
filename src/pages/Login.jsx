@@ -51,6 +51,7 @@ export default function Login() {
 
   const handleSignUp = async (e) => {
     e.preventDefault();
+    console.log('Botão Criar Conta clicado!');
     if (!email || !password || !fullName) {
       toast.error('Preencha todos os campos para criar sua conta');
       return;
@@ -58,11 +59,15 @@ export default function Login() {
 
     try {
       setIsLoading(true);
-      await base44.auth.signUp(email, password, { full_name: fullName });
-      toast.success('Conta criada com sucesso! Verifique seu e-mail se necessário.');
+      alert('Iniciando cadastro no sistema... por favor aguarde.');
+      const result = await base44.auth.signUp(email, password, { full_name: fullName });
+      console.log('Sucesso no cadastro:', result);
+      toast.success('Conta criada com sucesso! Você já pode entrar.');
+      alert('Conta criada com sucesso! Agora você será redirecionado para o login.');
       setView('login');
     } catch (error) {
-      console.error(error);
+      console.error('Erro no cadastro:', error);
+      alert('Erro ao criar conta: ' + (error.message || 'Erro desconhecido'));
       toast.error('Erro ao criar conta: ' + (error.message || 'Erro desconhecido'));
     } finally {
       setIsLoading(false);
