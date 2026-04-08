@@ -132,9 +132,27 @@ export default function Separation() {
     if (!rawItems || !products) return rawItems;
     return rawItems.filter(item => {
       const product = products.find(p => p.id === item.product_id);
-      return product?.category !== 'SV';
+      if (!product) return true;
+      // Tratar como serviço (SV) se a categoria for SV ou se for Assistência Técnica (conforme solicitado pelo usuário para PED-16665781)
+      const isService = product.category === 'SV' || 
+                       product.name?.toUpperCase().includes('ASSISTENCIA TECNICA') || 
+                       product.name?.toUpperCase().includes('SERVIÇO');
+      return !isService;
     });
   }, [rawItems, products]);
+
+  // Auto-avançar pedidos que só possuem itens de serviço
+  React.useEffect(() => {
+    if (selectedOrder?.status === 'CONFIRMADO' && rawItems?.length > 0 && items?.length === 0) {
+      startSeparationMutation.mutate(selectedOrder);
+    }
+  }, [selectedOrder?.id, rawItems, items]);
+
+  React.useEffect(() => {
+    if (selectedOrder?.status === 'SEPARANDO' && rawItems?.length > 0 && items?.length === 0) {
+      completeSeparationMutation.mutate(selectedOrder);
+    }
+  }, [selectedOrder?.status, rawItems, items]);
 
   const startSeparationMutation = useMutation({
     mutationFn: async (order) => {

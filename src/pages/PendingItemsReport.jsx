@@ -65,10 +65,14 @@ export default function PendingItemsReport() {
         const batch = orderIds.slice(i, i + BATCH_SIZE);
         const results = await base44.entities.SalesOrderItem.filter({ order_id: batch });
         
-        // Filtrar apenas itens físicos (não SV)
+        // Filtrar apenas itens físicos (não SV ou Serviços)
         const physical = results.filter(item => {
           const p = products.find(prod => prod.id === item.product_id);
-          return p?.category !== 'SV';
+          if (!p) return true;
+          const isService = p.category === 'SV' || 
+                           p.name?.toUpperCase().includes('ASSISTENCIA TECNICA') || 
+                           p.name?.toUpperCase().includes('SERVIÇO');
+          return !isService;
         });
 
         allItems = [...allItems, ...physical];

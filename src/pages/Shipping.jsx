@@ -127,7 +127,11 @@ export default function Shipping() {
     if (!rawItems || !products) return rawItems;
     return rawItems.filter(item => {
       const product = products.find(p => p.id === item.product_id);
-      return product?.category !== 'SV';
+      if (!product) return true;
+      const isService = product.category === 'SV' || 
+                       product.name?.toUpperCase().includes('ASSISTENCIA TECNICA') || 
+                       product.name?.toUpperCase().includes('SERVIÇO');
+      return !isService;
     });
   }, [rawItems, products]);
 

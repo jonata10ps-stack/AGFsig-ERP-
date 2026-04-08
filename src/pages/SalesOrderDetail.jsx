@@ -271,6 +271,20 @@ export default function SalesOrderDetail() {
             });
           }
         }
+
+        // Auto-avançar para SEPARADO se todos os itens forem serviços (sem estoque físico)
+        const productsList = await base44.entities.Product.filter({ company_id: order.company_id });
+        const hasOnlyServices = items.every(item => {
+          const p = productsList.find(prod => prod.id === item.product_id);
+          if (!p) return false;
+          return p.category === 'SV' || 
+                 p.name?.toUpperCase().includes('ASSISTENCIA TECNICA') || 
+                 p.name?.toUpperCase().includes('SERVIÇO');
+        });
+
+        if (hasOnlyServices && items.length > 0) {
+          status = 'SEPARADO';
+        }
       }
       
       return base44.entities.SalesOrder.update(orderId, { status });
