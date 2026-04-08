@@ -266,8 +266,8 @@ export const base44 = {
           company_id: profile?.company_id || '00000000-0000-0000-0000-000000000000',
           current_company_id: profile?.company_id || '00000000-0000-0000-0000-000000000000',
           company_ids: profile?.company_ids || [],
-          account_status: 'APROVADO',
-          active: true
+          account_status: profile?.account_status || 'PENDENTE',
+          active: profile?.active !== false
         };
         lastFetch = now;
         return cachedUser;

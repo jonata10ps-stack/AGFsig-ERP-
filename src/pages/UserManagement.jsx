@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { 
   Users, CheckCircle, XCircle, Clock, Search, Mail, Calendar,
-  UserCheck, Shield, Settings, Ban, UserPlus, Building2, Key
+  UserCheck, Shield, Settings, Ban, UserPlus, Building2, Key, RefreshCcw
 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
@@ -204,6 +204,60 @@ export default function UserManagement() {
     );
   };
 
+  const syncUsersMutation = useMutation({
+    mutationFn: async () => {
+      toast.loading('Iniciando sincronização...');
+      try {
+        // 1. Listar usuários do Auth via Admin SDK
+        const { data: { users: authUsers }, error } = await supabaseAdmin.auth.admin.listUsers();
+        if (error) throw error;
+
+        // 2. Buscar usuários já registrados na entidade User
+        const existingUsers = await base44.entities.User.list();
+        const existingEmails = new Set(existingUsers.map(u => u.email.toLowerCase()));
+
+        let createdCount = 0;
+        
+        // 3. Para cada usuário no Auth que não está na entidade User, criar o perfil
+        for (const authUser of authUsers) {
+          const email = authUser.email.toLowerCase();
+          if (!existingEmails.has(email)) {
+            await base44.entities.User.create({
+              email: authUser.email,
+              full_name: authUser.user_metadata?.full_name || 'Usuário Auto-Cadastrado',
+              allowed_modules: JSON.stringify([]),
+              company_ids: JSON.stringify([]),
+              is_seller: false,
+              is_technician: false,
+              account_status: 'PENDENTE',
+              role: 'user',
+              active: true,
+            });
+            createdCount++;
+          }
+        }
+
+        return createdCount;
+      } catch (err) {
+        console.error('Erro na sincronização:', err);
+        throw err;
+      }
+    },
+    onSuccess: (count) => {
+      toast.dismiss();
+      queryClient.invalidateQueries({ queryKey: ['users-management'] });
+      if (count > 0) {
+        toast.success(`${count} usuários novos foram encontrados e adicionados para aprovação!`);
+      } else {
+        toast.info('Sincronização concluída. Nenhum usuário novo encontrado.');
+      }
+    },
+    onError: (error) => {
+      toast.dismiss();
+      toast.error('Erro ao sincronizar usuários: ' + error.message);
+    }
+  });
+
   const toggleUserActive = async (user) => {
     const newActiveStatus = !user.active;
     try {
@@ -382,10 +436,21 @@ export default function UserManagement() {
             className="pl-10 w-full"
           />
         </div>
-        <Button onClick={() => setInviteDialog(true)} className="bg-indigo-600 hover:bg-indigo-700 w-full sm:w-auto">
-          <UserPlus className="h-4 w-4 mr-2" />
-          Convidar Usuário
-        </Button>
+        <div className="flex gap-2 w-full sm:w-auto">
+          <Button 
+            variant="outline"
+            onClick={() => syncUsersMutation.mutate()} 
+            disabled={syncUsersMutation.isLoading}
+            className="flex-1 sm:flex-initial"
+          >
+            <RefreshCcw className={`h-4 w-4 mr-2 ${syncUsersMutation.isLoading ? 'animate-spin' : ''}`} />
+            Sincronizar
+          </Button>
+          <Button onClick={() => setInviteDialog(true)} className="bg-indigo-600 hover:bg-indigo-700 flex-1 sm:flex-initial">
+            <UserPlus className="h-4 w-4 mr-2" />
+            Convidar Usuário
+          </Button>
+        </div>
       </div>
 
       {/* Filter */}
