@@ -261,20 +261,18 @@ export default function ProductionRequests() {
 
       const opNumber = `OP-${Date.now().toString().slice(-8)}`;
 
-      // Buscar produto completo
-      const allProducts = await base44.entities.Product.list();
-      const product = allProducts.find(p => p.id === request.product_id);
+      // Buscar produto completo de forma direta e eficiente
+      const product = await base44.entities.Product.get(request.product_id);
 
       if (!product) {
-        throw new Error('Produto não encontrado');
+        throw new Error('Produto não encontrado no cadastro mestre');
       }
 
       const routeId = product.route_id;
        let routeName = '';
 
        if (routeId) {
-         const allRoutes = await base44.entities.ProductionRoute.list();
-         const route = allRoutes.find(r => r.id === routeId);
+         const route = await base44.entities.ProductionRoute.get(routeId);
          routeName = route?.name || '';
        } else {
          console.warn(`Produto ${product.name} não possui roteiro associado`);

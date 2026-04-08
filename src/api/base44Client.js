@@ -69,6 +69,13 @@ const mapAuditFields = (data) => {
 
 const createEntityHandler = (entityName) => {
   return {
+    async get(id) {
+      if (!id) return null;
+      const { data, error } = await supabase.from(entityName).select('*').eq('id', id).maybeSingle();
+      if (error) throw error;
+      return mapAuditFields(data);
+    },
+
     async list(sort = '-created_date', limit = 1000, skip = 0) {
       const { data } = await this.queryPaginated({}, sort, limit, skip);
       return data;

@@ -366,6 +366,29 @@ export default function SalesOrderDetail() {
     }
   });
 
+  const [editingItem, setEditingItem] = useState(null);
+
+  const updateItemMutation = useMutation({
+    mutationFn: async (data) => {
+      const { id, total_price, ...updateData } = data;
+      await base44.entities.SalesOrderItem.update(id, updateData);
+      
+      // Re-calcular total do pedido
+      const updatedItems = items.map(i => i.id === id ? { ...i, ...updateData, total_price } : i);
+      const newTotal = updatedItems.reduce((sum, item) => sum + (item.total_price || 0), 0);
+      await base44.entities.SalesOrder.update(orderId, { total_amount: newTotal });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sales-order-items', orderId] });
+      queryClient.invalidateQueries({ queryKey: ['sales-order', orderId] });
+      setEditingItem(null);
+      toast.success('Item atualizado');
+    },
+    onError: (err) => {
+      toast.error('Erro ao atualizar item: ' + err.message);
+    }
+  });
+
   const cancelOrderMutation = useMutation({
     mutationFn: async (decisions) => {
       if (order?.status === 'EXPEDIDO' || order?.status === 'FATURADO') {
@@ -804,13 +827,15 @@ export default function SalesOrderDetail() {
                       <TableCell className="text-right">{formatCurrency(item.unit_price)}</TableCell>
                       <TableCell className="text-right font-medium">{formatCurrency(item.total_price)}</TableCell>
                       <TableCell className="text-center">
-                        {item.fulfill_mode === 'PRODUCAO' ? (
-                          <Badge className="bg-amber-100 text-amber-700 font-bold border-amber-200">SIM</Badge>
-                        ) : item.fulfill_mode === 'ESTOQUE' ? (
-                          <Badge variant="outline" className="text-slate-400">NÃO</Badge>
-                        ) : (
-                          <Badge className="bg-rose-100 text-rose-700 animate-pulse">DEFINIR</Badge>
-                        )}
+                        <div onClick={() => setEditingItem(item)} className="cursor-pointer hover:opacity-80 transition-opacity">
+                          {item.fulfill_mode === 'PRODUCAO' ? (
+                            <Badge className="bg-amber-100 text-amber-700 font-bold border-amber-200">SIM</Badge>
+                          ) : item.fulfill_mode === 'ESTOQUE' ? (
+                            <Badge variant="outline" className="text-slate-400">NÃO</Badge>
+                          ) : (
+                            <Badge className="bg-rose-100 text-rose-700 animate-pulse">DEFINIR</Badge>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>
                         {qtySeparated >= item.qty ? (
@@ -870,6 +895,22 @@ export default function SalesOrderDetail() {
             onSave={(data) => addItemMutation.mutate(data)}
             onCancel={() => setItemDialogOpen(false)}
             loading={addItemMutation.isPending}
+          />
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Item Dialog */}
+      <Dialog open={!!editingItem} onOpenChange={() => setEditingItem(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Editar Item</DialogTitle>
+          </DialogHeader>
+          <ItemForm
+            item={editingItem}
+            products={products}
+            onSave={(data) => updateItemMutation.mutate(data)}
+            onCancel={() => setEditingItem(null)}
+            loading={updateItemMutation.isPending}
           />
         </DialogContent>
       </Dialog>
