@@ -195,7 +195,11 @@ export default function AfterSales() {
                                     return s === 'ENCERRADA' || s === 'CONCLUIDA' || s === 'FINALIZADA';
                                 }
                                 return true;
-                            }).sort((a, b) => moment(b.created_date).diff(moment(a.created_date)))
+                            }).sort((a, b) => {
+                                const dateA = a.created_date || a.created_at || a.date_from;
+                                const dateB = b.created_date || b.created_at || b.date_from;
+                                return moment(dateB).diff(moment(dateA));
+                            })
                             .slice(0, 15);
 
                             return combined.map((item, i) => (
