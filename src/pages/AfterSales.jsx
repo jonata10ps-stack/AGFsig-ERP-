@@ -6,7 +6,7 @@ import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { 
   Wrench, ClipboardList, AlertCircle, Clock, 
-  ArrowRight, Filter, Search, MoreHorizontal
+  ArrowRight, Filter, Search, MoreHorizontal, Activity
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -19,6 +19,7 @@ export default function AfterSales() {
   const [searchParams] = React.useMemo(() => [new URLSearchParams(window.location.search)], []);
   const [search, setSearch] = useState(searchParams.get('search') || '');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [typeFilter, setTypeFilter] = useState('all');
 
   const { data: serviceRequests } = useQuery({
     queryKey: ['as-requests-clean', companyId],
@@ -111,66 +112,94 @@ export default function AfterSales() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Alerts / Critical Items Table */}
+        {/* Integrated Operations Table */}
         <Card className="lg:col-span-2 shadow-none border">
-          <CardHeader className="border-b bg-slate-50/50 py-3">
+          <CardHeader className="border-b bg-slate-50/50 py-3 flex flex-row items-center justify-between">
             <CardTitle className="text-sm font-bold flex items-center gap-2">
-                <AlertCircle className="h-4 w-4 text-red-500" />
-                Chamados Prioritários / Antigos
+                <Activity className="h-4 w-4 text-indigo-500" />
+                Operações Técnicas
             </CardTitle>
+            <div className="flex bg-slate-100 p-1 rounded-lg">
+                <Button 
+                    variant={typeFilter === 'all' ? 'secondary' : 'ghost'} 
+                    size="sm" className="h-7 text-[10px] px-2"
+                    onClick={() => setTypeFilter('all')}
+                >Todas</Button>
+                <Button 
+                    variant={typeFilter === 'SR' ? 'secondary' : 'ghost'} 
+                    size="sm" className="h-7 text-[10px] px-2"
+                    onClick={() => setTypeFilter('SR')}
+                >Solicitações</Button>
+                <Button 
+                    variant={typeFilter === 'OS' ? 'secondary' : 'ghost'} 
+                    size="sm" className="h-7 text-[10px] px-2"
+                    onClick={() => setTypeFilter('OS')}
+                >Ordens (OS)</Button>
+            </div>
           </CardHeader>
           <CardContent className="p-0">
-            <table className="w-full text-sm text-left">
-                <thead className="bg-slate-50 text-slate-500 font-medium">
-                    <tr>
-                        <th className="px-4 py-2 border-b">Nº Solicitação</th>
-                        <th className="px-4 py-2 border-b">OS Vinculada</th>
-                        <th className="px-4 py-2 border-b">Cliente</th>
-                        <th className="px-4 py-2 border-b">Data</th>
-                        <th className="px-4 py-2 border-b">Status</th>
-                        <th className="px-4 py-2 border-b text-right">Ação</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {criticalRequests.map((req, i) => {
-                        const linkedOS = serviceOrders?.find(o => o.request_id === req.id || (o.request_number === req.request_number && req.request_number));
-                        
-                        return (
-                            <tr key={i} className="hover:bg-slate-50 border-b last:border-0">
-                                <td className="px-4 py-3 font-semibold text-blue-600">{req.request_number || `#${i+1}`}</td>
-                                <td className="px-4 py-3">
-                                    {linkedOS ? (
-                                        <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-200">
-                                            {linkedOS.os_number}
-                                        </Badge>
-                                    ) : (
-                                        <span className="text-slate-400 italic text-[10px]">Pendente</span>
-                                    )}
-                                </td>
-                                <td className="px-4 py-3 text-slate-600 truncate max-w-[200px]">{req.client_name || 'Desconhecido'}</td>
-                                <td className="px-4 py-3 text-slate-500">{moment(req.created_date).format('DD/MM/YYYY')}</td>
-                                <td className="px-4 py-3">
-                                    <Badge variant={String(req.status || '').toUpperCase() === 'ABERTA' ? 'destructive' : 'default'} className="text-[10px]">
-                                        {req.status}
-                                    </Badge>
-                                </td>
-                                <td className="px-4 py-3 text-right">
-                                    <Link to={createPageUrl(`ServiceRequests?search=${req.request_number}`)}>
-                                        <Button variant="outline" size="sm" className="h-8 text-[10px] font-bold uppercase tracking-wider">
-                                            Abrir
-                                        </Button>
-                                    </Link>
-                                </td>
-                            </tr>
-                        );
-                    })}
-                    {criticalRequests.length === 0 && (
+            <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left">
+                    <thead className="bg-slate-50 text-slate-500 font-medium">
                         <tr>
-                            <td colSpan={6} className="p-8 text-center text-slate-400">Nenhum chamado pendente</td>
+                            <th className="px-4 py-2 border-b">Tipo</th>
+                            <th className="px-4 py-2 border-b">Documento</th>
+                            <th className="px-4 py-2 border-b">Cliente</th>
+                            <th className="px-4 py-2 border-b">Técnico/Responsável</th>
+                            <th className="px-4 py-2 border-b">Status</th>
+                            <th className="px-4 py-2 border-b text-right">Ação</th>
                         </tr>
-                    )}
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody>
+                        {useMemo(() => {
+                            const combined = [
+                                ...(serviceRequests?.map(r => ({ ...r, _type: 'SR' })) || []),
+                                ...(serviceOrders?.map(o => ({ ...o, _type: 'OS' })) || [])
+                            ].filter(item => {
+                                if (typeFilter === 'SR') return item._type === 'SR';
+                                if (typeFilter === 'OS') return item._type === 'OS';
+                                return true;
+                            }).sort((a, b) => moment(b.created_date).diff(moment(a.created_date)))
+                            .slice(0, 10);
+
+                            return combined.map((item, i) => (
+                                <tr key={i} className="hover:bg-slate-50 border-b last:border-0">
+                                    <td className="px-4 py-3">
+                                        <Badge variant="outline" className={item._type === 'SR' ? 'border-blue-200 text-blue-700 bg-blue-50' : 'border-indigo-200 text-indigo-700 bg-indigo-50'}>
+                                            {item._type}
+                                        </Badge>
+                                    </td>
+                                    <td className="px-4 py-3 font-semibold text-slate-700">
+                                        {item._type === 'SR' ? item.request_number : item.os_number}
+                                    </td>
+                                    <td className="px-4 py-3 text-slate-600 truncate max-w-[180px]">
+                                        {item.client_name || 'Desconhecido'}
+                                    </td>
+                                    <td className="px-4 py-3 text-slate-500">
+                                        {item._type === 'OS' ? (item.technician_name || 'Pendente') : '-'}
+                                    </td>
+                                    <td className="px-4 py-3">
+                                        <Badge variant={String(item.status || '').toUpperCase() === 'ABERTA' || String(item.status || '').toUpperCase() === 'PENDENTE' ? 'destructive' : 'default'} className="text-[10px]">
+                                            {item.status}
+                                        </Badge>
+                                    </td>
+                                    <td className="px-4 py-3 text-right">
+                                        {item._type === 'SR' ? (
+                                            <Link to={createPageUrl(`ServiceRequests?search=${item.request_number}`)}>
+                                                <Button variant="outline" size="sm" className="h-8 text-[10px] font-bold uppercase">Abrir</Button>
+                                            </Link>
+                                        ) : (
+                                            <Link to={createPageUrl(`ServiceOrders?search=${item.os_number}`)}>
+                                                <Button variant="outline" size="sm" className="h-8 text-[10px] font-bold uppercase">Abrir</Button>
+                                            </Link>
+                                        )}
+                                    </td>
+                                </tr>
+                            ));
+                        }, [serviceRequests, serviceOrders, typeFilter])}
+                    </tbody>
+                </table>
+            </div>
           </CardContent>
         </Card>
 
