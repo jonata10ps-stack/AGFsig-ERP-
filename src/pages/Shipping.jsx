@@ -99,7 +99,7 @@ export default function Shipping() {
       const [orderItems, separationMoves, locations, serials] = await Promise.all([
         base44.entities.SalesOrderItem.filter({ order_id: selectedOrder.id }),
         base44.entities.InventoryMove.filter({ related_id: selectedOrder.id, type: 'SEPARACAO' }),
-        base44.entities.Location.filter({ company_id: companyId }),
+        base44.entities.Location.listAll({ company_id: companyId }), // Usa listAll para garantir cache consistente
         base44.entities.SerialNumber.filter({ order_id: selectedOrder.id })
       ]);
 
