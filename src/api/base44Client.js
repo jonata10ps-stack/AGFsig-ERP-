@@ -228,6 +228,10 @@ export const base44 = {
       const { data, error } = await supabase.functions.invoke(functionName, { body });
       if (error) throw error;
       return { data };
+    },
+    invokeRpc: async (rpcName, params = {}) => {
+      const { data, error } = await supabase.rpc(rpcName, params);
+      return { data, error };
     }
   },
   auth: {

@@ -99,14 +99,25 @@ export default function UserManagement() {
   
   const resetPasswordMutation = useMutation({
     mutationFn: async ({ userId, password }) => {
-      if (!supabaseAdmin) throw new Error('Serviço de administração não disponível');
+      // 1. Tenta via RPC (Mais seguro e funciona em produção)
+      const { data, error: rpcError } = await base44.functions.invokeRpc('admin_reset_user_password', { 
+        p_user_id: userId, 
+        p_new_password: password 
+      });
+
+      if (!rpcError && data?.success) return data;
+
+      // 2. Fallback para supabaseAdmin (caso a função RPC não exista e a chave esteja disponível)
+      if (supabaseAdmin) {
+        const { error } = await supabaseAdmin.auth.admin.updateUserById(
+          userId,
+          { password: password }
+        );
+        if (error) throw error;
+        return { success: true };
+      }
       
-      const { error } = await supabaseAdmin.auth.admin.updateUserById(
-        userId,
-        { password: password }
-      );
-      
-      if (error) throw error;
+      throw new Error(rpcError?.message || 'Serviço de administração não configurado no banco de dados. Por favor, execute o SQL de ativação.');
     },
     onSuccess: () => {
       toast.success('Senha atualizada com sucesso!');
@@ -114,7 +125,8 @@ export default function UserManagement() {
       setNewPassword('');
     },
     onError: (error) => {
-      toast.error('Erro ao resetar senha: ' + error.message);
+      console.error('Erro no reset:', error);
+      toast.error('Erro ao resetar senha: ' + (error.message || 'Erro desconhecido'));
     }
   });
 
