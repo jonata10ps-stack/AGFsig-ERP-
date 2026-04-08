@@ -329,7 +329,7 @@ export default function QuoteDetail() {
   });
 
   const handlePrint = useReactToPrint({
-    contentRef: printRef,
+    content: () => printRef.current,
     documentTitle: `Orcamento_${quote?.quote_number || 'sem_numero'}`,
   });
 
@@ -1159,15 +1159,17 @@ export default function QuoteDetail() {
       />
 
       {/* Hidden Print Template */}
-      <div style={{ position: 'absolute', top: '-9999px', left: '-9999px' }}>
-        <QuotePrintTemplate
-          ref={printRef}
-          quote={quote}
-          quoteItems={quoteItems}
-          subitems={subitems}
-          client={client}
-          paymentCondition={paymentCondition}
-        />
+      {/* Hidden Print Template */}
+      <div style={{ display: 'none' }}>
+        <div ref={printRef}>
+          <QuotePrintTemplate
+            quote={quote}
+            quoteItems={quoteItems}
+            subitems={subitems}
+            client={client}
+            paymentCondition={paymentCondition}
+          />
+        </div>
       </div>
 
       {/* Cancel Conversion Dialog */}
@@ -1206,31 +1208,6 @@ export default function QuoteDetail() {
           )}
         </>
       )}
-
-      <style>{`
-        @media print {
-          body * {
-            visibility: hidden;
-          }
-          .print-only, .print-only * {
-            visibility: visible;
-          }
-          .print-only {
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
-          }
-        }
-        @media screen {
-          .print-only {
-            display: none;
-          }
-          .print-only.visible {
-            display: block;
-          }
-        }
-      `}</style>
     </div>
   );
 }

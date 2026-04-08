@@ -7,252 +7,187 @@ const QuotePrintTemplate = React.forwardRef(({ quote, quoteItems, subitems, clie
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);
   };
 
-  const today = format(new Date(), 'dd/MM/yyyy', { locale: ptBR });
+  const today = format(new Date(), 'dd/MM/yyyy HH:mm', { locale: ptBR });
 
   if (!quote || !quoteItems || quoteItems.length === 0) {
     return (
-      <div ref={ref} style={{
-        backgroundColor: 'white',
-        padding: '48px',
-        width: '210mm',
-        minHeight: '297mm',
-        fontFamily: 'Arial, sans-serif',
-        color: '#1e293b'
-      }}>
-        <p>Carregando dados...</p>
+      <div ref={ref} className="p-12 bg-white text-slate-800 font-sans">
+        <p>Carregando dados para impressão...</p>
       </div>
     );
   }
 
   return (
-    <div ref={ref} style={{
-      backgroundColor: 'white',
-      padding: '48px',
-      width: '210mm',
-      minHeight: '297mm',
-      fontFamily: 'Arial, sans-serif',
-      fontSize: '14px',
-      lineHeight: '1.5',
-      color: '#1e293b'
-    }}>
-      {/* Header */}
-      <div style={{
-        borderBottom: '2px solid #1e293b',
-        paddingBottom: '24px',
-        marginBottom: '24px',
-        display: 'flex',
-        justifyContent: 'space-between'
-      }}>
+    <div ref={ref} className="bg-white p-10 w-[210mm] min-h-[297mm] font-sans text-slate-900 mx-auto">
+      {/* Premium Header */}
+      <div className="flex justify-between items-start border-b-2 border-indigo-600 pb-8 mb-8">
         <div>
-          <h1 style={{ fontSize: '32px', fontWeight: 'bold', margin: '0 0 8px 0' }}>ORÇAMENTO</h1>
-          <p style={{ color: '#64748b', margin: 0 }}>Nº {quote?.quote_number}</p>
+          <div className="flex items-center gap-2 mb-2">
+            <div className="h-10 w-10 bg-indigo-600 rounded-lg flex items-center justify-center">
+              <span className="text-white font-bold text-xl">AG</span>
+            </div>
+            <h1 className="text-3xl font-extrabold text-indigo-950 tracking-tight">AGFSig ERP</h1>
+          </div>
+          <p className="text-slate-500 text-sm font-medium">Soluções Inteligentes para Gestão</p>
         </div>
-        <div style={{ textAlign: 'right' }}>
-          <p style={{ fontSize: '24px', fontWeight: 'bold', margin: '0 0 4px 0' }}>AGFSig ERP</p>
-          <p style={{ color: '#64748b', fontSize: '12px', margin: 0 }}>Sistema de Gestão Empresarial</p>
+        <div className="text-right">
+          <div className="bg-indigo-50 text-indigo-700 px-4 py-2 rounded-md inline-block mb-2">
+            <h2 className="text-xl font-bold uppercase tracking-wider">Orçamento</h2>
+          </div>
+          <p className="text-2xl font-mono font-bold text-slate-800">{quote.quote_number}</p>
+          <p className="text-slate-500 text-xs">Gerado em: {today}</p>
         </div>
       </div>
 
-      {/* Info Section */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px', marginBottom: '32px' }}>
+      {/* Grid Info */}
+      <div className="grid grid-cols-2 gap-12 mb-10">
         <div>
-          <h2 style={{ fontSize: '12px', fontWeight: 'bold', color: '#334155', marginBottom: '12px', textTransform: 'uppercase' }}>
-            Dados do Cliente
-          </h2>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <p style={{ fontWeight: '600', margin: 0 }}>{quote?.client_name}</p>
-            {quote?.client_document && (
-              <p style={{ color: '#64748b', fontSize: '12px', margin: 0 }}>
-                {quote.client_document.length > 14 ? 'CNPJ' : 'CPF'}: {quote.client_document}
+          <h3 className="text-[11px] font-bold text-indigo-600 uppercase tracking-widest mb-4 border-b pb-1">Identificação do Cliente</h3>
+          <div className="space-y-1">
+            <p className="text-base font-bold text-slate-900">{quote.client_name}</p>
+            {quote.client_document && (
+              <p className="text-sm text-slate-600">
+                <span className="font-semibold">{quote.client_document.length > 14 ? 'CNPJ' : 'CPF'}:</span> {quote.client_document}
               </p>
             )}
-            {client?.address && <p style={{ color: '#64748b', fontSize: '12px', margin: 0 }}>{client.address}</p>}
-            {client?.city && client?.state && (
-              <p style={{ color: '#64748b', fontSize: '12px', margin: 0 }}>{client.city} - {client.state}</p>
+            {client?.address && <p className="text-sm text-slate-600">{client.address}</p>}
+            {client?.city && (
+              <p className="text-sm text-slate-600">{client.city} - {client.state || ''}</p>
             )}
-            {client?.phone && <p style={{ color: '#64748b', fontSize: '12px', margin: 0 }}>Tel: {client.phone}</p>}
-            {client?.email && <p style={{ color: '#64748b', fontSize: '12px', margin: 0 }}>Email: {client.email}</p>}
+            {client?.phone && (
+              <p className="text-sm text-slate-600">
+                <span className="font-semibold">Contato:</span> {client.phone}
+              </p>
+            )}
           </div>
         </div>
 
-        <div>
-          <h2 style={{ fontSize: '12px', fontWeight: 'bold', color: '#334155', marginBottom: '12px', textTransform: 'uppercase' }}>
-            Informações do Orçamento
-          </h2>
-          <div style={{ fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ color: '#64748b' }}>Data de Emissão:</span>
-              <span style={{ fontWeight: '500' }}>{today}</span>
+        <div className="bg-slate-50 p-6 rounded-xl border border-slate-100">
+          <h3 className="text-[11px] font-bold text-indigo-600 uppercase tracking-widest mb-4 border-b border-indigo-100 pb-1">Resumo do Documento</h3>
+          <div className="space-y-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-slate-500 italic">Data de Validade:</span>
+              <span className="font-bold text-slate-800">
+                {quote.validity_date ? format(new Date(quote.validity_date), 'dd/MM/yyyy', { locale: ptBR }) : 'N/A'}
+              </span>
             </div>
-            {quote?.validity_date && (
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: '#64748b' }}>Validade:</span>
-                <span style={{ fontWeight: '500' }}>
-                  {format(new Date(quote.validity_date), 'dd/MM/yyyy', { locale: ptBR })}
-                </span>
-              </div>
-            )}
-            {quote?.delivery_date && (
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: '#64748b' }}>Previsão de Entrega:</span>
-                <span style={{ fontWeight: '500' }}>
-                  {format(new Date(quote.delivery_date), 'dd/MM/yyyy', { locale: ptBR })}
-                </span>
-              </div>
-            )}
-            {quote?.seller_name && (
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: '#64748b' }}>Vendedor:</span>
-                <span style={{ fontWeight: '500' }}>{quote.seller_name}</span>
-              </div>
-            )}
-            {quote?.payment_condition_name && (
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: '#64748b' }}>Condição de Pagamento:</span>
-                <span style={{ fontWeight: '500' }}>{quote.payment_condition_name}</span>
-              </div>
-            )}
+            <div className="flex justify-between">
+              <span className="text-slate-500 italic">Previsão de Entrega:</span>
+              <span className="font-bold text-slate-800">
+                {quote.delivery_date ? format(new Date(quote.delivery_date), 'dd/MM/yyyy', { locale: ptBR }) : 'A combinar'}
+              </span>
+            </div>
+            <div className="flex justify-between border-t pt-2 mt-2">
+              <span className="text-slate-500 italic">Vendedor:</span>
+              <span className="font-bold text-slate-800">{quote.seller_name || 'AGF Equipamentos'}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500 italic">Pgto:</span>
+              <span className="font-bold text-indigo-700">{quote.payment_condition_name || 'A definir'}</span>
+            </div>
           </div>
         </div>
       </div>
 
       {/* Items Table */}
-      <div style={{ marginBottom: '32px' }}>
-        <h2 style={{ fontSize: '12px', fontWeight: 'bold', color: '#334155', marginBottom: '12px', textTransform: 'uppercase' }}>
-          Itens do Orçamento
-        </h2>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+      <div className="mb-10">
+        <table className="w-full text-left">
           <thead>
-            <tr style={{ backgroundColor: '#1e293b', color: 'white' }}>
-              <th style={{ textAlign: 'left', padding: '12px 16px', fontSize: '12px', fontWeight: '600' }}>Código</th>
-              <th style={{ textAlign: 'left', padding: '12px 16px', fontSize: '12px', fontWeight: '600' }}>Descrição</th>
-              <th style={{ textAlign: 'right', padding: '12px 16px', fontSize: '12px', fontWeight: '600' }}>Qtd</th>
-              <th style={{ textAlign: 'right', padding: '12px 16px', fontSize: '12px', fontWeight: '600' }}>Valor Unit.</th>
-              <th style={{ textAlign: 'right', padding: '12px 16px', fontSize: '12px', fontWeight: '600' }}>Total</th>
+            <tr className="bg-indigo-950 text-white">
+              <th className="py-3 px-4 rounded-tl-lg text-[11px] font-bold uppercase tracking-wider">Código</th>
+              <th className="py-3 px-4 text-[11px] font-bold uppercase tracking-wider">Item / Descrição</th>
+              <th className="py-3 px-4 text-center text-[11px] font-bold uppercase tracking-wider">Qtd</th>
+              <th className="py-3 px-4 text-right text-[11px] font-bold uppercase tracking-wider">Unitário</th>
+              <th className="py-3 px-4 rounded-tr-lg text-right text-[11px] font-bold uppercase tracking-wider">Total</th>
             </tr>
           </thead>
-          <tbody>
-            {quoteItems?.flatMap((item, index) => {
+          <tbody className="divide-y divide-slate-100 border-x border-b rounded-b-lg">
+            {quoteItems.map((item, idx) => {
               const itemSubitems = subitems?.filter(s => s.quote_item_id === item.id) || [];
-              const rows = [
-                <tr key={`item-${item.id}`} style={{ backgroundColor: index % 2 === 0 ? '#f8fafc' : 'white' }}>
-                  <td style={{ padding: '12px 16px', fontSize: '12px', color: '#475569' }}>{item.product_sku}</td>
-                  <td style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '500' }}>{item.product_name}</td>
-                  <td style={{ padding: '12px 16px', fontSize: '12px', color: '#475569', textAlign: 'right' }}>{item.qty}</td>
-                  <td style={{ padding: '12px 16px', fontSize: '12px', color: '#475569', textAlign: 'right' }}>
-                    {formatCurrency(item.unit_price)}
-                  </td>
-                  <td style={{ padding: '12px 16px', fontSize: '12px', fontWeight: '600', textAlign: 'right' }}>
-                    {formatCurrency(item.base_total)}
-                  </td>
-                </tr>
-              ];
-
-              itemSubitems.forEach((subitem) => {
-                rows.push(
-                  <tr key={subitem.id} style={{ backgroundColor: index % 2 === 0 ? '#f8fafc' : 'white' }}>
-                    <td style={{ padding: '8px 16px', paddingLeft: '32px' }}></td>
-                    <td style={{ padding: '8px 16px', fontSize: '12px', color: '#64748b', fontStyle: 'italic', paddingLeft: '32px' }}>
-                      • {subitem.product_name}
+              return (
+                <React.Fragment key={item.id}>
+                  <tr className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
+                    <td className="py-4 px-4 text-sm font-mono text-slate-500">{item.product_sku}</td>
+                    <td className="py-4 px-4">
+                      <p className="text-sm font-bold text-slate-900">{item.product_name}</p>
                     </td>
-                    <td style={{ padding: '8px 16px', fontSize: '12px', color: '#64748b', textAlign: 'right' }}>{subitem.qty}</td>
-                    <td style={{ padding: '8px 16px', fontSize: '12px', color: '#64748b', textAlign: 'right' }}>
-                      {formatCurrency(subitem.unit_price)}
-                    </td>
-                    <td style={{ padding: '8px 16px', fontSize: '12px', color: '#64748b', textAlign: 'right' }}>
-                      {formatCurrency(subitem.total_price)}
-                    </td>
+                    <td className="py-4 px-4 text-sm text-center font-medium text-slate-700">{item.qty}</td>
+                    <td className="py-4 px-4 text-sm text-right text-slate-700">{formatCurrency(item.unit_price)}</td>
+                    <td className="py-4 px-4 text-sm text-right font-bold text-slate-900">{formatCurrency(item.base_total)}</td>
                   </tr>
-                );
-              });
-
-              if (itemSubitems.length > 0) {
-                rows.push(
-                  <tr key={`total-${item.id}`} style={{ backgroundColor: index % 2 === 0 ? '#f8fafc' : 'white' }}>
-                    <td colSpan="4" style={{ padding: '8px 16px', fontSize: '12px', color: '#475569', fontWeight: '600', textAlign: 'right' }}>
-                      Total do Item:
-                    </td>
-                    <td style={{ padding: '8px 16px', fontSize: '12px', fontWeight: 'bold', textAlign: 'right' }}>
-                      {formatCurrency(item.final_total)}
-                    </td>
-                  </tr>
-                );
-              }
-
-              return rows;
+                  {itemSubitems.map(sub => (
+                    <tr key={sub.id} className="bg-indigo-50/20">
+                      <td className="py-2 px-4"></td>
+                      <td colSpan={2} className="py-2 px-4 text-xs italic text-slate-500 pl-8">
+                        └ {sub.product_name} ({sub.qty}x)
+                      </td>
+                      <td className="py-2 px-4 text-xs text-right text-slate-400">{formatCurrency(sub.unit_price)}</td>
+                      <td className="py-2 px-4 text-xs text-right text-slate-500">{formatCurrency(sub.total_price)}</td>
+                    </tr>
+                  ))}
+                  {itemSubitems.length > 0 && (
+                    <tr className="bg-slate-50/80">
+                      <td colSpan={4} className="py-2 px-4 text-right text-[10px] uppercase font-bold text-slate-400">Total do Item c/ Subitens:</td>
+                      <td className="py-2 px-4 text-right text-xs font-bold text-indigo-600">{formatCurrency(item.final_total)}</td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              );
             })}
           </tbody>
         </table>
       </div>
 
-      {/* Total */}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '32px' }}>
-        <div style={{ backgroundColor: '#1e293b', color: 'white', padding: '16px 32px', borderRadius: '8px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <span style={{ fontSize: '18px', fontWeight: '600' }}>VALOR TOTAL:</span>
-            <span style={{ fontSize: '24px', fontWeight: 'bold' }}>{formatCurrency(quote?.total_amount)}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Notes */}
-      {quote?.notes && (
-        <div style={{ marginBottom: '32px' }}>
-          <h2 style={{ fontSize: '12px', fontWeight: 'bold', color: '#334155', marginBottom: '8px', textTransform: 'uppercase' }}>
-            Observações
-          </h2>
-          <p style={{ color: '#64748b', fontSize: '12px', whiteSpace: 'pre-wrap', margin: 0 }}>{quote.notes}</p>
-        </div>
-      )}
-
-      {/* Payment Condition Details */}
-      {paymentCondition && (
-        <div style={{ marginBottom: '32px', padding: '16px', backgroundColor: '#f8fafc', borderRadius: '8px' }}>
-          <h2 style={{ fontSize: '12px', fontWeight: 'bold', color: '#334155', marginBottom: '8px', textTransform: 'uppercase' }}>
-            Condições de Pagamento
-          </h2>
-          <div style={{ fontSize: '12px', color: '#475569' }}>
-            <p style={{ fontWeight: '500', margin: '0 0 4px 0' }}>{paymentCondition.name}</p>
-            {paymentCondition.description && (
-              <p style={{ color: '#64748b', margin: '0 0 8px 0' }}>{paymentCondition.description}</p>
-            )}
-            <div style={{ marginTop: '8px', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
-              {paymentCondition.installments > 0 && (
-                <div>
-                  <span style={{ color: '#64748b' }}>Parcelas: </span>
-                  <span style={{ fontWeight: '500' }}>{paymentCondition.installments}x</span>
-                </div>
-              )}
-              {paymentCondition.discount_percentage > 0 && (
-                <div>
-                  <span style={{ color: '#64748b' }}>Desconto: </span>
-                  <span style={{ fontWeight: '500', color: '#16a34a' }}>{paymentCondition.discount_percentage}%</span>
-                </div>
-              )}
-              {paymentCondition.interest_percentage > 0 && (
-                <div>
-                  <span style={{ color: '#64748b' }}>Juros: </span>
-                  <span style={{ fontWeight: '500', color: '#d97706' }}>{paymentCondition.interest_percentage}% a.m.</span>
-                </div>
-              )}
+      {/* Summary Section */}
+      <div className="flex justify-end mb-12">
+        <div className="w-80 space-y-3">
+          {paymentCondition && (
+            <div className="bg-slate-50 p-4 rounded-lg border border-slate-100 mb-4">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Detalhes de Pagamento</p>
+              <p className="text-xs font-bold text-slate-700">{paymentCondition.name}</p>
+              <p className="text-[10px] text-slate-500 mt-1">{paymentCondition.description || ''}</p>
             </div>
+          )}
+          <div className="flex justify-between items-center px-4">
+            <span className="text-slate-500 font-medium">Subtotal</span>
+            <span className="text-slate-700 font-bold">{formatCurrency(quote.total_amount)}</span>
           </div>
+          <div className="flex justify-between items-center bg-indigo-600 text-white p-4 rounded-xl shadow-lg shadow-indigo-200">
+            <span className="text-sm font-bold uppercase tracking-widest">Valor Total</span>
+            <span className="text-2xl font-black">{formatCurrency(quote.total_amount)}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Notes Area */}
+      {quote.notes && (
+        <div className="border-l-4 border-indigo-200 pl-6 py-2 mb-12">
+          <h4 className="text-[11px] font-bold text-indigo-600 uppercase tracking-widest mb-2">Observações Adicionais</h4>
+          <p className="text-sm text-slate-600 leading-relaxed font-light">{quote.notes}</p>
         </div>
       )}
 
-      {/* Footer */}
-      <div style={{ borderTop: '2px solid #1e293b', paddingTop: '24px', marginTop: 'auto' }}>
-        <div style={{ textAlign: 'center', color: '#64748b', fontSize: '12px' }}>
-          <p style={{ fontWeight: '600', margin: '0 0 4px 0' }}>
-            Este orçamento tem validade até {quote?.validity_date ? format(new Date(quote.validity_date), 'dd/MM/yyyy', { locale: ptBR }) : '___/___/___'}
-          </p>
-          <p style={{ fontSize: '10px', margin: '8px 0 0 0' }}>Orçamento gerado automaticamente pelo AGFSig ERP</p>
+      {/* Modern Footer */}
+      <div className="mt-auto pt-10 border-t border-slate-100 flex justify-between items-center opacity-70">
+        <div className="text-[10px] space-y-1">
+          <p className="font-bold text-slate-800 uppercase italic">AGF EQUIPAMENTOS - Unidade de Soluções Industriais</p>
+          <p className="text-slate-500">Documento gerado digitalmente pelo AGFSig ERP v2.0</p>
+        </div>
+        <div className="text-right text-[10px]">
+          <p className="font-bold text-slate-800">CÓDIGO DE RASTREAMENTO</p>
+          <p className="font-mono text-slate-400 uppercase">{quote.id.substring(0, 13)}</p>
         </div>
       </div>
+
+      <style>{`
+        @page { size: A4; margin: 0; }
+        @media print {
+          body { -webkit-print-color-adjust: exact; }
+        }
+      `}</style>
     </div>
   );
 });
 
 QuotePrintTemplate.displayName = 'QuotePrintTemplate';
-
 export default QuotePrintTemplate;
