@@ -146,8 +146,8 @@ export default function ServiceRequests() {
         if (req.status !== 'ENCERRADA' && req.status !== 'CANCELADA') {
           // Busca vínculo tanto por ID quanto por Número (retrocompatibilidade)
           const requestOrders = allServiceOrders.filter(so => 
-            (so.request_id === req.id) || 
-            (so.request_number === req.request_number && req.request_number)
+            (so.request_id === req.id && req.id) || 
+            (so.request_number === req.request_number && req.request_number && req.request_number !== '')
           );
           
           // Se houver OS(s) e TODAS estiverem CONCLUIDA ou CANCELADA
