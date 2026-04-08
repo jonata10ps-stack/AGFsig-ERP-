@@ -8,20 +8,33 @@ import { Separator } from '@/components/ui/separator';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
-export default function ServiceOrderReport({ order, history, onClose }) {
+export default function ServiceOrderReport({ order, history, quotes, onClose }) {
   if (!order) return null;
+
+  const totalInvestment = quotes && quotes.length > 0
+    ? quotes.reduce((acc, q) => acc + (q.status !== 'REJEITADO' ? (Number(q.total_amount) || 0) : 0), 0)
+    : null;
+
+  const formatCurrency = (value) => {
+    return new Intl.NumberFormat('pt-BR', { 
+      style: 'currency', 
+      currency: 'BRL' 
+    }).format(value);
+  };
+
+  const hasPhotos = order.service_photos && order.service_photos.length > 0;
+
+  const photoHtml = hasPhotos 
+    ? (order.service_photos || []).map(url => `<div class="photo-card"><img src="${url}"></div>`).join('')
+    : '<div class="empty-state-compact">Nenhuma foto anexada no atendimento</div>';
+
+  const signatureHtml = order.client_signature 
+    ? `<img src="${order.client_signature}" class="signature-img">`
+    : '<div class="signature-placeholder">Assinatura Pendente</div>';
 
   const handlePrint = () => {
     const printWindow = window.open('', '_blank');
     
-    const photoHtml = (order.service_photos || []).map(url => 
-      `<div class="photo-card"><img src="${url}"></div>`
-    ).join('') || '<div class="empty-state">Nenhuma foto anexada</div>';
-
-    const signatureHtml = order.client_signature 
-      ? `<img src="${order.client_signature}" class="signature-img">`
-      : '<div class="signature-placeholder">Assinatura Pendente</div>';
-
     const historyHtml = (history || []).map(h => `
       <div class="history-item">
         <div class="history-dot"></div>
@@ -88,7 +101,11 @@ export default function ServiceOrderReport({ order, history, onClose }) {
           .photo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
           .photo-card { border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; height: 180px; }
           .photo-card img { width: 100%; height: 100%; object-fit: cover; }
-          .empty-state { text-align: center; padding: 40px; color: #94a3b8; background: #f8fafc; border-radius: 12px; font-style: italic; }
+          .empty-state-compact { text-align: center; padding: 20px; color: #94a3b8; background: #f8fafc; border-radius: 12px; font-style: italic; border: 1px dashed #e2e8f0; }
+
+          /* Layout Variations */
+          .flex-row-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 25px; align-items: flex-start; }
+          .full-width-layout { margin-bottom: 25px; }
 
           /* History */
           .history-container { background: #fff; border-radius: 12px; border: 1px solid #e2e8f0; padding: 15px; }
@@ -99,12 +116,12 @@ export default function ServiceOrderReport({ order, history, onClose }) {
 
           /* Footer / Signature */
           .signature-section { 
-            margin-top: 40px; border-top: 1px solid #e2e8f0; pt: 30px; 
+            border-top: 1px solid #e2e8f0; padding-top: 15px;
             display: flex; justify-content: center; text-align: center; 
           }
-          .signature-box { width: 300px; }
-          .signature-img { max-height: 100px; width: auto; margin-bottom: 15px; }
-          .signature-line { border-top: 2px solid #1e293b; margin-top: 5px; padding-top: 5px; font-weight: 700; }
+          .signature-box { width: 100%; max-width: 300px; }
+          .signature-img { max-height: 80px; width: auto; margin-bottom: 5px; }
+          .signature-line { border-top: 1px solid #1e293b; margin-top: 5px; padding-top: 5px; font-weight: 700; font-size: 9px; }
           .footer-note { font-size: 8px; color: #94a3b8; text-align: center; margin-top: 40px; }
 
           .page-break { page-break-before: always; }
@@ -125,52 +142,68 @@ export default function ServiceOrderReport({ order, history, onClose }) {
 
           <div class="section-grid">
             <div class="card">
-              <div class="card-label">Dados do Cliente</div>
+              <div class="card-label">📍 Dados do Cliente</div>
               <div class="card-value">${order.client_name}</div>
             </div>
             <div class="card">
-              <div class="card-label">Técnico Responsável</div>
+              <div class="card-label">🔧 Técnico Responsável</div>
               <div class="card-value">${order.technician_name || 'Não atribuído'}</div>
               <div class="card-sub">${order.scheduled_date ? format(new Date(order.scheduled_date), 'dd/MM/yyyy') : 'Sem data'}</div>
             </div>
-            <div class="card">
-              <div class="card-label">Investimento Total</div>
-              <div class="card-value" style="color: #4f46e5; font-size: 14px;">R$ ${(order.total_cost || 0).toFixed(2)}</div>
+            <div class="card" style="border-left: 4px solid #4f46e5;">
+              <div class="card-label">💰 Investimento Total</div>
+              <div class="card-value" style="color: #4f46e5; font-size: 14px;">
+                ${totalInvestment !== null ? formatCurrency(totalInvestment) : 'A DEFINIR'}
+              </div>
               <div class="card-sub">${order.labor_hours || 0}h de labor</div>
             </div>
           </div>
 
           <div class="full-section">
-            <div class="section-title">Diagnóstico Técnico</div>
-            <div class="text-content italic">${order.diagnosis || 'Nenhum diagnóstico registrado.'}</div>
+            <div class="section-title">
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 2px"><path d="m21 21-4.3-4.3"/><circle cx="10" cy="10" r="7"/><path d="M7 9l3 3 7-7"/></svg>
+              Diagnóstico Técnico
+            </div>
+            <div class="text-content italic font-medium" style="border-left: 3px solid #64748b;">
+              ${order.diagnosis || 'Nenhum diagnóstico registrado.'}
+            </div>
           </div>
 
-          <div class="full-section">
-            <div class="section-title">Solução Aplicada</div>
-            <div class="text-content text-solution">${order.solution || 'Pendente de finalização.'}</div>
+          <div class="full-section" style="page-break-inside: avoid;">
+            <div class="section-title">
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 2px"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+              Solução Aplicada
+            </div>
+            <div class="text-content text-solution" style="border-left: 3px solid #059669; font-weight: 600;">
+              ${order.solution || 'Pendente de finalização.'}
+            </div>
           </div>
 
-          <div class="full-section">
-            <div class="section-title">Relatório Fotográfico</div>
+          <div class="full-width-layout" style="page-break-inside: avoid;">
+            <div class="section-title">
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 2px"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
+              Relatório Fotográfico
+            </div>
             <div class="photo-grid">
-              ${photoHtml}
+              ${hasPhotos ? photoHtml : '<div class="empty-state-compact" style="width: 100%">Nenhuma foto anexada no atendimento</div>'}
             </div>
           </div>
 
-          <div class="page-break"></div>
-
-          <div class="full-section">
-            <div class="section-title">Histórico de Movimentação</div>
+          <div class="full-section" style="page-break-inside: avoid; margin-top: 20px;">
+            <div class="section-title">
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 2px"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="m12 7v5l4 2"/></svg>
+              Histórico de Movimentação
+            </div>
             <div class="history-container">
-              ${historyHtml || '<div class="empty-state">Sem histórico registrado</div>'}
+              ${historyHtml || '<div class="empty-state-compact">Sem histórico registrado</div>'}
             </div>
           </div>
 
-          <div class="signature-section">
+          <div class="signature-section" style="margin-top: 40px; page-break-inside: avoid;">
             <div class="signature-box">
               ${signatureHtml}
               <div class="signature-line">ASSINATURA DO CLIENTE</div>
-              <div style="font-size: 10px; color: #64748b; font-weight: 500;">${order.client_name}</div>
+              <div style="font-size: 9px; color: #64748b;">${order.client_name}</div>
             </div>
           </div>
 
@@ -249,7 +282,9 @@ export default function ServiceOrderReport({ order, history, onClose }) {
                 </div>
                 <div className="flex justify-between text-lg pt-1">
                   <span className="text-slate-500">Total:</span>
-                  <span className="font-extrabold text-indigo-600">R$ {(order.total_cost || 0).toFixed(2)}</span>
+                  <span className={`font-extrabold ${totalInvestment !== null ? 'text-indigo-600' : 'text-amber-600 italic text-sm'}`}>
+                    {totalInvestment !== null ? formatCurrency(totalInvestment) : 'A DEFINIR'}
+                  </span>
                 </div>
               </CardContent>
             </Card>
@@ -257,13 +292,13 @@ export default function ServiceOrderReport({ order, history, onClose }) {
 
           <Separator />
 
-          {/* Photos and Signature */}
+          {/* Photos and Signature Grouping */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div className="space-y-4">
               <h4 className="flex items-center gap-2 text-xs font-bold text-slate-700 uppercase tracking-widest">
                 <ImageIcon className="h-4 w-4 text-indigo-500" /> Relatório Fotográfico
               </h4>
-              <div className="grid grid-cols-2 gap-3">
+              <div className={order.service_photos?.length > 0 ? "grid grid-cols-2 gap-3" : ""}>
                 {order.service_photos?.length > 0 ? (
                   order.service_photos.map((url, idx) => (
                     <div key={idx} className="bg-white p-1.5 rounded-xl border shadow-sm aspect-video overflow-hidden">
@@ -271,9 +306,9 @@ export default function ServiceOrderReport({ order, history, onClose }) {
                     </div>
                   ))
                 ) : (
-                  <div className="col-span-2 py-12 border-2 border-dashed border-slate-200 rounded-xl flex flex-col items-center justify-center text-slate-400">
-                    <ImageIcon className="h-12 w-12 mb-2 opacity-10" />
-                    <p className="text-xs">Sem fotos anexadas</p>
+                  <div className="py-8 border-2 border-dashed border-slate-200 rounded-xl flex flex-col items-center justify-center text-slate-400 bg-white">
+                    <ImageIcon className="h-8 w-8 mb-2 opacity-10" />
+                    <p className="text-[10px] italic">Sem fotos anexadas</p>
                   </div>
                 )}
               </div>
@@ -283,10 +318,10 @@ export default function ServiceOrderReport({ order, history, onClose }) {
               <h4 className="flex items-center gap-2 text-xs font-bold text-slate-700 uppercase tracking-widest">
                 <User className="h-4 w-4 text-indigo-500" /> Assinatura do Cliente
               </h4>
-              <div className="bg-white p-6 rounded-2xl border-2 border-slate-100 shadow-inner min-h-[220px] flex items-center justify-center overflow-hidden">
+              <div className="bg-white p-6 rounded-2xl border-2 border-slate-100 shadow-inner min-h-[160px] flex items-center justify-center overflow-hidden">
                 {order.client_signature ? (
-                  <div className="text-center group">
-                    <img src={order.client_signature} alt="Assinatura" className="max-h-[160px] object-contain mb-4" />
+                  <div className="text-center group w-full">
+                    <img src={order.client_signature} alt="Assinatura" className="max-h-[120px] mx-auto object-contain mb-4" />
                     <div className="pt-2 border-t border-slate-200 w-48 mx-auto">
                       <p className="text-[10px] font-bold text-slate-800">{order.client_name}</p>
                       <p className="text-[9px] text-slate-400">Assinatura Digital</p>
@@ -294,8 +329,8 @@ export default function ServiceOrderReport({ order, history, onClose }) {
                   </div>
                 ) : (
                   <div className="text-center text-slate-300">
-                    <History className="h-12 w-12 mx-auto mb-2 opacity-10" />
-                    <p className="text-sm">Assinatura pendente</p>
+                    <History className="h-8 w-8 mx-auto mb-2 opacity-10" />
+                    <p className="text-xs">Assinatura pendente</p>
                   </div>
                 )}
               </div>

@@ -75,20 +75,17 @@ const AuthenticatedApp = () => {
 
 
 function App() {
-
   return (
-    <AuthProvider>
-      <QueryClientProvider client={queryClientInstance}>
-        <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-          <NavigationTracker />
-          <Routes>
-            <Route path="/public/os/:id" element={<PublicServiceOrderReport />} />
-            <Route path="*" element={<AuthenticatedApp />} />
-          </Routes>
-        </Router>
-        <Toaster />
-      </QueryClientProvider>
-    </AuthProvider>
+    <QueryClientProvider client={queryClientInstance}>
+      <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <NavigationTracker />
+        <Routes>
+          <Route path="/public/os/:id" element={<PublicServiceOrderReport />} />
+          <Route path="*" element={<AuthenticatedApp />} />
+        </Routes>
+      </Router>
+      <Toaster />
+    </QueryClientProvider>
   )
 }
 

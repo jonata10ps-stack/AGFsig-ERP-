@@ -33,24 +33,40 @@ const MOVEMENT_TYPES = {
 export default function Kardex() {
   const { companyId } = useCompanyId();
   const [selectedProductId, setSelectedProductId] = useState(null);
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [startDate, setStartDate] = useState(format(new Date(Date.now() - 86400000), 'yyyy-MM-dd'));
+  const [endDate, setEndDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [activeFilters, setActiveFilters] = useState({
+    productId: null,
+    startDate: '',
+    endDate: ''
+  });
 
   const { data: product, isLoading: loadingProduct } = useQuery({
-    queryKey: ['product', selectedProductId],
-    queryFn: () => selectedProductId ? base44.entities.Product.filter({ id: selectedProductId }).then(r => r[0]) : null,
-    enabled: !!selectedProductId,
+    queryKey: ['product', activeFilters.productId],
+    queryFn: () => activeFilters.productId ? base44.entities.Product.get(activeFilters.productId) : null,
+    enabled: !!activeFilters.productId,
   });
 
   const [tablePage, setTablePage] = useState(0);
   const TABLE_PAGE_SIZE = 50;
 
   const { data: result, isLoading: loadingMovements } = useQuery({
-    queryKey: ['inventory-moves', selectedProductId, companyId, tablePage],
+    queryKey: ['inventory-moves', activeFilters.productId, activeFilters.startDate, activeFilters.endDate, companyId, tablePage],
     queryFn: async () => {
-      if (!selectedProductId || !companyId) return { data: [], count: 0 };
+      if (!activeFilters.productId || !companyId) return { data: [], count: 0 };
       
-      const filter = { product_id: selectedProductId, company_id: companyId };
+      const filter = { 
+        product_id: activeFilters.productId, 
+        company_id: companyId 
+      };
+
+      if (activeFilters.startDate) {
+        filter.created_at = { ...filter.created_at, gte: `${activeFilters.startDate}T00:00:00.000Z` };
+      }
+      if (activeFilters.endDate) {
+        filter.created_at = { ...filter.created_at, lte: `${activeFilters.endDate}T23:59:59.999Z` };
+      }
+      
       return await base44.entities.InventoryMove.queryPaginated(
         filter, 
         '-created_at', 
@@ -58,16 +74,29 @@ export default function Kardex() {
         tablePage * TABLE_PAGE_SIZE
       );
     },
-    enabled: !!selectedProductId && !!companyId,
+    enabled: !!activeFilters.productId && !!companyId,
+  });
+
+  // Carregar TODOS os movimentos do período (sem paginação) APENAS para calcular os totais corretos
+  const { data: allMovesInPeriod = [] } = useQuery({
+    queryKey: ['inventory-moves-all', activeFilters.productId, activeFilters.startDate, activeFilters.endDate, companyId],
+    queryFn: async () => {
+      if (!activeFilters.productId || !companyId) return [];
+      const filter = { product_id: activeFilters.productId, company_id: companyId };
+      if (activeFilters.startDate) filter.created_at = { ...filter.created_at, gte: `${activeFilters.startDate}T00:00:00.000Z` };
+      if (activeFilters.endDate) filter.created_at = { ...filter.created_at, lte: `${activeFilters.endDate}T23:59:59.999Z` };
+      return await base44.entities.InventoryMove.listAll(filter, '-created_at');
+    },
+    enabled: !!activeFilters.productId && !!companyId,
   });
 
   const movements = result?.data || [];
   const totalCount = result?.count || 0;
 
   const { data: currentBalances } = useQuery({
-    queryKey: ['stock-balances', selectedProductId, companyId],
-    queryFn: () => selectedProductId ? base44.entities.StockBalance.filter({ product_id: selectedProductId, company_id: companyId }) : [],
-    enabled: !!selectedProductId && !!companyId,
+    queryKey: ['stock-balances', activeFilters.productId, companyId],
+    queryFn: () => activeFilters.productId ? base44.entities.StockBalance.filter({ product_id: activeFilters.productId, company_id: companyId }) : [],
+    enabled: !!activeFilters.productId && !!companyId,
   });
 
   const currentPhysicalTotal = currentBalances?.reduce((sum, b) => sum + (parseFloat(b.qty_available) || 0), 0) || 0;
@@ -92,57 +121,46 @@ export default function Kardex() {
   const movementsWithBalance = React.useMemo(() => {
     if (!movements || movements.length === 0 || !currentPhysicalTotal) return [];
 
-    // Para calcular o saldo dessa página, precisamos saber o total de impactos de TODOS os itens MAIS NOVOS que NÃO estão nessa página.
-    // Mas uma solução mais simples é: se estamos na página 0, o primeiro item (mais novo) tem saldo = currentPhysicalTotal.
-    // Se estivermos na página P, precisamos saber o saldo 'após' o último item da pág anterior.
+    let currentBalanceForPage = currentPhysicalTotal;
     
-    // FETCH SIMPLIFICADO de todos os itens anteriores p/ calcular o saldo de abertura da página
-    // Como isso pode ser pesado, vamos assumir que o usuário quer ver o saldo relativo se for paginação muito profunda,
-    // ou faremos um cálculo rápido (isso seria o ideal).
-    
-    // Por enquanto, faremos o cálculo a partir do saldo atual subtraindo os movimentos mais recentes (se houver).
-    // Nota: O ideal seria o servidor retornar o 'trailing_balance'. 
-    
-    let physicalBalance = currentPhysicalTotal; 
-    // Se não for página 0, o saldo inicial deve ser ajustado pelos movimentos mais novos que já passaram.
-    // Como não temos esses movimentos aqui, o saldo da página ficaria "deslocado".
-    // Para resolver, vou recalcular o saldo a partir dos movimentos carregados, assumindo o saldo atual para o mais recente do BD.
-    
-    const computed = movements.map((move, index) => {
-      const typeCfg = MOVEMENT_TYPES[move.type] || { isLogical: false };
+    // Simplificação: O saldo do Kardex deve ser acumulativo. 
+    // Para um Kardex de período, o ideal é mostrar o saldo que o produto tinha naquele exato momento.
+    return movements.map((m, i) => {
+      const typeCfg = MOVEMENT_TYPES[m.type] || { isLogical: false };
       let impact = 0;
-      const qty = parseFloat(move.qty) || 0;
+      const qty = parseFloat(m.qty) || 0;
 
       if (!typeCfg.isLogical) {
-        if (move.to_warehouse_id && !move.from_warehouse_id) impact = qty;
-        else if (move.from_warehouse_id && !move.to_warehouse_id) impact = -qty;
-        else if (['ENTRADA', 'PRODUCAO_ENTRADA', 'PRODUCAO_REVERSO'].includes(move.type)) impact = qty;
-        else if (['SAIDA', 'PRODUCAO_CONSUMO', 'BAIXA'].includes(move.type)) impact = -qty;
+        if (m.to_warehouse_id && !m.from_warehouse_id) impact = qty;
+        else if (m.from_warehouse_id && !m.to_warehouse_id) impact = -qty;
+        else if (['ENTRADA', 'PRODUCAO_ENTRADA', 'PRODUCAO_REVERSO'].includes(m.type)) impact = qty;
+        else if (['SAIDA', 'PRODUCAO_CONSUMO', 'BAIXA'].includes(m.type)) impact = -qty;
       }
-      
-      // O saldo do item anterior (índice 0 é o mais novo) é o saldo atual menos os impactos acumulados.
-      // O saldo mostrado para o item N é saldo_inicial_da_pagina - sum(impacts de 0 a N-1).
-      return { ...move, impact, isLogical: typeCfg.isLogical };
-    });
 
-    // Agora calculamos os saldos reais para a página
-    let currentBalanceForPage = currentPhysicalTotal;
-    // TODO: Se tablePage > 0, precisaríamos subtrair os impactos das páginas anteriores...
-    // Mas por simplicidade de performance inicial, o saldo é calculado por página.
-    
-    return computed.map((m, i) => {
       const bal = currentBalanceForPage;
-      currentBalanceForPage -= m.impact;
-      return { ...m, balance: bal, prevBalance: bal - m.impact };
+      currentBalanceForPage -= impact;
+      return { ...m, impact, balance: bal, prevBalance: bal - impact };
     });
-  }, [movements, currentPhysicalTotal, tablePage]);
+  }, [movements, currentPhysicalTotal]);
+
+  const handleSearch = () => {
+    if (!selectedProductId) {
+      return;
+    }
+    setTablePage(0);
+    setActiveFilters({
+      productId: selectedProductId,
+      startDate,
+      endDate
+    });
+  };
 
   const handlePrint = () => {
     window.print();
   };
 
   const reconcileMutation = () => {
-    if (!selectedProductId || !isDiscrepant) return;
+    if (!activeFilters.productId || !isDiscrepant) return;
     
     const diff = currentPhysicalTotal - calculatedBalance;
     const absDiff = Math.abs(diff);
@@ -150,7 +168,7 @@ export default function Kardex() {
     // Criar movimento de ajuste histórico SEM tocar no StockBalance (pois o DB já está correto)
     const moveData = {
       company_id: companyId,
-      product_id: selectedProductId,
+      product_id: activeFilters.productId,
       type: 'SALDO_INICIAL',
       qty: String(absDiff),
       from_warehouse_id: diff < 0 ? (movements[0]?.from_warehouse_id || movements[0]?.to_warehouse_id) : null,
@@ -167,21 +185,21 @@ export default function Kardex() {
   };
 
 
-  const totalEntries = movements?.reduce((sum, m) => 
-    ['ENTRADA', 'PRODUCAO_ENTRADA', 'PRODUCAO_REVERSO', 'ESTORNO'].includes(m.type) ? sum + (m.qty || 0) : sum, 0
+  const totalEntries = allMovesInPeriod?.reduce((sum, m) => 
+    (['ENTRADA', 'PRODUCAO_ENTRADA', 'PRODUCAO_REVERSO', 'ESTORNO'].includes(m.type) || (m.type === 'AJUSTE' && !m.from_warehouse_id)) ? sum + (parseFloat(m.qty) || 0) : sum, 0
   ) || 0;
 
-  const totalExits = movements?.reduce((sum, m) => 
-    !['ENTRADA', 'PRODUCAO_ENTRADA', 'PRODUCAO_REVERSO', 'ESTORNO', 'TRANSFERENCIA'].includes(m.type) ? sum + (m.qty || 0) : sum, 0
+  const totalExits = allMovesInPeriod?.reduce((sum, m) => 
+    (['SAIDA', 'PRODUCAO_CONSUMO', 'BAIXA'].includes(m.type) || (m.type === 'AJUSTE' && !m.to_warehouse_id)) ? sum + (parseFloat(m.qty) || 0) : sum, 0
   ) || 0;
 
   const calculatedBalance = movementsWithBalance.length > 0 ? movementsWithBalance[0].balance : 0;
-  const isDiscrepant = Math.abs(calculatedBalance - currentPhysicalTotal) > 0.001;
+  const isDiscrepant = activeFilters.productId ? Math.abs(calculatedBalance - currentPhysicalTotal) > 0.001 : false;
 
   return (
     <div className="space-y-6">
       {/* Alerta de Discrepância */}
-      {selectedProductId && isDiscrepant && (
+      {activeFilters.productId && isDiscrepant && (
         <Card className="bg-amber-50 border-amber-200">
           <CardContent className="p-4 flex items-center gap-4">
             <div className="bg-amber-100 p-2 rounded-full">
@@ -258,11 +276,21 @@ export default function Kardex() {
                 className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
             </div>
+            <div className="flex items-end">
+              <Button 
+                onClick={handleSearch} 
+                className="w-full bg-indigo-600 hover:bg-indigo-700"
+                disabled={!selectedProductId}
+              >
+                <Search className="h-4 w-4 mr-2" />
+                Pesquisar
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
 
-      {selectedProductId && (
+      {activeFilters.productId && (
         <>
           {loadingProduct ? (
             <Skeleton className="h-32" />

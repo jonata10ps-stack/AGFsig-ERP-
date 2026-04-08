@@ -95,7 +95,16 @@ const createEntityHandler = (entityName) => {
         if (value !== undefined) {
           if (value === null) query = query.is(key, null);
           else if (Array.isArray(value)) query = query.in(key, value);
-          else if (typeof value === 'object' && value?.like) query = query.ilike(key, value.like);
+          else if (typeof value === 'object') {
+            if (value.like) query = query.ilike(key, value.like);
+            if (value.gte !== undefined) query = query.gte(key, value.gte);
+            if (value.lte !== undefined) query = query.lte(key, value.lte);
+            if (value.gt !== undefined) query = query.gt(key, value.gt);
+            if (value.lt !== undefined) query = query.lt(key, value.lt);
+            if (value.like === undefined && value.gte === undefined && value.lte === undefined && value.gt === undefined && value.lt === undefined) {
+              query = query.eq(key, value);
+            }
+          }
           else query = query.eq(key, value);
         }
       }

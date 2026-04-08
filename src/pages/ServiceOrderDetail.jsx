@@ -679,7 +679,7 @@ export default function ServiceOrderDetail() {
                 </div>
               )}
 
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-3 mt-4">
                 <Button
                   variant="outline"
                   disabled={isGeneratingQuote}
@@ -750,17 +750,18 @@ export default function ServiceOrderDetail() {
                         : 'Gerar Orçamento'
                   }
                 </Button>
+
+                {order.status !== 'CONCLUIDA' && order.status !== 'CANCELADA' && (
+                  <Button 
+                    onClick={handleSave} 
+                    disabled={updateMutation.isPending}
+                    className="bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-100"
+                  >
+                    <Save className="h-4 w-4 mr-2" />
+                    Salvar Alterações
+                  </Button>
+                )}
               </div>
-              {order.status !== 'CONCLUIDA' && order.status !== 'CANCELADA' && (
-                <Button 
-                  onClick={handleSave} 
-                  disabled={updateMutation.isPending}
-                  className="bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-100"
-                >
-                  <Save className="h-4 w-4 mr-2" />
-                  Salvar Alterações
-                </Button>
-              )}
             </div>
           </div>
         </CardContent>
@@ -789,6 +790,7 @@ export default function ServiceOrderDetail() {
         <ServiceOrderReport 
           order={order}
           history={techHistory}
+          quotes={linkedQuotes}
           onClose={() => setShowReport(false)}
         />
       )}
