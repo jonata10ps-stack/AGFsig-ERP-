@@ -10,6 +10,9 @@ import QuotePrintTemplate from '@/components/quotes/QuotePrintTemplate';
 import CancelOrderDialog from '@/components/sales/CancelOrderDialog';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -262,6 +265,11 @@ export default function QuoteDetail() {
   const { data: sellers } = useQuery({
     queryKey: ['sellers'],
     queryFn: () => base44.entities.Seller.filter({ active: true }),
+  });
+
+  const { data: paymentConditions } = useQuery({
+    queryKey: ['payment-conditions'],
+    queryFn: () => base44.entities.PaymentCondition.filter({ active: true }),
   });
 
   const { data: attachments } = useQuery({
@@ -805,24 +813,86 @@ export default function QuoteDetail() {
                     </p>
                 </div>
                 <div>
-                  <p className="text-sm text-slate-500">Vendedor</p>
-                  <p className="font-medium">{quote.seller_name || '-'}</p>
+                  <p className="text-sm text-slate-500 mb-1">Vendedor</p>
+                  {canEdit ? (
+                    <Select 
+                      value={quote.seller_id || ''} 
+                      onValueChange={(val) => {
+                        const seller = sellers?.find(s => s.id === val);
+                        saveQuoteMutation.mutate({ 
+                          seller_id: val, 
+                          seller_name: seller?.name || '' 
+                        });
+                      }}
+                    >
+                      <SelectTrigger className="h-8">
+                        <SelectValue placeholder="Selecione..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {sellers?.map(s => (
+                          <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <p className="font-medium">{quote.seller_name || '-'}</p>
+                  )}
                 </div>
                 <div>
-                  <p className="text-sm text-slate-500">Condição de Pagamento</p>
-                  <p className="font-medium">{quote.payment_condition_name || '-'}</p>
+                  <p className="text-sm text-slate-500 mb-1">Condição de Pagamento</p>
+                  {canEdit ? (
+                    <Select 
+                      value={quote.payment_condition_id || ''} 
+                      onValueChange={(val) => {
+                        const cond = paymentConditions?.find(pc => pc.id === val);
+                        saveQuoteMutation.mutate({ 
+                          payment_condition_id: val, 
+                          payment_condition_name: cond?.name || '' 
+                        });
+                      }}
+                    >
+                      <SelectTrigger className="h-8">
+                        <SelectValue placeholder="Selecione..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {paymentConditions?.map(pc => (
+                          <SelectItem key={pc.id} value={pc.id}>{pc.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <p className="font-medium">{quote.payment_condition_name || '-'}</p>
+                  )}
                 </div>
                 <div>
-                  <p className="text-sm text-slate-500">Data de Validade</p>
-                  <p className="font-medium">
-                    {quote.validity_date ? format(new Date(quote.validity_date), 'dd/MM/yyyy', { locale: ptBR }) : '-'}
-                  </p>
+                  <p className="text-sm text-slate-500 mb-1">Data de Validade</p>
+                  {canEdit ? (
+                    <Input 
+                      type="date"
+                      className="h-8"
+                      value={quote.validity_date ? quote.validity_date.split('T')[0] : ''}
+                      onChange={(e) => saveQuoteMutation.mutate({ validity_date: e.target.value })}
+                    />
+                  ) : (
+                    <p className="font-medium">
+                      {quote.validity_date ? format(new Date(quote.validity_date), 'dd/MM/yyyy', { locale: ptBR }) : '-'}
+                    </p>
+                  )}
                 </div>
                 <div>
-                  <p className="text-sm text-slate-500">Data de Entrega</p>
-                    <p className="text-sm font-medium text-slate-900">
+                  <p className="text-sm text-slate-500 mb-1">Data de Entrega</p>
+                  {canEdit ? (
+                    <Input 
+                      type="date"
+                      className="h-8"
+                      value={quote.delivery_date ? quote.delivery_date.split('T')[0] : ''}
+                      onChange={(e) => saveQuoteMutation.mutate({ delivery_date: e.target.value })}
+                    />
+                  ) : (
+                    <p className="font-medium">
                       {quote.delivery_date ? format(new Date(quote.delivery_date), 'dd/MM/yyyy', { locale: ptBR }) : 'Não informada'}
                     </p>
+                  )}
                 </div>
               </div>
               
