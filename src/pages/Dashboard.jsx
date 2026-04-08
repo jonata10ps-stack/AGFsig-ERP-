@@ -128,50 +128,32 @@ export default function Dashboard() {
   if (!hasAnyMainModule) return <ProspectionDashboard />;
 
   return (
-    <div className="min-h-screen space-y-8 pb-12">
-      {/* Premium Header Section */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
-        <div className="flex items-center gap-5">
-           <div className="p-4 bg-gradient-to-br from-indigo-600 to-blue-600 rounded-2xl shadow-xl shadow-indigo-100">
-              <LayoutDashboard className="h-8 w-8 text-white" />
-           </div>
-           <div>
-              <h1 className="text-3xl font-black text-slate-900 tracking-tight">
-                Olá, {user?.name?.split(' ')[0] || 'Gestor'}!
-              </h1>
-              <div className="flex items-center gap-2 mt-1">
-                <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                <p className="text-slate-500 font-medium text-sm">
-                  {editMode ? 'Modo de personalização ativo' : 'Seu painel está atualizado e operacional'}
-                </p>
-              </div>
-           </div>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between bg-white/50 backdrop-blur-sm p-6 rounded-2xl border border-white/20 shadow-sm mb-6">
+        <div>
+          <h1 className="text-3xl font-extrabold text-primary tracking-tight">Dashboard</h1>
+          <p className="text-slate-500 mt-1 font-medium italic">
+            {editMode ? 'Arraste os widgets para reorganizar' : 'Visão geral personalizada'}
+          </p>
         </div>
-        
-        <div className="flex items-center gap-3 w-full md:w-auto">
-          {editMode ? (
-            <div className="flex gap-2 w-full md:w-auto">
-              <Button variant="outline" onClick={() => setShowSelector(true)} className="rounded-2xl border-slate-200">
+        <div className="flex gap-2">
+          {editMode && (
+            <>
+              <Button variant="outline" onClick={() => setShowSelector(true)}>
                 <Plus className="h-4 w-4 mr-2" />
-                Adicionar
+                Adicionar Widget
               </Button>
-              <Button variant="outline" onClick={handleResetDefault} className="rounded-2xl border-slate-200">
-                Restaurar
+              <Button variant="outline" onClick={handleResetDefault}>
+                Restaurar Padrão
               </Button>
-            </div>
-          ) : (
-            <div className="hidden lg:flex flex-col items-end mr-6">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Status do Sistema</p>
-              <p className="text-sm font-bold text-emerald-600">Online & Sincronizado</p>
-            </div>
+            </>
           )}
-          
           <Button
             variant={editMode ? 'default' : 'outline'}
             onClick={() => setEditMode(!editMode)}
-            className={`rounded-2xl transition-all duration-300 ${editMode ? 'bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-100' : 'border-slate-200 hover:bg-slate-50'}`}
           >
-            <Settings className={`h-4 w-4 mr-2 ${editMode ? 'animate-spin' : ''}`} />
+            <Settings className="h-4 w-4 mr-2" />
             {editMode ? 'Concluir' : 'Personalizar'}
           </Button>
         </div>

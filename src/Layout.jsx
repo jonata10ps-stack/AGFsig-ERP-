@@ -298,25 +298,25 @@ export default function Layout({ children, currentPageName }) {
 
       {/* Sidebar */}
       <aside className={cn(
-        "fixed top-0 left-0 z-50 h-full w-72 bg-white/80 backdrop-blur-xl border-r border-slate-200 transform transition-transform duration-300 lg:translate-x-0",
+        "fixed top-0 left-0 z-50 h-full w-72 bg-white border-r border-slate-200 transform transition-transform duration-300 lg:translate-x-0",
         sidebarOpen ? "translate-x-0" : "-translate-x-full"
       )}>
         <div className="flex flex-col h-full">
           {/* Logo */}
-          <div className="flex-shrink-0 flex items-center px-6 py-8">
-            <div className="flex items-center gap-3 group cursor-pointer">
-              <div className="h-10 w-10 bg-gradient-to-tr from-indigo-600 to-blue-500 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-200 group-hover:scale-110 transition-transform duration-300">
-                <LayoutDashboard className="h-6 w-6 text-white" />
+          <div className="flex items-center justify-between h-16 px-6 border-b border-slate-200">
+            <Link to={createPageUrl('Dashboard')} className="flex items-center gap-3">
+              <div className="h-9 w-9 rounded-xl bg-gradient-to-br from-indigo-600 to-indigo-700 flex items-center justify-center shadow-lg shadow-indigo-200">
+                <Factory className="h-5 w-5 text-white" />
               </div>
-              <div>
-                <span className="text-xl font-black text-slate-800 tracking-tighter">AGFSig</span>
-                <span className="text-xl font-light text-slate-400 tracking-tighter ml-1">ERP</span>
-              </div>
-            </div>
+              <span className="text-lg font-bold text-slate-900">AGFSig ERP</span>
+            </Link>
+            <button onClick={() => setSidebarOpen(false)} className="lg:hidden">
+              <X className="h-5 w-5 text-slate-500" />
+            </button>
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 px-4 py-2 space-y-1.5 overflow-y-auto custom-scrollbar">
+          <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
             {navigation.filter(item => {
               // Get user permissions safely
               const userRole = user?.role;
