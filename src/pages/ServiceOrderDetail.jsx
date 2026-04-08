@@ -114,6 +114,14 @@ export default function ServiceOrderDetail() {
             status: 'EM_ATENDIMENTO'
           });
         }
+        if (newStatus === 'CONCLUIDA') {
+          updates.completed_at = new Date().toISOString();
+          if (order.request_id) {
+            await base44.entities.ServiceRequest.update(order.request_id, {
+              status: 'ENCERRADA'
+            });
+          }
+        }
         return await base44.entities.ServiceOrder.update(orderId, updates);
       } catch (err) {
         console.error('Erro ao mudar status:', err);
