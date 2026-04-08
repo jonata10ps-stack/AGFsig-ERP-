@@ -124,6 +124,7 @@ export default function AfterSales() {
                 <thead className="bg-slate-50 text-slate-500 font-medium">
                     <tr>
                         <th className="px-4 py-2 border-b">Nº Solicitação</th>
+                        <th className="px-4 py-2 border-b">OS Vinculada</th>
                         <th className="px-4 py-2 border-b">Cliente</th>
                         <th className="px-4 py-2 border-b">Data</th>
                         <th className="px-4 py-2 border-b">Status</th>
@@ -131,28 +132,41 @@ export default function AfterSales() {
                     </tr>
                 </thead>
                 <tbody>
-                    {criticalRequests.map((req, i) => (
-                        <tr key={i} className="hover:bg-slate-50 border-b last:border-0">
-                            <td className="px-4 py-3 font-semibold text-blue-600">{req.request_number || `#${i+1}`}</td>
-                            <td className="px-4 py-3 text-slate-600 truncate max-w-[200px]">{req.client_name || 'Desconhecido'}</td>
-                            <td className="px-4 py-3 text-slate-500">{moment(req.created_date).format('DD/MM/YYYY')}</td>
-                            <td className="px-4 py-3">
-                                <Badge variant={req.status === 'ABERTA' ? 'destructive' : 'default'} className="text-[10px]">
-                                    {req.status}
-                                </Badge>
-                            </td>
-                            <td className="px-4 py-3 text-right">
-                                <Link to={createPageUrl(`ServiceRequests?search=${req.request_number}`)}>
-                                    <Button variant="outline" size="sm" className="h-8 text-[10px] font-bold uppercase tracking-wider">
-                                        Abrir
-                                    </Button>
-                                </Link>
-                            </td>
-                        </tr>
-                    ))}
+                    {criticalRequests.map((req, i) => {
+                        const linkedOS = serviceOrders?.find(o => o.request_id === req.id || (o.request_number === req.request_number && req.request_number));
+                        
+                        return (
+                            <tr key={i} className="hover:bg-slate-50 border-b last:border-0">
+                                <td className="px-4 py-3 font-semibold text-blue-600">{req.request_number || `#${i+1}`}</td>
+                                <td className="px-4 py-3">
+                                    {linkedOS ? (
+                                        <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-200">
+                                            {linkedOS.os_number}
+                                        </Badge>
+                                    ) : (
+                                        <span className="text-slate-400 italic text-[10px]">Pendente</span>
+                                    )}
+                                </td>
+                                <td className="px-4 py-3 text-slate-600 truncate max-w-[200px]">{req.client_name || 'Desconhecido'}</td>
+                                <td className="px-4 py-3 text-slate-500">{moment(req.created_date).format('DD/MM/YYYY')}</td>
+                                <td className="px-4 py-3">
+                                    <Badge variant={String(req.status || '').toUpperCase() === 'ABERTA' ? 'destructive' : 'default'} className="text-[10px]">
+                                        {req.status}
+                                    </Badge>
+                                </td>
+                                <td className="px-4 py-3 text-right">
+                                    <Link to={createPageUrl(`ServiceRequests?search=${req.request_number}`)}>
+                                        <Button variant="outline" size="sm" className="h-8 text-[10px] font-bold uppercase tracking-wider">
+                                            Abrir
+                                        </Button>
+                                    </Link>
+                                </td>
+                            </tr>
+                        );
+                    })}
                     {criticalRequests.length === 0 && (
                         <tr>
-                            <td colSpan={5} className="p-8 text-center text-slate-400">Nenhum chamado pendente</td>
+                            <td colSpan={6} className="p-8 text-center text-slate-400">Nenhum chamado pendente</td>
                         </tr>
                     )}
                 </tbody>
