@@ -59,7 +59,7 @@ function ItemForm({ item, products, onSave, onCancel, loading }) {
     cod_finame: '',
     qty: 1,
     unit_price: 0,
-    fulfill_mode: 'AUTO'
+    fulfill_mode: ''
   });
 
   const handleProductChange = (productId, product) => {
@@ -79,6 +79,10 @@ function ItemForm({ item, products, onSave, onCancel, loading }) {
       toast.error('Produto e quantidade são obrigatórios');
       return;
     }
+    if (!form.fulfill_mode) {
+      toast.error('Obrigatório definir se gera solicitação de produção');
+      return;
+    }
     const total_price = form.qty * form.unit_price;
     onSave({ ...form, total_price });
   };
@@ -88,7 +92,7 @@ function ItemForm({ item, products, onSave, onCancel, loading }) {
       <ProductSearchSelect
         label="Produto"
         value={form.product_id}
-        onSelect={handleProductChange}
+        onSelect={(id, product) => handleProductChange(id, product)}
         placeholder="Buscar por código ou descrição..."
         required
       />
@@ -126,15 +130,14 @@ function ItemForm({ item, products, onSave, onCancel, loading }) {
       </div>
 
       <div className="space-y-2">
-        <Label>Modo de Atendimento</Label>
+        <Label>Gera Solicitação de Produção? *</Label>
         <Select value={form.fulfill_mode} onValueChange={(v) => setForm({ ...form, fulfill_mode: v })}>
-          <SelectTrigger>
-            <SelectValue />
+          <SelectTrigger className={!form.fulfill_mode ? "border-amber-500 bg-amber-50" : ""}>
+            <SelectValue placeholder="Selecione Sim ou Não..." />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="AUTO">Automático</SelectItem>
-            <SelectItem value="ESTOQUE">Somente Estoque</SelectItem>
-            <SelectItem value="PRODUCAO">Somente Produção</SelectItem>
+            <SelectItem value="PRODUCAO">Sim</SelectItem>
+            <SelectItem value="ESTOQUE">Não</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -241,12 +244,16 @@ export default function SalesOrderDetail() {
 
   const updateStatusMutation = useMutation({
     mutationFn: async (status) => {
-      // O pedido agora pode ser confirmado mesmo com estoque zero.
-      // O PCP tratará a produção via Solicitação de Produção.
+      // Validação obrigatória solicitada pelo usuário
       if (status === 'CONFIRMADO') {
+        const incompleteItems = items?.filter(item => !item.fulfill_mode);
+        if (incompleteItems && incompleteItems.length > 0) {
+          throw new Error(`Existem ${incompleteItems.length} item(ns) sem a definição de "Gera Solicitação de Produção". Por favor, edite os itens e defina Sim ou Não.`);
+        }
+
         // Criar solicitações de produção para itens que requerem produção
         for (const item of items) {
-          if (item.fulfill_mode === 'PRODUCAO' || item.fulfill_mode === 'AUTO') {
+          if (item.fulfill_mode === 'PRODUCAO') {
             await base44.entities.ProductionRequest.create({
               company_id: order.company_id,
               origin_type: 'VENDA',
@@ -758,6 +765,7 @@ export default function SalesOrderDetail() {
                   <TableHead className="text-right">Separado</TableHead>
                   <TableHead className="text-right">Preço Unit.</TableHead>
                   <TableHead className="text-right">Total</TableHead>
+                  <TableHead className="text-center">Gera Produção</TableHead>
                   <TableHead>Status</TableHead>
                   {order.is_shipment && order.requires_return && (
                     <TableHead className="w-32">Retorno</TableHead>
@@ -795,6 +803,15 @@ export default function SalesOrderDetail() {
                       </TableCell>
                       <TableCell className="text-right">{formatCurrency(item.unit_price)}</TableCell>
                       <TableCell className="text-right font-medium">{formatCurrency(item.total_price)}</TableCell>
+                      <TableCell className="text-center">
+                        {item.fulfill_mode === 'PRODUCAO' ? (
+                          <Badge className="bg-amber-100 text-amber-700 font-bold border-amber-200">SIM</Badge>
+                        ) : item.fulfill_mode === 'ESTOQUE' ? (
+                          <Badge variant="outline" className="text-slate-400">NÃO</Badge>
+                        ) : (
+                          <Badge className="bg-rose-100 text-rose-700 animate-pulse">DEFINIR</Badge>
+                        )}
+                      </TableCell>
                       <TableCell>
                         {qtySeparated >= item.qty ? (
                           <Badge className="bg-emerald-100 text-emerald-700">
@@ -894,18 +911,18 @@ export default function SalesOrderDetail() {
         loading={cancelOrderMutation.isPending}
         />
 
-        {/* Hidden Print Template */}
-        <div style={{ position: 'fixed', top: 0, left: 0, zIndex: -9999, opacity: 0, pointerEvents: 'none' }}>
-          <OrderPrintTemplate ref={printRef} order={order} items={items || []} />
+      {/* Hidden Print Template */}
+      <div style={{ display: 'none' }}>
+        <div ref={printRef}>
+          <OrderPrintTemplate order={order} items={items || []} />
         </div>
+      </div>
 
-        <style>{`
-          @media print {
-            body * { visibility: hidden; }
-            .print-order, .print-order * { visibility: visible; }
-            .print-order { position: absolute; left: 0; top: 0; width: 100%; }
-          }
-        `}</style>
-        </div>
-        );
+      <style>{`
+        @media print {
+          .print-order { display: block !important; }
         }
+      `}</style>
+    </div>
+  );
+}
