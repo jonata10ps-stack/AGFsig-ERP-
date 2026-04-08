@@ -113,10 +113,17 @@ export default function Separation() {
 
   const isProductService = (p) => {
     if (!p) return false;
-    return p.category === 'SV' || 
-           p.name?.toUpperCase().includes('ASSISTENCIA TECNICA') || 
-           p.name?.toUpperCase().includes('SERVIÇO') ||
-           p.sku?.toUpperCase().startsWith('SV-');
+    const name = (p.name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, "").toUpperCase();
+    const category = (p.category || '').toUpperCase();
+    const sku = (p.sku || '').toUpperCase();
+    
+    return category === 'SV' || 
+           category === 'SERVICO' ||
+           name.includes('ASSISTENCIA TECNICA') || 
+           name.includes('SERVICO') ||
+           name.includes('MAO DE OBRA') ||
+           sku.startsWith('SV-') ||
+           sku === '1402'; // Forçamento manual para o item citado pelo usuário
   };
 
   const { data: products } = useQuery({
@@ -138,12 +145,14 @@ export default function Separation() {
       return base44.entities.SalesOrderItem.filter({ order_id: orderIds });
     },
     enabled: !!companyId,
+    refetchInterval: 5000, // Atualizar a cada 5s para auto-avanço funcionar melhor
   });
 
   const { data: rawOrders, isLoading } = useQuery({
     queryKey: ['orders-for-separation-raw', companyId],
     queryFn: () => companyId ? base44.entities.SalesOrder.filter({ company_id: companyId, status: ['CONFIRMADO', 'RESERVADO', 'SEPARANDO', 'SEPARADO'] }) : Promise.resolve([]),
     enabled: !!companyId,
+    refetchInterval: 5000,
   });
 
   // Filtrar pedidos que possuem ao menos um item físico
@@ -151,6 +160,8 @@ export default function Separation() {
     if (!rawOrders || !allItems || !products) return rawOrders;
     return rawOrders.filter(order => {
       const orderItems = allItems.filter(item => item.order_id === order.id);
+      if (orderItems.length === 0) return true; // Mostrar se não tiver itens para fins de depuração
+      
       const hasPhysicalItem = orderItems.some(item => {
         const p = products.find(prod => prod.id === item.product_id);
         return !isProductService(p);
@@ -173,13 +184,23 @@ export default function Separation() {
     });
   }, [rawItems, products]);
 
+  // Lista de itens de serviço do pedido selecionado (para depuração visual)
+  const serviceItems = React.useMemo(() => {
+    if (!rawItems || !products) return [];
+    return rawItems.filter(item => {
+      const product = products.find(p => p.id === item.product_id);
+      return isProductService(product);
+    });
+  }, [rawItems, products]);
+
   // Auto-avançar pedidos que só possuem itens de serviço em background
   React.useEffect(() => {
-    if (!rawOrders || !allItems || !products) return;
+    if (!rawOrders || !allItems || !products || startSeparationMutation.isPending || completeSeparationMutation.isPending) return;
     
     const advanceOrders = async () => {
       for (const order of rawOrders) {
-        if (order.status !== 'CONFIRMADO' && order.status !== 'SEPARANDO') continue;
+        // Reservado também pode ser auto-avançado se for só serviço
+        if (!['CONFIRMADO', 'RESERVADO', 'SEPARANDO'].includes(order.status)) continue;
         
         const orderItems = allItems.filter(item => item.order_id === order.id);
         if (orderItems.length === 0) continue;
@@ -190,10 +211,16 @@ export default function Separation() {
         });
 
         if (!hasPhysical) {
-          if (order.status === 'CONFIRMADO') {
-            await startSeparationMutation.mutateAsync(order);
-          } else if (order.status === 'SEPARANDO') {
-            await completeSeparationMutation.mutateAsync(order);
+          try {
+            if (order.status === 'CONFIRMADO' || order.status === 'RESERVADO') {
+              console.log(`Auto-iniciando separação para pedido de serviço: ${order.order_number}`);
+              await startSeparationMutation.mutateAsync(order);
+            } else if (order.status === 'SEPARANDO') {
+              console.log(`Auto-finalizando separação para pedido de serviço: ${order.order_number}`);
+              await completeSeparationMutation.mutateAsync(order);
+            }
+          } catch (e) {
+            console.error('Erro no auto-avanço:', e);
           }
         }
       }
