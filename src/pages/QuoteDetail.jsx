@@ -98,8 +98,7 @@ function ItemForm({ item, products, onSave, onCancel, loading }) {
     unit_price: 0,
   });
 
-  const handleProductChange = (productId) => {
-    const product = products?.find(p => p.id === productId);
+  const handleProductChange = (productId, product) => {
     setForm({
       ...form,
       product_id: productId,
@@ -124,7 +123,7 @@ function ItemForm({ item, products, onSave, onCancel, loading }) {
       <ProductSearchSelect
         label="Produto"
         value={form.product_id}
-        onSelect={handleProductChange}
+        onSelect={(id, product) => handleProductChange(id, product)}
         placeholder="Buscar por código ou descrição..."
         required
       />
