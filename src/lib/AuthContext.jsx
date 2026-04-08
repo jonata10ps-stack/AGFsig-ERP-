@@ -24,16 +24,35 @@ export const AuthProvider = ({ children }) => {
     try {
       setIsLoadingAuth(true);
       setAuthError(null);
+      
+      // 1. Autenticação básica
       const currentUser = await base44.auth.me();
-      setUser(currentUser);
+      
+      // 2. Buscar perfil expandido na entidade User para checar aprovação
+      const profiles = await base44.entities.User.filter({ email: currentUser.email });
+      const userProfile = profiles?.[0];
+      
+      if (!userProfile || userProfile.account_status === 'PENDENTE') {
+        throw new Error('PENDING_APPROVAL');
+      }
+
+      setUser({ ...currentUser, ...userProfile });
       setIsAuthenticated(true);
     } catch (error) {
-      console.error('Usuário não autenticado:', error.message);
+      console.error('Usuário não autenticado ou pendente:', error.message);
       setIsAuthenticated(false);
-      setAuthError({
-        type: 'auth_required',
-        message: error.message || 'Erro não monitorado'
-      });
+      
+      if (error.message === 'PENDING_APPROVAL') {
+        setAuthError({
+          type: 'approval_pending',
+          message: 'Sua conta está aguardando aprovação de um administrador.'
+        });
+      } else {
+        setAuthError({
+          type: 'auth_required',
+          message: error.message || 'Erro não monitorado'
+        });
+      }
     } finally {
       setIsLoadingAuth(false);
     }

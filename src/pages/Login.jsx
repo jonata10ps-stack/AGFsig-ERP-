@@ -58,10 +58,35 @@ export default function Login() {
 
     try {
       setIsLoading(true);
-      alert('Iniciando cadastro... Isso pode levar alguns segundos.');
+      
+      // 1. Criar conta de autenticação
       await base44.auth.signUp(email, password, { full_name: fullName });
-      alert('Conta iniciada! Agora você já pode entrar no sistema.');
-      toast.success('Conta criada com sucesso!');
+      
+      // 2. Garantir que exista um registro na entidade User com status PENDENTE
+      // Primeiro verificamos se já foi pré-convidado
+      const existingUsers = await base44.entities.User.filter({ email });
+      
+      if (existingUsers && existingUsers.length > 0) {
+        // Já existe, não fazemos nada (mantém as permissões que o admin já deu)
+        console.log('Usuário pré-cadastrado encontrado.');
+      } else {
+        // Novo auto-cadastro: Criamos o registro com status PENDENTE
+        await base44.entities.User.create({
+          email,
+          full_name: fullName,
+          allowed_modules: JSON.stringify([]),
+          company_ids: JSON.stringify([]),
+          is_seller: false,
+          is_technician: false,
+          account_status: 'PENDENTE',
+          role: 'user',
+          active: true,
+        });
+        console.log('Registro de aprovação pendente criado.');
+      }
+
+      toast.success('Conta criada com sucesso! Aguarde a aprovação do administrador.');
+      alert('Sua conta foi criada com sucesso! Por favor, aguarde que um administrador aprove seu acesso para entrar no sistema.');
       setView('login');
     } catch (error) {
       console.error(error);

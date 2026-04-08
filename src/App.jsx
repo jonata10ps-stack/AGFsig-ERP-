@@ -36,6 +36,8 @@ const AuthenticatedApp = () => {
   if (authError) {
     if (authError.type === 'user_not_registered') {
       return <UserNotRegisteredError />;
+    } else if (authError.type === 'approval_pending') {
+      return <AccountPendingApproval />;
     } else if (authError.type === 'auth_required') {
       return (
         <Routes>
