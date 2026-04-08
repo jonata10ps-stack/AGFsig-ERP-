@@ -355,25 +355,25 @@ export default function SalesOrders() {
   const { data: clients } = useQuery({
     queryKey: ['clients', companyId],
     queryFn: () => companyId ? base44.entities.Client.listAll({ company_id: companyId, active: true }) : Promise.resolve([]),
-    enabled: !!companyId,
+    enabled: !!companyId && dialogOpen, // Otimização: Só carrega se o diálogo estiver aberto
   });
   
   const { data: sellers } = useQuery({
     queryKey: ['sellers', companyId],
     queryFn: () => companyId ? base44.entities.Seller.listAll({ company_id: companyId, active: true }) : Promise.resolve([]),
-    enabled: !!companyId,
+    enabled: !!companyId && dialogOpen,
   });
   
   const { data: products } = useQuery({
     queryKey: ['products', companyId],
     queryFn: () => companyId ? base44.entities.Product.listAll({ company_id: companyId, active: true }) : Promise.resolve([]),
-    enabled: !!companyId,
+    enabled: !!companyId && dialogOpen,
   });
   
   const { data: paymentConditions } = useQuery({
     queryKey: ['payment-conditions', companyId],
     queryFn: () => companyId ? base44.entities.PaymentCondition.listAll({ company_id: companyId, active: true }) : Promise.resolve([]),
-    enabled: !!companyId,
+    enabled: !!companyId && dialogOpen,
   });
 
   const createMutation = useMutation({
