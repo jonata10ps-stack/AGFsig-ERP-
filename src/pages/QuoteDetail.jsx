@@ -760,7 +760,7 @@ export default function QuoteDetail() {
           </div>
         </div>
         <div className="flex gap-2">
-          {(quote.status === 'RASCUNHO' || quote.status === 'CONFIRMADO') && quoteItems?.length > 0 && (
+          {(quote.status === 'RASCUNHO' || quote.status === 'CONFIRMADO' || quote.status === 'CONVERTIDO') && quoteItems?.length > 0 && (
             <Button onClick={handlePrint} variant="outline">
               <Printer className="h-4 w-4 mr-2" />
               Imprimir
