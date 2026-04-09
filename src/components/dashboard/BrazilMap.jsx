@@ -162,20 +162,60 @@ export default function BrazilInteractiveMap({ services = [] }) {
                 const jitterLong = (idx % 8) * 0.4 - 1.5;
 
                 return (
-                  <Marker key={`pin-${idx}`} coordinates={[geoCoords[0] + jitterLong, geoCoords[1] + jitterLat]}>
-                    <g className="cursor-pointer">
-                        <circle r="8" fill="rgba(99, 102, 241, 0.2)">
-                            <animate attributeName="r" from="4" to="12" dur="2s" repeatCount="indefinite" />
-                            <animate attributeName="opacity" from="0.6" to="0" dur="2s" repeatCount="indefinite" />
+                  <Marker 
+                    key={`pin-${idx}`} 
+                    coordinates={[geoCoords[0] + jitterLong, geoCoords[1] + jitterLat]}
+                  >
+                    <g 
+                      className="cursor-pointer group/pin"
+                      onMouseEnter={() => setHoveredState(`marker-${idx}`)}
+                      onMouseLeave={() => setHoveredState(null)}
+                    >
+                        {/* Efeito de pulso sob o pin (Compensado pelo Zoom) */}
+                        <circle r={4 / currentZoom.zoom} fill="rgba(239, 68, 68, 0.4)">
+                            <animate attributeName="r" from={2 / currentZoom.zoom} to={8 / currentZoom.zoom} dur="1.5s" repeatCount="indefinite" />
+                            <animate attributeName="opacity" from="0.8" to="0" dur="1.5s" repeatCount="indefinite" />
                         </circle>
-                        <circle r="2.5" fill="white" className="shadow-[0_0_10px_white]" />
+                        
+                        {/* Ícone de Pin Vermelho (Compensado para tamanho constante e nítido) */}
+                        <path 
+                          d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" 
+                          fill="#ef4444" 
+                          transform={`translate(${-12 / currentZoom.zoom}, ${-22 / currentZoom.zoom}) scale(${1 / currentZoom.zoom})`}
+                          className="drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]"
+                        />
                     </g>
                     
-                    {selectedRegion && (
-                        <foreignObject x="8" y="-15" width="160" height="60" style={{ overflow: 'visible' }}>
-                             <div className="bg-black/90 backdrop-blur-2xl p-3 rounded-2xl border border-white/10 shadow-2xl scale-[0.45] origin-left border-l-4 border-l-indigo-500">
-                                <p className="text-[12px] font-black text-white uppercase truncate mb-1">{service.client_name}</p>
-                                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">{service.city_name}</p>
+                    {/* Label flutuante Proporcional (Compensada e Legível) */}
+                    {hoveredState === `marker-${idx}` && (
+                        <foreignObject 
+                            x={14 / currentZoom.zoom} 
+                            y={-42 / currentZoom.zoom} 
+                            width={180 / currentZoom.zoom} 
+                            height={55 / currentZoom.zoom} 
+                            style={{ overflow: 'visible' }}
+                        >
+                             <div 
+                               style={{ 
+                                 transform: `scale(${1.2 / currentZoom.zoom})`, 
+                                 transformOrigin: 'bottom left',
+                                 background: 'rgba(0,0,0,0.98)',
+                                 backdropFilter: 'blur(16px)',
+                                 padding: '8px 12px',
+                                 borderRadius: '12px',
+                                 border: '1px solid rgba(255,255,255,0.2)',
+                                 borderLeft: '5px solid #ef4444',
+                                 boxShadow: '0 15px 50px rgba(0,0,0,0.7)',
+                                 pointerEvents: 'none',
+                                 width: 'fit-content'
+                               }}
+                             >
+                                <p style={{ fontSize: '13px', fontWeight: '900', color: 'white', textTransform: 'uppercase', whiteSpace: 'nowrap', lineHeight: '1.2' }}>
+                                    {service.technician_name}
+                                </p>
+                                <p style={{ fontSize: '11px', fontWeight: '800', color: '#cbd5e1', textTransform: 'uppercase', marginTop: '2px', lineHeight: '1' }}>
+                                    {service.city_name}/{service.state_uf}
+                                </p>
                              </div>
                         </foreignObject>
                     )}

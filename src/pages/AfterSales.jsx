@@ -23,58 +23,79 @@ export default function AfterSales() {
   const [typeFilter, setTypeFilter] = useState('all');
 
   const { data: serviceRequests = [] } = useQuery({
-    queryKey: ['as-requests-v5', companyId],
+    queryKey: ['as-requests-prod', companyId],
     queryFn: async () => {
       if (!companyId) return [];
       try {
-        const ent = base44.entities.ServiceRequest || base44.entities.service_request;
-        return await ent.filter({ company_id: companyId }, '-created_date');
+        // Garantindo o uso da entidade correta conforme o schema
+        return await base44.entities.ServiceRequest.filter({ company_id: companyId }, '-created_at');
       } catch (e) {
+        console.error("Erro ao buscar SRs:", e);
         return [];
       }
     },
     enabled: !!companyId,
+    staleTime: 30000
   });
 
   const { data: serviceOrders = [] } = useQuery({
-    queryKey: ['as-orders-v5', companyId],
+    queryKey: ['as-orders-prod', companyId],
     queryFn: async () => {
       if (!companyId) return [];
       try {
-        const ent = base44.entities.ServiceOrder || base44.entities.service_order;
-        return await ent.filter({ company_id: companyId }, '-created_date');
+        // Garantindo o uso da entidade correta conforme o schema
+        return await base44.entities.ServiceOrder.filter({ company_id: companyId }, '-created_at');
       } catch (e) {
+        console.error("Erro ao buscar OSs:", e);
         return [];
       }
     },
     enabled: !!companyId,
+    staleTime: 30000
   });
 
   const { data: clients = [] } = useQuery({
-    queryKey: ['as-clients-geo', companyId],
+    queryKey: ['as-clients-geo-list', companyId],
     queryFn: async () => {
       if (!companyId) return [];
       try {
-        return await base44.entities.Client.filter({ company_id: companyId });
+        // Busca todos os clientes para cruzamento de localidade
+        return await base44.entities.Client.listAll({ company_id: companyId });
       } catch (e) {
         return [];
       }
     },
     enabled: !!companyId,
+    staleTime: 60000
   });
 
+  // Mapeamento geográfico robusto (combinando SR e OS para o mapa)
   const mapData = useMemo(() => {
+    const sReqs = Array.isArray(serviceRequests) ? serviceRequests : [];
     const sOrds = Array.isArray(serviceOrders) ? serviceOrders : [];
-    return sOrds.map(so => {
-      const client = clients.find(c => c.id === so.client_id);
+    
+    // Unificar para visualização no mapa
+    const combined = [
+        ...sReqs.map(r => ({ ...r, _type: 'SR' })),
+        ...sOrds.map(o => ({ ...o, _type: 'OS' }))
+    ];
+
+    return combined.map(item => {
+      const client = clients.find(c => c.id === item.client_id);
+      
+      // Tentar pegar UF do Cliente, ou fallback para algum campo no item se existir
+      const uf = (client?.state || '').toUpperCase().trim();
+      const city = client?.city || item.contact_address?.split(',')[0] || 'Localidade não informada';
+      
       return {
-        ...so,
-        state_uf: (client?.state || '').toUpperCase().trim(),
-        city_name: client?.city || 'Localidade não informada',
-        client_name: client?.name || so.client_name || 'Cliente Oculto'
+        ...item,
+        state_uf: uf,
+        city_name: city,
+        client_name: client?.name || item.client_name || 'Cliente Oculto',
+        technician_name: item.technician_name || null
       };
-    }).filter(s => s.state_uf);
-  }, [serviceOrders, clients]);
+    }).filter(s => s.state_uf && s.technician_name); // Filtra apenas OS com técnico e UF
+  }, [serviceRequests, serviceOrders, clients]);
 
   const kpis = useMemo(() => {
     const sReqs = Array.isArray(serviceRequests) ? serviceRequests : [];
@@ -110,19 +131,31 @@ export default function AfterSales() {
       const sReqs = Array.isArray(serviceRequests) ? serviceRequests : [];
       const sOrds = Array.isArray(serviceOrders) ? serviceOrders : [];
       const combined = [
-          ...sReqs.map(sr => ({ ...sr, _type: 'SR', date: sr.created_date || sr.created_at, status: sr.status || 'Aberta' })),
-          ...sOrds.map(so => ({ ...so, _type: 'OS', date: so.created_date || so.created_at, status: so.status || 'Pendente' }))
+          ...sReqs.map(sr => ({ ...sr, _type: 'SR', date: sr.created_date || sr.created_at || new Date().toISOString(), status: sr.status || 'Aberta' })),
+          ...sOrds.map(so => ({ ...so, _type: 'OS', date: so.created_date || so.created_at || new Date().toISOString(), status: so.status || 'Pendente' }))
       ];
-      combined.sort((a, b) => moment(b.date).valueOf() - moment(a.date).valueOf());
+      
+      // Ordenação segura por data decrescente
+      combined.sort((a, b) => {
+          const dateA = moment(a.date).isValid() ? moment(a.date).valueOf() : 0;
+          const dateB = moment(b.date).isValid() ? moment(b.date).valueOf() : 0;
+          return dateB - dateA;
+      });
+
       return combined.filter(item => {
+        // Busca o cliente para ter a localidade disponível na tabela também
+        const client = clients.find(c => c.id === item.client_id);
+        item._location = client ? `${client.city || 'S/C'}/${client.state || 'UF'}` : 'Não informada';
+
         if (typeFilter !== 'all' && item._type !== typeFilter) return false;
+        
         const s = String(item?.status || '').toUpperCase();
         if (statusFilter === 'active') return s === 'ABERTA' || s === 'PENDENTE';
         if (statusFilter === 'progress') return ['EM_ANDAMENTO', 'EM_ATENDIMENTO', 'PAUSADA', 'AGUARDANDO_PECA'].includes(s);
         if (statusFilter === 'done') return ['ENCERRADA', 'CONCLUIDA', 'FINALIZADA'].includes(s);
         return true;
       }).slice(0, 50);
-  }, [serviceRequests, serviceOrders, typeFilter, statusFilter]);
+  }, [serviceRequests, serviceOrders, typeFilter, statusFilter, clients]);
 
   return (
     <div className="bg-[#0A0C10] min-h-screen text-slate-200 selection:bg-indigo-500/30">
@@ -327,7 +360,9 @@ export default function AfterSales() {
                                 </td>
                                 <td className="px-6 py-5">
                                     <p className="text-white font-bold uppercase truncate max-w-[300px]">{item.client_name || '-'}</p>
-                                    <p className="text-[10px] text-slate-500 font-medium">Data: {moment(item.date).format('DD/MM/YYYY')}</p>
+                                    <p className="text-[10px] text-slate-500 font-medium">
+                                        <span className="text-indigo-400 font-bold">{item._location}</span> • {moment(item.date).format('DD/MM/YYYY')}
+                                    </p>
                                 </td>
                                 <td className="px-6 py-5">
                                     <div className="flex items-center gap-2 text-slate-400 font-semibold italic text-[10px]">
