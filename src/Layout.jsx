@@ -285,7 +285,7 @@ export default function Layout({ children, currentPageName }) {
           isActive
             ? "bg-indigo-600 text-white shadow-lg shadow-indigo-200"
             : "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
-          sidebarCollapsed && !mobile && "justify-center px-0"
+          sidebarCollapsed && !mobile && "justify-center px-0 mx-auto w-12"
         )}
         title={sidebarCollapsed && !mobile ? item.name : undefined}
       >
@@ -317,25 +317,42 @@ export default function Layout({ children, currentPageName }) {
       )}>
         <div className="flex flex-col h-full">
           {/* Logo */}
-          <div className="flex items-center justify-between h-16 px-4 border-b border-slate-200">
-            <Link to={createPageUrl('Dashboard')} className={cn("flex items-center gap-3", sidebarCollapsed && "lg:justify-center lg:w-full")}>
-              <div className="h-9 w-9 shrink-0 rounded-xl bg-gradient-to-br from-indigo-600 to-indigo-700 flex items-center justify-center shadow-lg shadow-indigo-200">
+          <div className={cn(
+            "flex items-center h-16 border-b border-slate-200 transition-all duration-300",
+            sidebarCollapsed ? "justify-center" : "justify-between px-4"
+          )}>
+            <Link to={createPageUrl('Dashboard')} className={cn("flex items-center gap-3", sidebarCollapsed && "justify-center")}>
+              <div className="h-9 w-9 shrink-0 rounded-xl bg-gradient-to-br from-indigo-600 to-indigo-700 flex items-center justify-center shadow-lg shadow-indigo-200 transform transition-transform hover:scale-105 active:scale-95">
                 <Factory className="h-5 w-5 text-white" />
               </div>
-              {(!sidebarCollapsed || sidebarOpen) && (
-                <span className="text-lg font-bold text-slate-900 truncate">AGFSig ERP</span>
+              {!sidebarCollapsed && (
+                <span className="text-lg font-bold text-slate-900 truncate animate-in fade-in slide-in-from-left-2 duration-300">AGFSig ERP</span>
               )}
             </Link>
-            <button onClick={() => setSidebarOpen(false)} className="lg:hidden">
-              <X className="h-5 w-5 text-slate-500" />
-            </button>
-            <button 
-              onClick={() => setSidebarCollapsed(!sidebarCollapsed)} 
-              className="hidden lg:flex p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-indigo-600 transition-colors"
-            >
-              {sidebarCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
-            </button>
+            {!sidebarCollapsed && (
+              <button 
+                onClick={() => setSidebarCollapsed(true)} 
+                className="hidden lg:flex p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-indigo-600 transition-colors"
+                title="Recolher menu"
+              >
+                <PanelLeftClose className="h-4 w-4" />
+              </button>
+            )}
           </div>
+
+          {/* Collapsed Toggle Button */}
+          {sidebarCollapsed && (
+            <div className="hidden lg:flex justify-center py-4 border-b border-slate-50">
+              <button 
+                onClick={() => setSidebarCollapsed(false)} 
+                className="p-2 rounded-xl bg-slate-50 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all shadow-sm border border-slate-100"
+                title="Expandir menu"
+              >
+                <PanelLeftOpen className="h-5 w-5" />
+              </button>
+            </div>
+          )}
+
 
 
           {/* Navigation */}
@@ -389,21 +406,22 @@ export default function Layout({ children, currentPageName }) {
           {/* User section */}
           {user && (
             <div className="p-4 border-t border-slate-200">
-              <div className={cn("flex items-center gap-3 px-3 py-2", sidebarCollapsed && "lg:justify-center px-0")}>
-                <Avatar className="h-9 w-9 shrink-0">
-                  <AvatarFallback className="bg-indigo-100 text-indigo-700 font-medium">
+              <div className={cn("flex items-center gap-3 px-3 py-2", sidebarCollapsed && "justify-center px-0")}>
+                <Avatar className="h-10 w-10 shrink-0 shadow-md ring-2 ring-white border border-slate-100 transition-transform hover:scale-110">
+                  <AvatarFallback className="bg-gradient-to-br from-indigo-50 to-indigo-100 text-indigo-700 font-black text-xs">
                     {user.full_name?.charAt(0) || user.email?.charAt(0) || 'U'}
                   </AvatarFallback>
                 </Avatar>
                 {!sidebarCollapsed && (
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-slate-900 truncate">{user.full_name || 'Usuário'}</p>
-                    <p className="text-xs text-slate-500 truncate">{user.email}</p>
+                  <div className="flex-1 min-w-0 animate-in fade-in slide-in-from-left-2 duration-300">
+                    <p className="text-sm font-bold text-slate-900 truncate">{user.full_name || 'Usuário'}</p>
+                    <p className="text-[10px] text-slate-500 truncate font-medium">{user.email}</p>
                   </div>
                 )}
               </div>
             </div>
           )}
+
 
         </div>
       </aside>
