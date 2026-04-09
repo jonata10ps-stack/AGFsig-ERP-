@@ -6,12 +6,14 @@ import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { 
   Wrench, ClipboardList, AlertCircle, Clock, 
-  ArrowRight, Filter, Search, MoreHorizontal
+  ArrowRight, Filter, Search, MoreHorizontal, Activity
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import moment from 'moment';
+
+import BrazilInteractiveMap from '@/components/dashboard/BrazilMap';
 
 export default function AfterSales() {
   const { companyId } = useCompanyId();
@@ -48,23 +50,46 @@ export default function AfterSales() {
     enabled: !!companyId,
   });
 
+  const { data: clients = [] } = useQuery({
+    queryKey: ['as-clients-geo', companyId],
+    queryFn: async () => {
+      if (!companyId) return [];
+      try {
+        return await base44.entities.Client.filter({ company_id: companyId });
+      } catch (e) {
+        return [];
+      }
+    },
+    enabled: !!companyId,
+  });
+
+  const mapData = useMemo(() => {
+    const sOrds = Array.isArray(serviceOrders) ? serviceOrders : [];
+    return sOrds.map(so => {
+      const client = clients.find(c => c.id === so.client_id);
+      return {
+        ...so,
+        state_uf: (client?.state || '').toUpperCase().trim(),
+        city_name: client?.city || 'Localidade não informada',
+        client_name: client?.name || so.client_name || 'Cliente Oculto'
+      };
+    }).filter(s => s.state_uf);
+  }, [serviceOrders, clients]);
+
   const kpis = useMemo(() => {
     const sReqs = Array.isArray(serviceRequests) ? serviceRequests : [];
     const sOrds = Array.isArray(serviceOrders) ? serviceOrders : [];
     
-    // 1. All Items with metadata
     const allItems = [
         ...sReqs.map(r => ({ ...r, _type: 'SR', _status: String(r?.status || '').trim().toUpperCase() })),
         ...sOrds.map(o => ({ ...o, _type: 'OS', _status: String(o?.status || '').trim().toUpperCase() }))
     ];
 
-    // 2. Global category set (respects only Type Filter) for Efficiency
     const categorySet = allItems.filter(item => typeFilter === 'all' || item._type === typeFilter);
     const categoryTotal = categorySet.length;
     const categoryCompleted = categorySet.filter(i => ['ENCERRADA', 'CONCLUIDA', 'FINALIZADA'].includes(i._status)).length;
     const globalEfficiency = categoryTotal > 0 ? Math.round((categoryCompleted / categoryTotal) * 100) : 0;
 
-    // 3. Filtered subset (respects Type AND Status) for counts
     const filteredSubset = allItems.filter(item => {
         if (typeFilter !== 'all' && item._type !== typeFilter) return false;
         if (statusFilter === 'active') return item._status === 'ABERTA' || item._status === 'PENDENTE';
@@ -82,12 +107,11 @@ export default function AfterSales() {
   }, [serviceRequests, serviceOrders, typeFilter, statusFilter]);
 
   const technicalOperations = useMemo(() => {
-    const sReqs = Array.isArray(serviceRequests) ? serviceRequests : [];
-    const sOrds = Array.isArray(serviceOrders) ? serviceOrders : [];
-      if (!serviceRequests || !serviceOrders) return [];
+      const sReqs = Array.isArray(serviceRequests) ? serviceRequests : [];
+      const sOrds = Array.isArray(serviceOrders) ? serviceOrders : [];
       const combined = [
-          ...serviceRequests.map(sr => ({ ...sr, _type: 'SR', date: sr.created_date || sr.created_at, status: sr.status || 'Aberta' })),
-          ...serviceOrders.map(so => ({ ...so, _type: 'OS', date: so.created_date || so.created_at, status: so.status || 'Pendente' }))
+          ...sReqs.map(sr => ({ ...sr, _type: 'SR', date: sr.created_date || sr.created_at, status: sr.status || 'Aberta' })),
+          ...sOrds.map(so => ({ ...so, _type: 'OS', date: so.created_date || so.created_at, status: so.status || 'Pendente' }))
       ];
       combined.sort((a, b) => moment(b.date).valueOf() - moment(a.date).valueOf());
       return combined.filter(item => {
@@ -95,25 +119,30 @@ export default function AfterSales() {
         const s = String(item?.status || '').toUpperCase();
         if (statusFilter === 'active') return s === 'ABERTA' || s === 'PENDENTE';
         if (statusFilter === 'progress') return ['EM_ANDAMENTO', 'EM_ATENDIMENTO', 'PAUSADA', 'AGUARDANDO_PECA'].includes(s);
-        if (statusFilter === 'done') return s === 'ENCERRADA' || s === 'CONCLUIDA' || s === 'FINALIZADA';
+        if (statusFilter === 'done') return ['ENCERRADA', 'CONCLUIDA', 'FINALIZADA'].includes(s);
         return true;
       }).slice(0, 50);
   }, [serviceRequests, serviceOrders, typeFilter, statusFilter]);
 
   return (
-    <div className="bg-slate-50 min-h-screen">
-      <div className="max-w-[1800px] mx-auto p-4 lg:p-6 lg:pl-10 space-y-6">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
-          <div>
-            <h1 className="text-xl font-black text-slate-800 tracking-tight">Pós-Vendas</h1>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Controle Operacional Centralizado</p>
+    <div className="bg-[#0A0C10] min-h-screen text-slate-200 selection:bg-indigo-500/30">
+      <div className="max-w-[1800px] mx-auto p-4 lg:p-8 space-y-8">
+        {/* Header Section - Glassmorphism */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 bg-white/5 backdrop-blur-xl p-6 rounded-[2rem] border border-white/10 shadow-2xl relative overflow-hidden group">
+          <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+          <div className="relative z-10">
+            <h1 className="text-3xl font-black text-white tracking-tighter flex items-center gap-3">
+              <div className="w-1.5 h-8 bg-indigo-500 rounded-full shadow-[0_0_15px_rgba(99,102,241,0.5)]" />
+              Pós-Vendas
+            </h1>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.3em] mt-1 ml-4">Centro Intelligence Operacional</p>
           </div>
-          <div className="w-full md:w-auto">
-              <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+          <div className="w-full md:w-auto relative z-10">
+              <div className="relative group/search">
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 group-focus-within/search:text-indigo-400 transition-colors" />
                   <input 
-                      className="pl-9 pr-4 py-2 border-2 border-slate-100 rounded-xl text-xs w-full md:w-64 outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                      placeholder="Pesquisar..."
+                      className="pl-11 pr-6 py-3 bg-white/5 border border-white/10 rounded-2xl text-xs w-full md:w-80 outline-none focus:ring-2 focus:ring-indigo-500/50 focus:bg-white/10 transition-all placeholder:text-slate-600"
+                      placeholder="Buscar por cliente, OS ou técnico..."
                       value={search}
                       onChange={(e) => setSearch(e.target.value)}
                   />
@@ -121,168 +150,195 @@ export default function AfterSales() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            <Card className="border shadow-sm rounded-2xl bg-white">
-                <CardContent className="p-4">
-                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider mb-1">Total</p>
-                    <p className="text-2xl font-black text-slate-900">{kpis.total}</p>
-                </CardContent>
-            </Card>
-            <Card className="border border-red-100 bg-red-50/5 shadow-sm rounded-2xl">
-                <CardContent className="p-4 border-l-4 border-l-red-500">
-                    <p className="text-[9px] font-black text-red-500 uppercase tracking-wider mb-1">Pendentes</p>
-                    <p className="text-2xl font-black text-red-600">{kpis.pending}</p>
-                </CardContent>
-            </Card>
-            <Card className="border border-blue-100 bg-blue-50/5 shadow-sm rounded-2xl">
-                <CardContent className="p-4 border-l-4 border-l-blue-500">
-                    <p className="text-[9px] font-black text-blue-500 uppercase tracking-wider mb-1">Andamento</p>
-                    <p className="text-2xl font-black text-blue-600">{kpis.inProgress}</p>
-                </CardContent>
-            </Card>
-            <Card className="border border-emerald-100 bg-emerald-50/5 shadow-sm rounded-2xl">
-                <CardContent className="p-4 border-l-4 border-l-emerald-500">
-                    <p className="text-[9px] font-black text-emerald-500 uppercase tracking-wider mb-1">Eficiência</p>
-                    <p className="text-2xl font-black text-emerald-600">{kpis.efficiency}%</p>
-                </CardContent>
-            </Card>
-        </div>
-
-        <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
-          {/* Siderbar-like Links on the LEFT (1/4 space) */}
-          <div className="space-y-3 xl:col-span-1">
-              <h3 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] px-2 mb-2">Ações Rápidas</h3>
-              <div className="flex flex-col gap-2">
+        {/* Main Grid Layout */}
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
+          {/* Main Visual Center (Map + KPIs) */}
+          <div className="xl:col-span-9 space-y-8">
+            <BrazilInteractiveMap services={mapData} />
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 {[
-                    { title: 'Solicitações', icon: ClipboardList, page: 'ServiceRequests', color: 'border-blue-100 bg-white hover:border-blue-500', iconColor: 'text-blue-500' },
-                    { title: 'Ordens Técnicas', icon: Wrench, page: 'ServiceOrders', color: 'border-indigo-100 bg-white hover:border-indigo-500', iconColor: 'text-indigo-500' },
-                    { title: 'Relatórios', icon: Clock, page: 'ServiceReports', color: 'border-slate-100 bg-white hover:border-slate-500', iconColor: 'text-slate-500' },
+                  { label: 'Total Geral', value: kpis.total, color: 'from-blue-500/20 to-indigo-500/5', border: 'border-blue-500/20', iconColor: 'text-blue-400' },
+                  { label: 'Pendentes', value: kpis.pending, color: 'from-rose-500/20 to-rose-500/5', border: 'border-rose-500/20', iconColor: 'text-rose-400' },
+                  { label: 'Em Andamento', value: kpis.inProgress, color: 'from-amber-500/20 to-amber-500/5', border: 'border-amber-500/20', iconColor: 'text-amber-400' },
+                  { label: 'Eficiência Regional', value: `${kpis.efficiency}%`, color: 'from-emerald-500/20 to-emerald-500/5', border: 'border-emerald-500/20', iconColor: 'text-emerald-400' },
+                ].map((kpi, idx) => (
+                  <Card key={idx} className={`bg-gradient-to-br ${kpi.color} border ${kpi.border} shadow-xl rounded-[1.5rem] overflow-hidden group hover:scale-[1.02] transition-transform duration-300`}>
+                    <CardContent className="p-6">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{kpi.label}</p>
+                            <p className={`text-3xl font-black ${kpi.iconColor}`}>{kpi.value}</p>
+                          </div>
+                          <div className={`p-2 rounded-xl bg-white/5 ${kpi.iconColor}`}>
+                             <Activity className="h-4 w-4" />
+                          </div>
+                        </div>
+                    </CardContent>
+                  </Card>
+                ))}
+            </div>
+          </div>
+          
+          {/* Quick Actions / Sidebar Area */}
+          <div className="xl:col-span-3 space-y-8">
+            <div className="space-y-4">
+              <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] px-4">Operações Rápidas</h3>
+              <div className="flex flex-col gap-3">
+                {[
+                    { title: 'Solicitações', desc: 'Gerenciar chamados', icon: ClipboardList, page: 'ServiceRequests', color: 'hover:border-blue-500/50 hover:bg-blue-500/5', iconBg: 'bg-blue-500/10 text-blue-400' },
+                    { title: 'Ordens Técnicas', desc: 'Controle de campo', icon: Wrench, page: 'ServiceOrders', color: 'hover:border-indigo-500/50 hover:bg-indigo-500/5', iconBg: 'bg-indigo-500/10 text-indigo-400' },
+                    { title: 'Relatórios Full', desc: 'Análise de KPIs', icon: Clock, page: 'ServiceReports', color: 'hover:border-emerald-500/50 hover:bg-emerald-500/5', iconBg: 'bg-emerald-500/10 text-emerald-400' },
                 ].map((link, i) => (
                     <Link key={i} to={createPageUrl(link.page)} className="block group">
-                        <div className={`flex items-center justify-between p-3 border-2 rounded-xl transition-all group-hover:shadow-md ${link.color}`}>
-                            <div className="flex items-center gap-3">
-                                <div className={`p-1.5 rounded-lg bg-slate-50 ${link.iconColor}`}>
-                                  <link.icon className="h-4 w-4" />
+                        <div className={`p-4 bg-white/5 border border-white/10 rounded-[1.5rem] transition-all duration-300 group-hover:shadow-[0_0_20px_rgba(0,0,0,0.3)] ${link.color}`}>
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-4">
+                                    <div className={`p-3 rounded-2xl ${link.iconBg}`}>
+                                      <link.icon className="h-5 w-5" />
+                                    </div>
+                                    <div>
+                                      <p className="font-black text-sm text-white tracking-tight">{link.title}</p>
+                                      <p className="text-[10px] text-slate-500 font-bold uppercase">{link.desc}</p>
+                                    </div>
                                 </div>
-                                <span className="font-bold text-xs text-slate-700 tracking-tight">{link.title}</span>
+                                <ArrowRight className="h-4 w-4 text-slate-600 group-hover:text-white group-hover:translate-x-1 transition-all" />
                             </div>
-                            <ArrowRight className="h-3 w-3 text-slate-300 group-hover:text-slate-900 group-hover:translate-x-1 transition-all" />
                         </div>
                     </Link>
                 ))}
               </div>
-          </div>
+            </div>
 
-          {/* Main Table on the RIGHT (3/4 space) */}
-          <Card className="xl:col-span-3 shadow-sm border-2 border-slate-100 rounded-3xl overflow-hidden bg-white">
-            <CardHeader className="border-b border-slate-50 bg-white p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-              <CardTitle className="text-[10px] font-black uppercase tracking-[0.1em] flex items-center gap-2 text-slate-400">
-                  <ClipboardList className="h-4 w-4 text-slate-600" />
-                  Painel Operacional
-              </CardTitle>
-              <div className="flex flex-col gap-2 w-full sm:w-auto">
-                  <div className="flex bg-slate-50 p-1 rounded-xl shadow-inner gap-1 border border-slate-100 overflow-x-auto no-scrollbar">
-                      {['all', 'SR', 'OS'].map(t => (
-                          <Button 
-                              key={t}
-                              variant={typeFilter === t ? 'default' : 'ghost'} 
-                              size="sm" 
-                              className={`h-7 text-[10px] px-3 font-black rounded-lg transition-all ${
-                                typeFilter === t ? 'bg-white text-slate-900 shadow-sm border hover:bg-white' : 'text-slate-400 hover:text-slate-600'
-                              }`}
-                              onClick={() => setTypeFilter(t)}
-                          >{t === 'all' ? 'Tudo' : t === 'SR' ? 'Solicitações' : 'Ordens (OS)'}</Button>
-                      ))}
-                  </div>
-                  <div className="flex bg-slate-50 p-1 rounded-xl shadow-inner gap-1 border border-slate-100 overflow-x-auto no-scrollbar">
-                      <Button 
-                          variant={statusFilter === 'all' ? 'default' : 'ghost'} 
-                          size="sm" className={`h-7 text-[9px] px-2 font-black rounded-lg ${statusFilter === 'all' ? 'bg-slate-800 text-white shadow-md' : 'text-slate-400'}`}
-                          onClick={() => setStatusFilter('all')}
-                      >TODOS</Button>
-                      <Button 
-                          variant={statusFilter === 'active' ? 'default' : 'ghost'} 
-                          size="sm" className={`h-7 text-[9px] px-2 font-black rounded-lg border ${statusFilter === 'active' ? 'bg-red-600 text-white border-red-600 shadow-sm' : 'text-red-500 border-transparent hover:bg-red-50'}`}
-                          onClick={() => setStatusFilter('active')}
-                      >PENDENTES</Button>
-                      <Button 
-                          variant={statusFilter === 'progress' ? 'default' : 'ghost'} 
-                          size="sm" className={`h-7 text-[9px] px-2 font-black rounded-lg border ${statusFilter === 'progress' ? 'bg-blue-600 text-white border-blue-600 shadow-sm' : 'text-blue-500 border-transparent hover:bg-blue-50'}`}
-                          onClick={() => setStatusFilter('progress')}
-                      >ANDAMENTO</Button>
-                      <Button 
-                          variant={statusFilter === 'done' ? 'default' : 'ghost'} 
-                          size="sm" className={`h-7 text-[9px] px-2 font-black rounded-lg border ${statusFilter === 'done' ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm' : 'text-emerald-500 border-transparent hover:bg-emerald-50'}`}
-                          onClick={() => setStatusFilter('done')}
-                      >ENCERRADAS</Button>
-                  </div>
-              </div>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className="overflow-x-auto">
-                  <table className="w-full text-xs text-left">
-                      <thead className="bg-slate-50/50 text-slate-400 font-black uppercase text-[9px] tracking-wider">
-                          <tr>
-                              <th className="px-4 py-3 border-b">Doc</th>
-                              <th className="px-4 py-3 border-b w-[35%]">Cliente</th>
-                              <th className="px-4 py-3 border-b">Técnico/Responsável</th>
-                              <th className="px-4 py-3 border-b text-center">Status</th>
-                              <th className="px-4 py-3 border-b text-right">Ação</th>
-                          </tr>
-                      </thead>
-                      <tbody>
-                          {technicalOperations.map((item, i) => (
-                              <tr key={item.id || i} className="hover:bg-slate-50/60 border-b last:border-0 transition-all group">
-                                  <td className="px-4 py-3">
-                                      <div className="flex flex-col gap-0.5">
-                                          <Badge variant="outline" className={`text-[8px] h-4 font-black w-fit px-1 ${item._type === 'SR' ? 'border-blue-200 text-blue-700 bg-blue-50' : 'border-indigo-200 text-indigo-700 bg-indigo-50'}`}>
-                                              {item._type}
-                                          </Badge>
-                                          <span className="font-black text-slate-800">
-                                              {item._type === 'SR' ? item.request_number : item.os_number}
-                                          </span>
-                                      </div>
-                                  </td>
-                                  <td className="px-4 py-3 text-slate-700 font-bold uppercase truncate">
-                                      {item.client_name || '-'}
-                                  </td>
-                                  <td className="px-4 py-3 text-slate-500 font-semibold italic text-[10px]">
-                                      {item._type === 'OS' ? (item.technician_name || 'Agendamento') : '-'}
-                                  </td>
-                                  <td className="px-4 py-3 text-center">
-                                      <Badge 
-                                        variant={['ABERTA', 'PENDENTE'].includes(String(item.status || '').toUpperCase()) ? 'destructive' : 'default'} 
-                                        className={`text-[8px] font-black px-2 py-0.5 rounded shadow-sm ${
-                                            String(item.status || '').toUpperCase() === 'EM_ANDAMENTO' ? 'bg-blue-600' : 
-                                            ['ENCERRADA', 'CONCLUIDA', 'FINALIZADA'].includes(String(item.status || '').toUpperCase()) ? 'bg-emerald-600' : 'bg-slate-400'
-                                        }`}
-                                      >
-                                          {(item.status || 'Pendente').toUpperCase()}
-                                      </Badge>
-                                  </td>
-                                  <td className="px-5 py-4 text-right">
-                                      <Link to={createPageUrl(item._type === 'SR' ? `ServiceRequests?search=${item.request_number}` : `ServiceOrderDetail?id=${item.id}`)}>
-                                          <Button variant="ghost" size="sm" className="h-9 w-9 p-0 rounded-xl hover:bg-slate-900 hover:text-white transition-all">
-                                            <ArrowRight className="h-4 w-4" />
-                                          </Button>
-                                      </Link>
-                                  </td>
-                              </tr>
-                          ))}
-                          {technicalOperations.length === 0 && (
-                              <tr>
-                                  <td colSpan={5} className="p-12 text-center text-slate-200">
-                                      <ClipboardList className="h-10 w-10 mx-auto mb-2 opacity-5" />
-                                      <p className="text-xs font-black opacity-10 uppercase">Sem movimentação</p>
-                                  </td>
-                              </tr>
-                          )}
-                      </tbody>
-                  </table>
-              </div>
-            </CardContent>
-          </Card>
+            {/* Live Feed Placeholder */}
+            <div className="p-6 bg-gradient-to-b from-indigo-500/10 to-transparent border border-white/5 rounded-[2rem] space-y-4">
+               <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-emerald-500 rounded-full animate-ping" />
+                  <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Feed em Tempo Real</span>
+               </div>
+               <div className="space-y-3">
+                  <p className="text-[11px] text-slate-400 font-medium border-l-2 border-slate-800 pl-3 py-1">Nova OS #442 geolocalizada em SP</p>
+                  <p className="text-[11px] text-slate-400 font-medium border-l-2 border-slate-800 pl-3 py-1">Técnico Ricardo iniciou atendimento</p>
+               </div>
+            </div>
+          </div>
         </div>
+
+        {/* Operational Panel - Dark Theme */}
+        <Card className="shadow-2xl border border-white/5 rounded-[2.5rem] overflow-hidden bg-white/[0.02] backdrop-blur-sm">
+          <CardHeader className="border-b border-white/5 bg-white/[0.02] p-6 flex flex-col lg:flex-row items-center justify-between gap-6">
+            <CardTitle className="text-xs font-black uppercase tracking-[0.2em] flex items-center gap-3 text-slate-400">
+                <div className="p-2 bg-indigo-500/10 rounded-xl">
+                  <ClipboardList className="h-5 w-5 text-indigo-400" />
+                </div>
+                Monitoramento Operacional
+            </CardTitle>
+            <div className="flex flex-col sm:flex-row gap-4 w-full lg:w-auto">
+                <div className="flex bg-black/40 p-1.5 rounded-2xl border border-white/10 gap-1 overflow-x-auto no-scrollbar">
+                    {['all', 'SR', 'OS'].map(t => (
+                        <Button 
+                            key={t}
+                            variant="ghost" 
+                            size="sm" 
+                            className={`h-8 text-[10px] px-4 font-black rounded-xl transition-all ${
+                              typeFilter === t ? 'bg-indigo-500 text-white shadow-[0_0_15px_rgba(99,102,241,0.4)]' : 'text-slate-500 hover:text-white'
+                            }`}
+                            onClick={() => setTypeFilter(t)}
+                        >{t === 'all' ? 'Tudo' : t === 'SR' ? 'Solicitações' : 'Ordens (OS)'}</Button>
+                    ))}
+                </div>
+                <div className="flex bg-black/40 p-1.5 rounded-2xl border border-white/10 gap-1 overflow-x-auto no-scrollbar">
+                    {[
+                      { id: 'all', label: 'TODOS', color: 'bg-slate-700' },
+                      { id: 'active', label: 'PENDENTES', color: 'bg-rose-500' },
+                      { id: 'progress', label: 'ANDAMENTO', color: 'bg-blue-500' },
+                      { id: 'done', label: 'ENCERRADAS', color: 'bg-emerald-500' }
+                    ].map(st => (
+                      <Button 
+                          key={st.id}
+                          variant="ghost" 
+                          size="sm" 
+                          className={`h-8 text-[9px] px-3 font-black rounded-xl transition-all ${
+                            statusFilter === st.id ? `${st.color} text-white shadow-lg` : 'text-slate-500 hover:text-white'
+                          }`}
+                          onClick={() => setStatusFilter(st.id)}
+                      >{st.label}</Button>
+                    ))}
+                </div>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+                <table className="w-full text-xs text-left border-collapse">
+                    <thead className="bg-black/20 text-slate-500 font-bold uppercase text-[9px] tracking-[0.2em]">
+                        <tr>
+                            <th className="px-6 py-4 border-b border-white/5">Identificação</th>
+                            <th className="px-6 py-4 border-b border-white/5 w-[35%]">Cliente / Local</th>
+                            <th className="px-6 py-4 border-b border-white/5">Técnico Atribuído</th>
+                            <th className="px-6 py-4 border-b border-white/5 text-center">Status Operacional</th>
+                            <th className="px-6 py-4 border-b border-white/5 text-right">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                        {technicalOperations.map((item, i) => (
+                            <tr key={item.id || i} className="hover:bg-white/[0.03] transition-all group">
+                                <td className="px-6 py-5">
+                                    <div className="flex items-center gap-3">
+                                        <Badge variant="outline" className={`text-[8px] h-5 font-black uppercase px-2 ${item._type === 'SR' ? 'border-blue-500/30 text-blue-400 bg-blue-500/5' : 'border-indigo-500/30 text-indigo-400 bg-indigo-500/5'}`}>
+                                            {item._type}
+                                        </Badge>
+                                        <span className="font-black text-white text-sm tracking-tight">
+                                            {item._type === 'SR' ? item.request_number : item.os_number}
+                                        </span>
+                                    </div>
+                                </td>
+                                <td className="px-6 py-5">
+                                    <p className="text-white font-bold uppercase truncate max-w-[300px]">{item.client_name || '-'}</p>
+                                    <p className="text-[10px] text-slate-500 font-medium">Data: {moment(item.date).format('DD/MM/YYYY')}</p>
+                                </td>
+                                <td className="px-6 py-5">
+                                    <div className="flex items-center gap-2 text-slate-400 font-semibold italic text-[10px]">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-slate-600" />
+                                        {item._type === 'OS' ? (item.technician_name || 'Agendamento Pendente') : 'N/A'}
+                                    </div>
+                                </td>
+                                <td className="px-6 py-5 text-center">
+                                    <Badge 
+                                      variant="default"
+                                      className={`text-[8px] font-black px-2.5 py-1 rounded-md shadow-lg ${
+                                          ['ABERTA', 'PENDENTE'].includes(String(item.status || '').toUpperCase()) ? 'bg-rose-500 text-white' :
+                                          String(item.status || '').toUpperCase() === 'EM_ANDAMENTO' ? 'bg-blue-600 text-white' : 
+                                          ['ENCERRADA', 'CONCLUIDA', 'FINALIZADA'].includes(String(item.status || '').toUpperCase()) ? 'bg-emerald-600 text-white' : 
+                                          'bg-slate-700 text-slate-300'
+                                      }`}
+                                    >
+                                        {(item.status || 'Pendente').toUpperCase()}
+                                    </Badge>
+                                </td>
+                                <td className="px-6 py-5 text-right">
+                                    <Link to={createPageUrl(item._type === 'SR' ? `ServiceRequests?search=${item.request_number}` : `ServiceOrderDetail?id=${item.id}`)}>
+                                        <Button variant="ghost" size="sm" className="h-10 w-10 p-0 rounded-2xl hover:bg-white hover:text-black transition-all">
+                                          <ArrowRight className="h-5 w-5" />
+                                        </Button>
+                                    </Link>
+                                </td>
+                            </tr>
+                        ))}
+                        {technicalOperations.length === 0 && (
+                            <tr>
+                                <td colSpan={5} className="p-20 text-center">
+                                    <div className="flex flex-col items-center gap-4 opacity-20">
+                                      <ClipboardList className="h-16 w-16 text-slate-400" />
+                                      <p className="text-sm font-black uppercase tracking-widest">Nenhuma Operação Monitorada</p>
+                                    </div>
+                                </td>
+                            </tr>
+                        )}
+                    </tbody>
+                </table>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
