@@ -385,11 +385,12 @@ export default function AfterSales() {
                                 </td>
                                 <td className="px-6 py-5 text-right">
                                     <Link to={createPageUrl(item._type === 'SR' ? `ServiceRequests?search=${item.request_number}` : `ServiceOrderDetail?id=${item.id}`)}>
-                                        <Button variant="ghost" size="sm" className="h-10 w-10 p-0 rounded-2xl hover:bg-white hover:text-black transition-all">
+                                        <Button variant="ghost" size="sm" className="h-10 w-10 p-0 rounded-2xl hover:bg-white hover:text-black transition-all text-white/20 hover:text-white">
                                           <ArrowRight className="h-5 w-5" />
                                         </Button>
                                     </Link>
                                 </td>
+
                             </tr>
                         ))}
                     </tbody>
@@ -409,7 +410,7 @@ export default function AfterSales() {
                         disabled={currentPage === 1}
                         variant="ghost"
                         size="sm"
-                        className="h-8 w-8 p-0 rounded-lg hover:bg-indigo-500 hover:text-white transition-all disabled:opacity-20"
+                        className="h-8 w-8 p-0 rounded-lg hover:bg-indigo-500 hover:text-white transition-all disabled:opacity-5 text-slate-500 hover:text-white"
                       >
                         ←
                       </Button>
@@ -423,10 +424,11 @@ export default function AfterSales() {
                         disabled={currentPage === totalPages}
                         variant="ghost"
                         size="sm"
-                        className="h-8 w-8 p-0 rounded-lg hover:bg-indigo-500 hover:text-white transition-all disabled:opacity-20"
+                        className="h-8 w-8 p-0 rounded-lg hover:bg-indigo-500 hover:text-white transition-all disabled:opacity-5 text-slate-500 hover:text-white"
                       >
                         →
                       </Button>
+
                   </div>
                 </div>
               </div>
