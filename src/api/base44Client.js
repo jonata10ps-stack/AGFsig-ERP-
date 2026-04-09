@@ -269,6 +269,17 @@ export const base44 = {
           account_status: profile?.account_status || 'PENDENTE',
           active: profile?.active !== false
         };
+
+        // PERSISTÊNCIA: Se houver uma empresa salva no localStorage, usa ela
+        const storedCompanyId = localStorage.getItem('agfsig_last_company_id');
+        if (storedCompanyId) {
+          const hasAccess = cachedUser.company_ids?.includes(storedCompanyId) || cachedUser.company_id === storedCompanyId;
+          if (hasAccess) {
+            cachedUser.company_id = storedCompanyId;
+            cachedUser.current_company_id = storedCompanyId;
+          }
+        }
+
         lastFetch = now;
         return cachedUser;
       };
@@ -281,6 +292,9 @@ export const base44 = {
       if (!session) throw new Error('Não autenticado');
       const { error } = await supabase.from('User').update(data).eq('email', session.user.email);
       if (error) throw error;
+      if (data.company_id) {
+        localStorage.setItem('agfsig_last_company_id', data.company_id);
+      }
       if (typeof base44.auth.me.clearCache === 'function') {
         base44.auth.me.clearCache();
       }
