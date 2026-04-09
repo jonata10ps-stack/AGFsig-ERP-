@@ -194,8 +194,10 @@ export default function Products() {
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [importFiles, setImportFiles] = useState([]);
   const [importing, setImporting] = useState(false);
+  const [syncAllCompanies, setSyncAllCompanies] = useState(false);
 
   const [tablePage, setTablePage] = useState(0);
+
   const TABLE_PAGE_SIZE = 50;
 
   // Optimized query for server-side pagination
@@ -344,11 +346,11 @@ export default function Products() {
 
     setImporting(true);
     try {
-      // Ler todos os arquivos e combinar os itens
+      // 1. Parse Excel files
       const allParsed = await Promise.all(importFiles.map(parseExcelFile));
       const importedItems = allParsed.flat();
 
-      // Remover duplicatas dentro do próprio arquivo (mesmo SKU repetido)
+      // 2. Remove internal duplicates (same SKU in Excel)
       const seen = new Set();
       const uniqueItems = importedItems.filter(p => {
         if (seen.has(p.sku)) return false;
@@ -357,48 +359,56 @@ export default function Products() {
       });
 
       if (uniqueItems.length === 0) {
-        throw new Error('Nenhum produto válido encontrado (verifique se as colunas sku e name/nome existem)');
+        throw new Error('Nenhum produto válido encontrado');
       }
 
-      // Buscar produtos existentes para verificar SKUs
-      const existingProducts = await base44.entities.Product.filter({ company_id: companyId }, 'sku', 9999);
-      const existingSkus = new Set(existingProducts.map(p => p.sku?.toUpperCase()));
-
-      const newItems = uniqueItems.filter(p => !existingSkus.has(p.sku));
-      const skippedCount = uniqueItems.length - newItems.length;
-
-      if (newItems.length === 0) {
-        toast.warning(`Todos os ${uniqueItems.length} produto(s) já existem no cadastro. Nenhum item foi importado.`);
-        return;
+      // 3. Determine target companies
+      let targetCompanies = [companyId];
+      if (syncAllCompanies) {
+        const allCompanies = await base44.entities.Company.listAll({ active: true });
+        targetCompanies = allCompanies.map(c => c.id);
       }
 
-      const CHUNK_SIZE = 100;
-      let created = 0;
-      for (let i = 0; i < newItems.length; i += CHUNK_SIZE) {
-        const chunk = newItems.slice(i, i + CHUNK_SIZE);
-        await base44.entities.Product.bulkCreate(chunk.map(p => ({
-          company_id: companyId,
-          sku: p.sku, name: p.name, unit: p.unit, category: p.category,
-          min_stock: p.min_stock, max_stock: p.max_stock,
-          cost_price: p.cost_price, sale_price: p.sale_price, active: true
-        })));
-        created += chunk.length;
+      // 4. Process each company
+      for (const targetId of targetCompanies) {
+        const companyName = syncAllCompanies 
+          ? `Empresa ${targetId.substring(0, 8)}...` 
+          : 'empresa atual';
+          
+        toast.loading(`Processando ${companyName}...`, { id: 'import-status' });
+
+        // Get ALL existing products for this specific company to prevent duplicates
+        const existingProducts = await base44.entities.Product.listAll({ company_id: targetId });
+        const existingSkus = new Set(existingProducts.map(p => p.sku?.toUpperCase()));
+
+        const newItems = uniqueItems.filter(p => !existingSkus.has(p.sku));
+        
+        if (newItems.length > 0) {
+          const CHUNK_SIZE = 100;
+          for (let i = 0; i < newItems.length; i += CHUNK_SIZE) {
+            const chunk = newItems.slice(i, i + CHUNK_SIZE);
+            await base44.entities.Product.bulkCreate(chunk.map(p => ({
+              company_id: targetId,
+              sku: p.sku, name: p.name, unit: p.unit, category: p.category,
+              min_stock: p.min_stock, max_stock: p.max_stock,
+              cost_price: p.cost_price, sale_price: p.sale_price, active: true
+            })));
+          }
+        }
       }
 
-      queryClient.invalidateQueries({ queryKey: ['products', companyId] });
+      toast.success('Importação e sincronização concluídas com sucesso!', { id: 'import-status' });
+      queryClient.invalidateQueries({ queryKey: ['products'] });
       setImportDialogOpen(false);
       setImportFiles([]);
-
-      const msg = skippedCount > 0
-        ? `${created} produto(s) importado(s). ${skippedCount} já existiam e foram ignorados.`
-        : `${created} produto(s) importado(s) com sucesso.`;
-      toast.success(msg);
+      setSyncAllCompanies(false);
     } catch (error) {
-      toast.error('Erro ao importar: ' + error.message);
+      toast.error('Erro ao importar: ' + error.message, { id: 'import-status' });
     } finally {
       setImporting(false);
     }
   };
+
 
   if (companyLoading) {
     return <div className="text-center py-8">Carregando...</div>;
@@ -625,8 +635,27 @@ export default function Products() {
                 <p className="text-xs text-slate-500">{importFiles.length} arquivo(s) selecionado(s)</p>
               )}
             </div>
+            <div className="space-y-4 pt-2 border-t mt-4">
+              <label className="flex items-center gap-3 p-3 bg-indigo-50 rounded-lg cursor-pointer border border-indigo-100 group">
+                <input 
+                  type="checkbox" 
+                  checked={syncAllCompanies} 
+                  onChange={(e) => setSyncAllCompanies(e.target.checked)}
+                  className="h-4 w-4 rounded border-indigo-300 text-indigo-600 focus:ring-indigo-600"
+                />
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-indigo-900 group-hover:text-indigo-700 transition-colors">
+                    Sincronizar com todas as empresas
+                  </p>
+                  <p className="text-xs text-indigo-600">
+                    O cadastro será copiado para todas as filiais ativas.
+                  </p>
+                </div>
+              </label>
+            </div>
           </div>
           <DialogFooter>
+
             <Button variant="outline" onClick={() => { setImportDialogOpen(false); setImportFiles([]); }}>
               Cancelar
             </Button>
