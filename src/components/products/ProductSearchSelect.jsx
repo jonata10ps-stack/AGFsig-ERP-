@@ -27,19 +27,16 @@ export default function ProductSearchSelect({
   // Fetch selected product details if not already in local search results
   const { data: valueProduct } = useQuery({
     queryKey: ['product-single', value],
-    queryFn: () => value && companyId ? base44.entities.Product.filter({ id: value }).then(r => r[0]) : null,
-    enabled: !!value && !!companyId,
+    queryFn: () => value ? base44.entities.Product.filter({ id: value }).then(r => r[0]) : null,
+    enabled: !!value,
   });
 
-  const { data: result, isLoading } = useQuery({
-    queryKey: ['products-search', companyId, search, page],
+    queryKey: ['products-search', search, page],
     queryFn: async () => {
-      if (!companyId) return { data: [], count: 0 };
-      
-      const conditions = { company_id: companyId };
+      const conditions = {}; // MODO UNIFICADO: Busca em todas as empresas
       const searchFields = search ? ['sku', 'name', 'category'] : [];
       
-      return base44.entities.Product.queryPaginated(
+      const { data, count } = await base44.entities.Product.queryPaginated(
         conditions, 
         'sku', 
         PAGE_SIZE, 
@@ -47,8 +44,17 @@ export default function ProductSearchSelect({
         searchFields,
         search
       );
+
+      // Desduplicação básica por SKU
+      const uniqueData = data.reduce((acc, current) => {
+        const x = acc.find(item => item.sku === current.sku);
+        if (!x) return acc.concat([current]);
+        return acc;
+      }, []);
+
+      return { data: uniqueData, count };
     },
-    enabled: !!companyId && isOpen,
+    enabled: isOpen,
     staleTime: 30000,
   });
 

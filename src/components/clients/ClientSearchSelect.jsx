@@ -25,14 +25,12 @@ export default function ClientSearchSelect({
   const [page, setPage] = useState(0);
 
   const { data: result, isLoading } = useQuery({
-    queryKey: ['clients-search', companyId, search, page],
+    queryKey: ['clients-search', search, page],
     queryFn: async () => {
-      if (!companyId) return { data: [], count: 0 };
-      
-      const conditions = { company_id: companyId };
+      const conditions = {}; // MODO UNIFICADO: Busca em todas as empresas
       const searchFields = search ? ['name', 'document', 'code'] : [];
       
-      return base44.entities.Client.queryPaginated(
+      const { data, count } = await base44.entities.Client.queryPaginated(
         conditions, 
         'name', 
         PAGE_SIZE, 
@@ -40,8 +38,18 @@ export default function ClientSearchSelect({
         searchFields,
         search
       );
+
+      // Desduplicação básica por documento/código
+      const uniqueData = data.reduce((acc, current) => {
+        const key = current.document || current.code;
+        const x = acc.find(item => (item.document || item.code) === key);
+        if (!x) return acc.concat([current]);
+        return acc;
+      }, []);
+
+      return { data: uniqueData, count };
     },
-    enabled: !!companyId && isOpen,
+    enabled: isOpen,
     staleTime: 30000,
   });
 
