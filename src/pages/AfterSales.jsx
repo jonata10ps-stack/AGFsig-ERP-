@@ -210,15 +210,48 @@ export default function AfterSales() {
               </div>
             </div>
 
-            {/* Live Feed Placeholder */}
+            {/* Live Feed Dinâmico */}
             <div className="p-6 bg-gradient-to-b from-indigo-500/10 to-transparent border border-white/5 rounded-[2rem] space-y-4">
                <div className="flex items-center gap-2">
                   <div className="w-2 h-2 bg-emerald-500 rounded-full animate-ping" />
-                  <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Feed em Tempo Real</span>
+                  <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Atividade Recente</span>
                </div>
-               <div className="space-y-3">
-                  <p className="text-[11px] text-slate-400 font-medium border-l-2 border-slate-800 pl-3 py-1">Nova OS #442 geolocalizada em SP</p>
-                  <p className="text-[11px] text-slate-400 font-medium border-l-2 border-slate-800 pl-3 py-1">Técnico Ricardo iniciou atendimento</p>
+               <div className="space-y-4">
+                  {technicalOperations.slice(0, 5).map((item, idx) => {
+                      const clientFirst = (item.client_name || 'Cliente').split(' ')[0].toUpperCase();
+                      const status = String(item.status || '').toUpperCase();
+                      let message = '';
+                      
+                      if (item._type === 'SR') {
+                          message = `SOLICITAÇÃO #${item.request_number} RECEBIDA DE ${clientFirst}`;
+                      } else {
+                          if (['EM_ANDAMENTO', 'EM_ATENDIMENTO'].includes(status)) {
+                              message = `${(item.technician_name || 'TÉCNICO').split(' ')[0].toUpperCase()} EM ATENDIMENTO NA OS #${item.os_number}`;
+                          } else if (['ENCERRADA', 'CONCLUIDA'].includes(status)) {
+                              message = `OS #${item.os_number} CONCLUÍDA EM ${clientFirst}`;
+                          } else {
+                              message = `OS #${item.os_number} AGENDADA PARA ${clientFirst}`;
+                          }
+                      }
+
+                      return (
+                          <div key={idx} className="group/feed relative">
+                             <div className="absolute -left-3 top-0 bottom-0 w-[2px] bg-white/5 group-hover/feed:bg-indigo-500 transition-colors" />
+                             <p className="text-[10px] text-slate-300 font-black leading-tight tracking-tight mb-1 uppercase">
+                                {message}
+                             </p>
+                             <div className="flex items-center gap-2">
+                                <span className={`text-[8px] font-bold px-1.5 rounded-sm ${item._type === 'SR' ? 'bg-blue-500/20 text-blue-400' : 'bg-indigo-500/20 text-indigo-400'}`}>
+                                    {item._type}
+                                </span>
+                                <span className="text-[8px] text-slate-600 font-black uppercase">{moment(item.date).fromNow()}</span>
+                             </div>
+                          </div>
+                      );
+                  })}
+                  {technicalOperations.length === 0 && (
+                      <p className="text-[10px] text-slate-600 italic pl-3 uppercase font-black">Aguardando pulso do sistema...</p>
+                  )}
                </div>
             </div>
           </div>
