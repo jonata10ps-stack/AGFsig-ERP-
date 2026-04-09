@@ -316,18 +316,9 @@ export default function MaterialRequestDetail() {
   };
 
   const handlePrint = () => {
-    const printWindow = window.open('', '', 'height=600,width=800');
-    printWindow.document.write('<html><head><title>Solicitação de Materiais</title>');
-    printWindow.document.write('<style>body{font-family:Arial;padding:20px;}table{width:100%;border-collapse:collapse;}th,td{border:1px solid #ddd;padding:8px;text-align:left;}.header{margin-bottom:20px;}.title{font-size:20px;font-weight:bold;margin-bottom:10px;}</style>');
-    printWindow.document.write('</head><body>');
-    printWindow.document.write(printRef.current.innerHTML);
-    printWindow.document.write('</body></html>');
-    printWindow.document.close();
-    setTimeout(() => {
-      printWindow.print();
-      printWindow.close();
-    }, 250);
+    window.print();
   };
+
 
   if (loadingRequest && requestId) {
     return <div className="p-6"><Skeleton className="h-64 w-full" /></div>;
@@ -361,7 +352,24 @@ export default function MaterialRequestDetail() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      {/* Estilos para impressão estável em mobile */}
+      <style>{`
+        @media print {
+          body * { visibility: hidden; }
+          .print-section, .print-section * { visibility: visible; }
+          .print-section { 
+            position: absolute; 
+            left: 0; 
+            top: 0; 
+            width: 100%; 
+            padding: 20px;
+          }
+          .no-print { display: none !important; }
+        }
+      `}</style>
+
+      <div className="flex items-center justify-between no-print">
+
         <div className="flex items-center gap-4">
           <Link to={createPageUrl('MaterialRequests')}>
             <Button variant="ghost" size="icon">
@@ -448,9 +456,16 @@ export default function MaterialRequestDetail() {
           </div>
       </div>
 
-      {/* Print Template */}
-      <div ref={printRef} className="hidden print:block">
-        <div className="header">
+      {/* Print Template - Visível apenas na impressão */}
+      <div ref={printRef} className="hidden print:block print-section">
+        <style>{`
+          .print-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+          .print-table th, .print-table td { border: 1px solid #000; padding: 8px; text-align: left; font-size: 12px; }
+          .print-header { margin-bottom: 20px; border-bottom: 2px solid #000; pb-4; }
+          .print-title { font-size: 18px; font-weight: bold; }
+        `}</style>
+        <div className="print-header">
+
           <div className="title">Solicitação de Materiais - {request?.request_number}</div>
           <div>Solicitante: {request?.requester || form.requester}</div>
           <div>Departamento: {request?.department || form.department}</div>
@@ -480,11 +495,17 @@ export default function MaterialRequestDetail() {
             ))}
           </tbody>
         </table>
+        
+        <div className="mt-12 grid grid-cols-2 gap-8 text-center pt-8">
+          <div className="border-t border-black pt-2">Assinatura Solicitante</div>
+          <div className="border-t border-black pt-2">Assinatura Almoxarifado</div>
+        </div>
       </div>
 
       {/* Form */}
       {canEdit && (
-        <Card>
+        <Card className="no-print">
+
           <CardHeader>
             <CardTitle>Informações da Solicitação</CardTitle>
           </CardHeader>
@@ -540,7 +561,8 @@ export default function MaterialRequestDetail() {
       )}
 
       {/* Items */}
-      <Card>
+      <Card className="no-print">
+
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Itens Solicitados</CardTitle>
           {canEdit && (
@@ -631,7 +653,8 @@ export default function MaterialRequestDetail() {
 
       {/* Receiving Section */}
       {!isNew && pendingItems.length > 0 && request?.status !== 'CANCELADA' && (
-        <Card>
+        <Card className="no-print">
+
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Itens para Recebimento</CardTitle>
             <Button 
