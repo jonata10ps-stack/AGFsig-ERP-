@@ -5,7 +5,6 @@ import { Search, X, Package } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
-import { useCompanyId } from '@/components/useCompanyId';
 
 export default function ProductSearchSelect({ 
   value, 
@@ -15,7 +14,6 @@ export default function ProductSearchSelect({
   placeholder = 'Buscar produto...', 
   required = false 
 }) {
-  const { companyId } = useCompanyId();
   const [search, setSearch] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
@@ -31,6 +29,7 @@ export default function ProductSearchSelect({
     enabled: !!value,
   });
 
+  const { data: result, isLoading } = useQuery({
     queryKey: ['products-search', search, page],
     queryFn: async () => {
       const conditions = {}; // MODO UNIFICADO: Busca em todas as empresas
@@ -46,7 +45,7 @@ export default function ProductSearchSelect({
       );
 
       // Desduplicação básica por SKU
-      const uniqueData = data.reduce((acc, current) => {
+      const uniqueData = (data || []).reduce((acc, current) => {
         const x = acc.find(item => item.sku === current.sku);
         if (!x) return acc.concat([current]);
         return acc;
@@ -80,7 +79,6 @@ export default function ProductSearchSelect({
   }, []);
 
   const isSearching = search.trim() !== '';
-
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
   const pagedProducts = React.useMemo(() => {
