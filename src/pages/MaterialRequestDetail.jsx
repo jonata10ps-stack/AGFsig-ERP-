@@ -132,14 +132,12 @@ function ItemDialog({ open, onClose, products, onSave }) {
 
 export default function MaterialRequestDetail() {
   const queryClient = useQueryClient();
-  const printRef = useRef();
   const urlParams = new URLSearchParams(window.location.search);
   const requestId = urlParams.get('id');
   const isNew = !requestId;
 
   const [itemDialogOpen, setItemDialogOpen] = useState(false);
   const [deleteItemConfirm, setDeleteItemConfirm] = useState(null);
-  const [receiveDialogOpen, setReceiveDialogOpen] = useState(false);
   const [selectedItems, setSelectedItems] = useState([]);
   const [labelsDialogOpen, setLabelsDialogOpen] = useState(false);
   const [form, setForm] = useState({
@@ -183,7 +181,6 @@ export default function MaterialRequestDetail() {
       const user = await base44.auth.me();
       const requestNumber = `SOL-${Date.now().toString().slice(-8)}`;
       
-      // 1. Criar a Solicitação
       const newRequest = await base44.entities.MaterialRequest.create({
         company_id: user.company_id,
         ...form,
@@ -191,7 +188,6 @@ export default function MaterialRequestDetail() {
         status: 'ABERTA'
       });
 
-      // 2. Criar os Itens com colunas explícitas para garantir persistência
       const itemsToCreate = items.map(item => ({ 
         company_id: user.company_id,
         request_id: newRequest.id,
@@ -211,23 +207,13 @@ export default function MaterialRequestDetail() {
     onSuccess: (newRequest) => {
       queryClient.invalidateQueries({ queryKey: ['material-requests'] });
       toast.success('Solicitação salva com sucesso');
-      // Forçar recarregamento para entrar no modo de edição com o novo ID
       setTimeout(() => {
         window.location.href = `?id=${newRequest.id}`;
       }, 500);
     },
     onError: (err) => {
       toast.error('Erro ao salvar solicitação: ' + err.message);
-      console.error('Save error:', err);
     }
-  });
-
-  const updateItemMutation = useMutation({
-    mutationFn: ({ itemId, data }) => base44.entities.MaterialRequestItem.update(itemId, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['material-request-items', requestId] });
-      toast.success('Item atualizado');
-    },
   });
 
   const deleteItemMutation = useMutation({
@@ -266,7 +252,6 @@ export default function MaterialRequestDetail() {
   const cancelRequestMutation = useMutation({
     mutationFn: async () => {
       await base44.entities.MaterialRequest.update(requestId, { status: 'CANCELADA' });
-      // Também marcar itens como pendência zero
       if (items.length > 0) {
         await Promise.all(items.map(item => 
           base44.entities.MaterialRequestItem.update(item.id, { qty_pending: 0 })
@@ -316,70 +301,83 @@ export default function MaterialRequestDetail() {
   };
 
   const handlePrint = () => {
-    window.print();
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    document.body.appendChild(iframe);
+    
+    const doc = iframe.contentWindow.document;
+    doc.write(\`
+      <html>
+        <head>
+          <title>Solicitação - \${request?.request_number || ''}</title>
+          <style>
+            body { font-family: sans-serif; padding: 20px; color: #333; }
+            .header { border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 20px; }
+            .title { font-size: 18px; font-weight: bold; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th, td { border: 1px solid #000; padding: 10px; text-align: left; font-size: 11px; }
+            th { background: #f4f4f4; }
+            .footer { margin-top: 60px; display: flex; justify-content: space-around; text-align: center; }
+            .sign { border-top: 1px solid #000; padding-top: 5px; width: 250px; font-size: 10px; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="title">Solicitação de Materiais - \${request?.request_number || ''}</div>
+            <p><strong>Solicitante:</strong> \${request?.requester || form.requester || ''}</p>
+            <p><strong>Departamento:</strong> \${request?.department || form.department || ''}</p>
+            <p><strong>Data:</strong> \${format(new Date(), 'dd/MM/yyyy')}</p>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>SKU</th>
+                <th>Produto</th>
+                <th style="text-align:right">Solicitado</th>
+                <th style="text-align:right">Recebido</th>
+                <th style="text-align:right">Pendente</th>
+                <th>Observações</th>
+              </tr>
+            </thead>
+            <tbody>
+              \${(items || []).map(item => \`
+                <tr>
+                  <td>\${item.product_sku || ''}</td>
+                  <td>\${item.product_name || ''}</td>
+                  <td style="text-align:right">\${item.qty_requested || 0}</td>
+                  <td style="text-align:right">\${item.qty_received || 0}</td>
+                  <td style="text-align:right">\${item.qty_pending ?? item.qty_requested}</td>
+                  <td>\${item.notes || '-'}</td>
+                </tr>
+              \`).join('')}
+            </tbody>
+          </table>
+          <div class="footer">
+            <div class="sign">Assinatura Solicitante</div>
+            <div class="sign">Assinatura Almoxarifado</div>
+          </div>
+        </body>
+      </html>
+    \`);
+    doc.close();
+    
+    setTimeout(() => {
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+      document.body.removeChild(iframe);
+    }, 500);
   };
-
 
   if (loadingRequest && requestId) {
     return <div className="p-6"><Skeleton className="h-64 w-full" /></div>;
   }
 
   const canEdit = isNew || request?.status === 'ABERTA' || request?.status === 'PARCIAL';
-  const displayItems = items; // Usar o estado 'items' que já é sincronizado pelo useEffect
-
-  const pendingItems = displayItems?.filter(item => (item.qty_pending ?? item.qty_requested) > 0) || [];
-
-  const handleReceiveItems = () => {
-    if (selectedItems.length === 0) {
-      toast.error('Selecione pelo menos um item para receber');
-      return;
-    }
-    // Redireciona para recebimento com IDs selecionados
-    const selectedIds = selectedItems.map(i => i.id).join(',');
-    window.location.href = createPageUrl(`InventoryReceive?request=${requestId}&items=${selectedIds}`);
-  };
-
-  const toggleItemSelection = (item) => {
-    setSelectedItems(prev => {
-      const exists = prev.find(i => i.id === item.id);
-      if (exists) {
-        return prev.filter(i => i.id !== item.id);
-      } else {
-        return [...prev, item];
-      }
-    });
-  };
+  const pendingItems = items?.filter(item => (item.qty_pending ?? item.qty_requested) > 0) || [];
 
   return (
     <div className="space-y-6">
-      {/* Estilos para impressão estável em mobile */}
-      <style>{`
-        @media print {
-          body * { visibility: hidden !important; }
-          .print-material-template, .print-material-template * { 
-            visibility: visible !important; 
-            display: block !important; 
-          }
-          .print-material-template { 
-            position: absolute !important; 
-            left: 0 !important; 
-            top: 0 !important; 
-            width: 100% !important; 
-            padding: 30px !important;
-            background: white !important;
-          }
-          .no-print { display: none !important; }
-          .print-table { width: 100%; border-collapse: collapse; margin-top: 25px; }
-          .print-table th, .print-table td { border: 1px solid #000; padding: 10px; text-align: left; font-size: 11px; }
-          .print-header { margin-bottom: 30px; border-bottom: 2px solid #000; padding-bottom: 15px; }
-          .print-title { font-size: 18px; font-weight: bold; }
-        }
-      `}</style>
-
-
-
-      <div className="flex items-center justify-between no-print">
-
+      <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Link to={createPageUrl('MaterialRequests')}>
             <Button variant="ghost" size="icon">
@@ -388,7 +386,7 @@ export default function MaterialRequestDetail() {
           </Link>
           <div>
             <h1 className="text-2xl font-bold text-slate-900">
-              {isNew ? 'Nova Solicitação' : `Solicitação ${request?.request_number}`}
+              {isNew ? 'Nova Solicitação' : \`Solicitação \${request?.request_number}\`}
             </h1>
             {request && (
               <Badge className={STATUS_CONFIG[request.status]?.color}>
@@ -397,324 +395,199 @@ export default function MaterialRequestDetail() {
             )}
           </div>
         </div>
-          <div className="flex gap-2">
-            {!isNew && request?.status !== 'CANCELADA' && (
-              <>
-                <Button onClick={handlePrint} variant="outline">
-                  <Printer className="h-4 w-4 mr-2" />
-                  Imprimir
-                </Button>
-                {request?.status !== 'ATENDIDA' && (
-                  <>
-                    <Button 
-                      variant="outline" 
-                      className="text-red-600 border-red-200 hover:bg-red-50"
-                      onClick={() => {
-                        if (confirm('Tem certeza que deseja CALCELAR esta solicitação?')) {
-                          cancelRequestMutation.mutate();
-                        }
-                      }}
-                      disabled={cancelRequestMutation.isPending}
-                    >
-                      <Ban className="h-4 w-4 mr-2" />
-                      {cancelRequestMutation.isPending ? 'Cancelando...' : 'Cancelar Solicitação'}
+        <div className="flex gap-2">
+          {!isNew && request?.status !== 'CANCELADA' && (
+            <>
+              <Button onClick={handlePrint} variant="outline">
+                <Printer className="h-4 w-4 mr-2" />
+                Imprimir
+              </Button>
+              {request?.status !== 'ATENDIDA' && (
+                <>
+                  <Button 
+                    variant="outline" 
+                    className="text-red-600 border-red-200 hover:bg-red-50"
+                    onClick={() => {
+                      if (confirm('Tem certeza que deseja CALCELAR esta solicitação?')) {
+                        cancelRequestMutation.mutate();
+                      }
+                    }}
+                    disabled={cancelRequestMutation.isPending}
+                  >
+                    <Ban className="h-4 w-4 mr-2" />
+                    {cancelRequestMutation.isPending ? 'Cancelando...' : 'Cancelar Solicitação'}
+                  </Button>
+                  <Link to={createPageUrl(\`InventoryReceive?request=\${requestId}\`)}>
+                    <Button className="bg-emerald-600 hover:bg-emerald-700">
+                      <Package className="h-4 w-4 mr-2" />
+                      Receber
                     </Button>
-                    <Link to={createPageUrl(`InventoryReceive?request=${requestId}`)}>
-                      <Button className="bg-emerald-600 hover:bg-emerald-700">
-                        <Package className="h-4 w-4 mr-2" />
-                        Receber
-                      </Button>
-                    </Link>
-                  </>
-                )}
-              </>
-            )}
-            {isNew && (
-              <Button 
-                onClick={() => saveMutation.mutate()} 
-                disabled={saveMutation.isPending || items.length === 0}
-                className="bg-slate-900 text-white"
-              >
-                {saveMutation.isPending ? (
-                  <>
-                    <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
-                    Gravando Solicitação...
-                  </>
-                ) : (
-                  <>
-                    <Save className="h-4 w-4 mr-2" />
-                    Salvar Solicitação
-                  </>
-                )}
-              </Button>
-            )}
-            {!isNew && request?.status === 'PARCIAL' && pendingItems.length > 0 && (
-              <Button 
-                variant="outline"
-                className="text-amber-700 border-amber-200 hover:bg-amber-50"
-                onClick={() => {
-                  if (confirm('Deseja encerrar esta solicitação e limpar todos os resíduos pendentes?')) {
-                    clearAllResiduesMutation.mutate();
-                  }
-                }}
-                disabled={clearAllResiduesMutation.isPending}
-              >
-                <CheckSquare className="h-4 w-4 mr-2" />
-                {clearAllResiduesMutation.isPending ? 'Limpando...' : 'Limpar Resíduos'}
-              </Button>
-            )}
-          </div>
-      </div>
-
-      {/* Print Template - Totalmente oculto via inline style no modo tela */}
-      <div 
-        ref={printRef} 
-        className="print-material-template" 
-        style={{ display: 'none' }}
-      >
-        <div className="print-header">
-
-
-
-          <div className="title">Solicitação de Materiais - {request?.request_number}</div>
-          <div>Solicitante: {request?.requester || form.requester}</div>
-          <div>Departamento: {request?.department || form.department}</div>
-          <div>Data: {format(new Date(), 'dd/MM/yyyy')}</div>
-        </div>
-        <table>
-          <thead>
-            <tr>
-              <th>SKU</th>
-              <th>Produto</th>
-              <th>Qtd Solicitada</th>
-              <th>Qtd Recebida</th>
-              <th>Qtd Pendente</th>
-              <th>Obs</th>
-            </tr>
-          </thead>
-          <tbody>
-            {displayItems?.map((item, i) => (
-              <tr key={i}>
-                <td>{item.product_sku}</td>
-                <td>{item.product_name}</td>
-                <td>{item.qty_requested}</td>
-                <td>{item.qty_received || 0}</td>
-                <td>{item.qty_pending || item.qty_requested}</td>
-                <td>{item.notes || '-'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        
-        <div className="mt-12 grid grid-cols-2 gap-8 text-center pt-8">
-          <div className="border-t border-black pt-2">Assinatura Solicitante</div>
-          <div className="border-t border-black pt-2">Assinatura Almoxarifado</div>
-        </div>
-      </div>
-
-      {/* Form */}
-      {canEdit && (
-        <Card className="no-print">
-
-          <CardHeader>
-            <CardTitle>Informações da Solicitação</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Descrição</Label>
-                <Input
-                  value={form.description}
-                  onChange={(e) => setForm({ ...form, description: e.target.value })}
-                  placeholder="Ex: Materiais para produção"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Solicitante</Label>
-                <Input
-                  value={form.requester}
-                  onChange={(e) => setForm({ ...form, requester: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Departamento</Label>
-                <Input
-                  value={form.department}
-                  onChange={(e) => setForm({ ...form, department: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Prioridade</Label>
-                <Select value={form.priority} onValueChange={(v) => setForm({ ...form, priority: v })}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="BAIXA">Baixa</SelectItem>
-                    <SelectItem value="NORMAL">Normal</SelectItem>
-                    <SelectItem value="ALTA">Alta</SelectItem>
-                    <SelectItem value="URGENTE">Urgente</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Data Necessária</Label>
-                <Input
-                  type="date"
-                  value={form.needed_date}
-                  onChange={(e) => setForm({ ...form, needed_date: e.target.value })}
-                />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Items */}
-      <Card className="no-print">
-
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>Itens Solicitados</CardTitle>
-          {canEdit && (
-            <Button onClick={() => setItemDialogOpen(true)} size="sm">
-              <Plus className="h-4 w-4 mr-2" />
-              Adicionar Item
-            </Button>
+                  </Link>
+                </>
+              )}
+            </>
           )}
-        </CardHeader>
-        <CardContent className="p-0">
-          {loadingItems ? (
-            <div className="p-6"><Skeleton className="h-32 w-full" /></div>
-          ) : displayItems?.length === 0 ? (
-            <div className="text-center py-12">
-              <p className="text-slate-500">Nenhum item adicionado</p>
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>SKU</TableHead>
-                  <TableHead>Produto</TableHead>
-                  <TableHead className="text-right">Qtd Solicitada</TableHead>
-                  <TableHead className="text-right">Qtd Recebida</TableHead>
-                  <TableHead className="text-right">Qtd Pendente</TableHead>
-                  <TableHead>Observações</TableHead>
-                  {(!isNew && request?.status !== 'CANCELADA') && <TableHead className="w-12"></TableHead>}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {displayItems?.map((item, index) => (
-                  <TableRow key={item.id || index}>
-                    <TableCell className="font-mono text-indigo-600">{item.product_sku}</TableCell>
-                    <TableCell className="font-medium">{item.product_name}</TableCell>
-                    <TableCell className="text-right">{item.qty_requested}</TableCell>
-                    <TableCell className="text-right">
-                      <Badge className="bg-blue-100 text-blue-700">
-                        {item.qty_received || 0}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Badge className={(item.qty_pending || item.qty_requested) > 0 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}>
-                        {item.qty_pending ?? item.qty_requested}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>{item.notes || '-'}</TableCell>
-                    {isNew ? (
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleRemoveItem(index, null)}
-                          className="text-red-500"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
-                    ) : canEdit && request?.status !== 'ATENDIDA' ? (
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => setDeleteItemConfirm({ id: item.id, index })}
-                          className="text-red-500"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
-                    ) : request?.status !== 'CANCELADA' && (item.qty_pending > 0) && (
-                      <TableCell>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => clearResidueMutation.mutate(item.id)}
-                          className="text-xs text-red-600"
-                        >
-                          Limpar Resíduo
-                        </Button>
-                      </TableCell>
-                    )}
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Receiving Section */}
-      {!isNew && pendingItems.length > 0 && request?.status !== 'CANCELADA' && (
-        <Card className="no-print">
-
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>Itens para Recebimento</CardTitle>
+          {isNew && (
             <Button 
-              onClick={handleReceiveItems}
-              disabled={selectedItems.length === 0}
-              className="bg-emerald-600 hover:bg-emerald-700"
+              onClick={() => saveMutation.mutate()} 
+              disabled={saveMutation.isPending || items.length === 0}
+              className="bg-slate-900 text-white"
             >
-              <Package className="h-4 w-4 mr-2" />
-              Gerar Etiquetas ({selectedItems.length})
+              {saveMutation.isPending ? (
+                <>
+                  <div className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
+                  Gravando Solicitação...
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4 mr-2" />
+                  Salvar Solicitação
+                </>
+              )}
             </Button>
+          )}
+          {!isNew && request?.status === 'PARCIAL' && pendingItems.length > 0 && (
+            <Button 
+              variant="outline"
+              className="text-amber-700 border-amber-200 hover:bg-amber-50"
+              onClick={() => {
+                if (confirm('Deseja encerrar esta solicitação e limpar todos os resíduos pendentes?')) {
+                  clearAllResiduesMutation.mutate();
+                }
+              }}
+              disabled={clearAllResiduesMutation.isPending}
+            >
+              <CheckSquare className="h-4 w-4 mr-2" />
+              {clearAllResiduesMutation.isPending ? 'Limpando...' : 'Limpar Resíduos'}
+            </Button>
+          )}
+        </div>
+      </div>
+
+      <div className="grid gap-6">
+        {canEdit && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Informações da Solicitação</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label>Descrição</Label>
+                  <Input
+                    value={form.description}
+                    onChange={(e) => setForm({ ...form, description: e.target.value })}
+                    placeholder="Ex: Materiais para produção"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Solicitante</Label>
+                  <Input
+                    value={form.requester}
+                    onChange={(e) => setForm({ ...form, requester: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Departamento</Label>
+                  <Input
+                    value={form.department}
+                    onChange={(e) => setForm({ ...form, department: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Prioridade</Label>
+                  <Select value={form.priority} onValueChange={(v) => setForm({ ...form, priority: v })}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="BAIXA">Baixa</SelectItem>
+                      <SelectItem value="NORMAL">Normal</SelectItem>
+                      <SelectItem value="ALTA">Alta</SelectItem>
+                      <SelectItem value="URGENTE">Urgente</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Data Necessária</Label>
+                  <Input
+                    type="date"
+                    value={form.needed_date}
+                    onChange={(e) => setForm({ ...form, needed_date: e.target.value })}
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle>Itens Solicitados</CardTitle>
+            {canEdit && (
+              <Button onClick={() => setItemDialogOpen(true)} size="sm">
+                <Plus className="h-4 w-4 mr-2" />
+                Adicionar Item
+              </Button>
+            )}
           </CardHeader>
           <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-12"></TableHead>
-                  <TableHead>SKU</TableHead>
-                  <TableHead>Produto</TableHead>
-                  <TableHead className="text-right">Qtd Pendente</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {pendingItems.map((item) => {
-                  const isSelected = selectedItems.find(i => i.id === item.id);
-                  return (
-                    <TableRow 
-                      key={item.id} 
-                      className={isSelected ? 'bg-emerald-50' : ''}
-                    >
-                      <TableCell>
-                        <Checkbox
-                          checked={!!isSelected}
-                          onCheckedChange={() => toggleItemSelection(item)}
-                        />
-                      </TableCell>
+            {loadingItems ? (
+              <div className="p-6"><Skeleton className="h-32 w-full" /></div>
+            ) : items?.length === 0 ? (
+              <div className="text-center py-12">
+                <p className="text-slate-500">Nenhum item adicionado</p>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>SKU</TableHead>
+                    <TableHead>Produto</TableHead>
+                    <TableHead className="text-right">Qtd Solicitada</TableHead>
+                    <TableHead className="text-right">Qtd Recebida</TableHead>
+                    <TableHead className="text-right">Qtd Pendente</TableHead>
+                    <TableHead>Observações</TableHead>
+                    {canEdit && <TableHead className="w-12"></TableHead>}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {items?.map((item, index) => (
+                    <TableRow key={item.id || index}>
                       <TableCell className="font-mono text-indigo-600">{item.product_sku}</TableCell>
                       <TableCell className="font-medium">{item.product_name}</TableCell>
+                      <TableCell className="text-right">{item.qty_requested}</TableCell>
                       <TableCell className="text-right">
-                        <Badge className="bg-amber-100 text-amber-700">
+                        <Badge variant="outline" className="bg-blue-50">
+                          {item.qty_received || 0}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Badge className={(item.qty_pending ?? item.qty_requested) > 0 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}>
                           {item.qty_pending ?? item.qty_requested}
                         </Badge>
                       </TableCell>
+                      <TableCell>{item.notes || '-'}</TableCell>
+                      {canEdit && (
+                        <TableCell>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setDeleteItemConfirm({ id: item.id, index })}
+                            className="text-red-500"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      )}
                     </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
           </CardContent>
         </Card>
-      )}
+      </div>
 
       <ItemDialog
         open={itemDialogOpen}
@@ -739,53 +612,6 @@ export default function MaterialRequestDetail() {
               {deleteItemMutation.isPending ? 'Removendo...' : 'Remover'}
             </Button>
           </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Labels Dialog */}
-      <Dialog open={labelsDialogOpen} onOpenChange={setLabelsDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Etiquetas de Recebimento</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <Button 
-              onClick={() => window.print()} 
-              className="w-full print:hidden"
-            >
-              <Printer className="h-4 w-4 mr-2" />
-              Imprimir Etiquetas
-            </Button>
-            
-            <div className="grid grid-cols-2 gap-4 print:grid-cols-3">
-              {selectedItems.map((item) => (
-                <div 
-                  key={item.id} 
-                  className="border-2 border-slate-300 rounded-lg p-4 print:border-black print:break-inside-avoid"
-                >
-                  <div className="flex flex-col items-center text-center space-y-2">
-                    <QRCodeSVG 
-                      value={item.product_sku} 
-                      size={120} 
-                      level="M"
-                    />
-                    <div className="w-full">
-                      <p className="text-xs text-slate-500">SKU</p>
-                      <p className="font-mono font-bold text-sm">{item.product_sku}</p>
-                    </div>
-                    <div className="w-full">
-                      <p className="text-xs text-slate-500">Produto</p>
-                      <p className="font-medium text-xs">{item.product_name}</p>
-                    </div>
-                    <div className="w-full border-t pt-2 mt-2">
-                      <p className="text-xs text-slate-400">Qtd: ____________</p>
-                      <p className="text-xs text-slate-400 mt-1">Local: ____________</p>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
         </DialogContent>
       </Dialog>
     </div>
