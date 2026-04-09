@@ -215,21 +215,43 @@ export default function Layout({ children, currentPageName }) {
   }, []);
 
   useEffect(() => {
-    const handleFullscreenChange = () => {
-      if (!document.fullscreenElement && sidebarCollapsed) {
-        setSidebarCollapsed(false);
-      }
+    let idleTimeout;
+    const INACTIVITY_LIMIT = 30000; // 30 seconds
+
+    const resetIdleTimer = () => {
+      if (idleTimeout) clearTimeout(idleTimeout);
+      idleTimeout = setTimeout(() => {
+        // Auto-collapse sidebar after 30s of inactivity
+        // Note: Browsers block automatic Fullscreen without a click, 
+        // but we can still minimize the UI.
+        setSidebarCollapsed(true);
+      }, INACTIVITY_LIMIT);
     };
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
-  }, [sidebarCollapsed]);
+
+    // Events to track activity
+    const activityEvents = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart'];
+    
+    activityEvents.forEach(event => {
+      document.addEventListener(event, resetIdleTimer);
+    });
+
+    resetIdleTimer(); // Initial start
+
+    return () => {
+      if (idleTimeout) clearTimeout(idleTimeout);
+      activityEvents.forEach(event => {
+        document.removeEventListener(event, resetIdleTimer);
+      });
+    };
+  }, []);
 
   const toggleSidebar = (collapsed) => {
     setSidebarCollapsed(collapsed);
     if (collapsed) {
       if (document.documentElement.requestFullscreen) {
         document.documentElement.requestFullscreen().catch(err => {
-          console.error(`Error attempting to enable full-screen mode: ${err.message}`);
+          // Quietly fail as browsers often block this
+          console.log("Fullscreen blocked or not supported on this device.");
         });
       }
     } else {
@@ -238,6 +260,7 @@ export default function Layout({ children, currentPageName }) {
       }
     }
   };
+
 
   const handleLogout = () => {
     base44.auth.logout();
