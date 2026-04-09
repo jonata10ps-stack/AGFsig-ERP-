@@ -267,8 +267,16 @@ export default function Clients() {
     }
   });
 
-  const clients = result?.data || [];
+  const clientsRaw = result?.data || [];
   const totalCount = result?.count || 0;
+
+  // Desduplicação por Documento ou Código: Remove repetidos de empresas diferentes
+  const clients = clientsRaw.reduce((acc, current) => {
+    const key = current.document || current.code;
+    const x = acc.find(item => (item.document || item.code) === key);
+    if (!x) return acc.concat([current]);
+    else return acc;
+  }, []);
 
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.Client.create({ ...data, company_id: companyId }),

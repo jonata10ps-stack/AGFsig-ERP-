@@ -197,8 +197,15 @@ export default function Products() {
     }
   });
 
-  const products = result?.data || [];
+  const productsRaw = result?.data || [];
   const totalCount = result?.count || 0;
+
+  // Desduplicação por SKU: Se o mesmo SKU existe em várias empresas, mostra apenas um.
+  const products = productsRaw.reduce((acc, current) => {
+    const x = acc.find(item => item.sku === current.sku);
+    if (!x) return acc.concat([current]);
+    else return acc;
+  }, []);
 
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.Product.create({ ...data, company_id: companyId }),
