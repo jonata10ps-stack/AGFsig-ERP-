@@ -559,7 +559,22 @@ export default function Layout({ children, currentPageName }) {
           </header>
         )}
 
+        {/* Floating Toggle Button for Zen Mode (Mobile/Tablet accessibility) */}
+        {sidebarCollapsed && (
+          <div className="fixed top-4 left-4 z-[60] animate-in fade-in zoom-in duration-300">
+            <Button
+              onClick={() => toggleSidebar(false)}
+              className="h-12 w-12 rounded-2xl bg-white/90 backdrop-blur-md shadow-2xl border border-indigo-100 flex items-center justify-center group hover:bg-white transition-all active:scale-90"
+              variant="secondary"
+              title="Mostrar menu"
+            >
+              <PanelLeftOpen className="h-6 w-6 text-indigo-500 group-hover:text-indigo-600 transition-colors" />
+            </Button>
+          </div>
+        )}
+
         {/* Page content */}
+
         <main className={cn(
           "transition-all duration-300",
           sidebarCollapsed ? "p-0" : "p-4 lg:p-8"
