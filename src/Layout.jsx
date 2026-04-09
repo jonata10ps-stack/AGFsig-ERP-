@@ -239,13 +239,14 @@ export default function Layout({ children, currentPageName }) {
             )}
             title={sidebarCollapsed && !mobile ? item.name : undefined}
           >
-            <span className="flex items-center gap-3">
-              <Icon className={cn("h-5 w-5 shrink-0", sidebarCollapsed && !mobile && "h-6 w-6")} />
+            <span className={cn("flex items-center gap-3 w-full", sidebarCollapsed && !mobile && "justify-center")}>
+              <Icon className={cn("h-5 w-5 shrink-0 transition-all", sidebarCollapsed && !mobile && "h-7 w-7")} />
               {(!sidebarCollapsed || mobile) && <span className="truncate">{item.name}</span>}
             </span>
             {(!sidebarCollapsed || mobile) && (
               <ChevronDown className={cn("h-4 w-4 transition-transform", isExpanded && "rotate-180")} />
             )}
+
           </button>
           {isExpanded && (!sidebarCollapsed || mobile) && (
             <div className="ml-4 pl-4 border-l border-slate-200 space-y-1">
@@ -289,9 +290,10 @@ export default function Layout({ children, currentPageName }) {
         )}
         title={sidebarCollapsed && !mobile ? item.name : undefined}
       >
-        <Icon className={cn("h-5 w-5 shrink-0", sidebarCollapsed && !mobile && "h-6 w-6")} />
+        <Icon className={cn("h-5 w-5 shrink-0 transition-all", sidebarCollapsed && !mobile && "h-7 w-7")} />
         {(!sidebarCollapsed || mobile) && <span className="truncate">{item.name}</span>}
       </Link>
+
     );
   };
 
@@ -356,7 +358,10 @@ export default function Layout({ children, currentPageName }) {
 
 
           {/* Navigation */}
-          <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
+          <nav className={cn(
+            "flex-1 py-6 space-y-1 overflow-y-auto overflow-x-hidden transition-all",
+            sidebarCollapsed ? "px-2" : "px-4"
+          )}>
             {navigation
               .map(item => {
                 // If user is technician, prune children of Pós-Vendas
@@ -399,9 +404,10 @@ export default function Layout({ children, currentPageName }) {
                 // Check module permissions (case insensitive)
                 return allowedModules.includes(String(item.moduleId).toLowerCase());
               }).map((item, index) => (
-                <NavItem key={`${item.name}-${item.page || index}`} item={item} mobile />
+                <NavItem key={`${item.name}-${item.page || index}`} item={item} />
               ))}
           </nav>
+
 
           {/* User section */}
           {user && (
