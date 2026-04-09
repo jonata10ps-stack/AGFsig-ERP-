@@ -75,8 +75,6 @@
   }
 }
 
-
-
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -96,5 +94,14 @@
 
   .premium-gradient {
     background: linear-gradient(135deg, hsl(var(--primary)) 0%, #2c5670 100%);
+  }
+
+  /* Custom scrollbar hide utility */
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
   }
 }
