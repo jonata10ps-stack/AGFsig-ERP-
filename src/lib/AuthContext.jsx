@@ -40,7 +40,19 @@ export const AuthProvider = ({ children }) => {
         throw new Error('PENDING_APPROVAL');
       }
 
-      setUser({ ...currentUser, ...userProfile });
+      const fullUser = { ...currentUser, ...userProfile };
+      
+      // PERSISTÊNCIA: Recuperar última empresa selecionada do localStorage
+      const storedCompanyId = localStorage.getItem('agfsig_last_company_id');
+      if (storedCompanyId) {
+        // Verifica se o usuário ainda tem acesso a essa empresa antes de aplicar
+        const hasAccess = fullUser.company_ids?.includes(storedCompanyId) || fullUser.company_id === storedCompanyId;
+        if (hasAccess) {
+          fullUser.company_id = storedCompanyId;
+        }
+      }
+
+      setUser(fullUser);
       setIsAuthenticated(true);
     } catch (error) {
       console.error('Usuário não autenticado ou pendente:', error.message);
@@ -73,6 +85,10 @@ export const AuthProvider = ({ children }) => {
   };
 
   const updateUser = (updatedUser) => {
+    // PERSISTÊNCIA: Se a empresa mudou, salvar no localStorage
+    if (updatedUser.company_id) {
+      localStorage.setItem('agfsig_last_company_id', updatedUser.company_id);
+    }
     setUser(prev => ({ ...prev, ...updatedUser }));
   };
 
