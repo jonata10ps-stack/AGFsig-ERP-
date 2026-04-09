@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { base44 } from '@/api/base44Client';
+import { base44, supabase } from '@/api/base44Client';
 import { debounce } from 'lodash';
 import { useCompanyId } from '@/components/useCompanyId';
 import {
@@ -83,18 +83,7 @@ function ClientForm({ client, onSave, onCancel, loading, allClients }) {
     setCnpjError(null);
     try {
       const result = await base44.integrations.Core.InvokeLLM({
-        prompt: `Acesse https://casadosdados.com.br/solucao/cnpj e busque os dados do CNPJ ${cleanCNPJ}.
-
-Extraia as seguintes informações EXATAMENTE como aparecem no site:
-
-- "name": Razão Social em MAIÚSCULAS
-- "email": Email de contato
-- "phone": Telefone com DDD
-- "address": Endereço completo (logradouro + número + complemento). Exemplo: "AVENIDA BRASIL 1500 SALA 10". NÃO incluir bairro, cidade, UF ou CEP neste campo.
-- "city": Nome da cidade
-- "state": Sigla do estado (2 letras maiúsculas)
-
-Use "" para campos não disponíveis.`,
+        prompt: `Acesse https://casadosdados.com.br/solucao/cnpj e busque os dados do CNPJ ${cleanCNPJ}. Extraia name (RAZÃO SOCIAL), email, phone, address, city, state.`,
         add_context_from_internet: true,
         response_json_schema: {
           type: "object",
@@ -120,13 +109,10 @@ Use "" para campos não disponíveis.`,
           state: result.state || prev.state,
           address: result.address || prev.address
         }));
-        toast.success('Dados do CNPJ carregados com sucesso');
-      } else {
-        setCnpjError('Dados não encontrados para este CNPJ');
+        toast.success('Dados do CNPJ carregados');
       }
     } catch (error) {
-      setCnpjError('Erro ao buscar CNPJ. Tente novamente.');
-      console.error('Erro:', error);
+      console.error('Erro CNPJ:', error);
     } finally {
       setSearchingCNPJ(false);
     }
@@ -164,13 +150,9 @@ Use "" para campos não disponíveis.`,
                 debouncedSearchCNPJ(e.target.value);
               }}
               placeholder="00.000.000/0000-00"
-              disabled={searchingCNPJ}
             />
-            {searchingCNPJ && (
-              <Loader className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-slate-400" />
-            )}
+            {searchingCNPJ && <Loader className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin" />}
           </div>
-          {cnpjError && <p className="text-xs text-red-600 mt-1">{cnpjError}</p>}
         </div>
       </div>
 
@@ -179,7 +161,6 @@ Use "" para campos não disponíveis.`,
         <Input
           value={form.name}
           onChange={(e) => setForm({ ...form, name: e.target.value })}
-          placeholder="Nome do cliente"
         />
       </div>
 
@@ -190,7 +171,6 @@ Use "" para campos não disponíveis.`,
             type="email"
             value={form.email}
             onChange={(e) => setForm({ ...form, email: e.target.value })}
-            placeholder="email@exemplo.com"
           />
         </div>
         <div className="space-y-2">
@@ -198,7 +178,6 @@ Use "" para campos não disponíveis.`,
           <Input
             value={form.phone}
             onChange={(e) => setForm({ ...form, phone: e.target.value })}
-            placeholder="(00) 00000-0000"
           />
         </div>
       </div>
@@ -208,27 +187,18 @@ Use "" para campos não disponíveis.`,
         <Textarea
           value={form.address}
           onChange={(e) => setForm({ ...form, address: e.target.value })}
-          placeholder="Rua, número, bairro"
           rows={2}
         />
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
+        <div>
           <Label>Cidade</Label>
-          <Input
-            value={form.city}
-            onChange={(e) => setForm({ ...form, city: e.target.value })}
-          />
+          <Input value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
         </div>
-        <div className="space-y-2">
+        <div>
           <Label>Estado</Label>
-          <Input
-            value={form.state}
-            onChange={(e) => setForm({ ...form, state: e.target.value })}
-            maxLength={2}
-            placeholder="SP"
-          />
+          <Input value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} maxLength={2} />
         </div>
       </div>
 
@@ -254,7 +224,7 @@ Use "" para campos não disponíveis.`,
 
 export default function Clients() {
   const queryClient = useQueryClient();
-  const { companyId, loading: companyLoading } = useCompanyId();
+  const { companyId } = useCompanyId();
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingClient, setEditingClient] = useState(null);
@@ -267,20 +237,34 @@ export default function Clients() {
   const TABLE_PAGE_SIZE = 50;
 
   const { data: result, isLoading } = useQuery({
-    queryKey: ['clients', companyId, tablePage, search],
+    queryKey: ['clients', tablePage, search],
     queryFn: async () => {
-      if (!companyId) return { data: [], count: 0 };
-      const searchFields = search ? ['name', 'document', 'code', 'email'] : [];
-      return base44.entities.Client.queryPaginated(
-        { company_id: companyId },
-        '-created_date',
-        TABLE_PAGE_SIZE,
-        tablePage * TABLE_PAGE_SIZE,
-        searchFields,
-        search
-      );
-    },
-    enabled: !!companyId,
+      const skip = tablePage * TABLE_PAGE_SIZE;
+      const limit = skip + TABLE_PAGE_SIZE - 1;
+      
+      // MODO GERAL: Não filtra por companyId para que todas as empresas vejam todos os clientes
+      // Usamos o acesso normal (supabase). Como você aplicou o SQL "USING (true)", ele verá tudo.
+      let query = supabase
+        .from('Client')
+        .select('*', { count: 'exact' });
+
+      if (search) {
+        query = query.or(`name.ilike.%${search}%,document.ilike.%${search}%,code.ilike.%${search}%,email.ilike.%${search}%`);
+      }
+
+      const { data, count, error } = await query
+        .order('created_at', { ascending: false })
+        .range(skip, limit);
+
+      if (error) throw error;
+      
+      const mappedData = (data || []).map(item => ({
+        ...item,
+        created_date: item.created_at || item.registered_date
+      }));
+
+      return { data: mappedData, count: count || 0 };
+    }
   });
 
   const clients = result?.data || [];
@@ -289,32 +273,29 @@ export default function Clients() {
   const createMutation = useMutation({
     mutationFn: (data) => base44.entities.Client.create({ ...data, company_id: companyId }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['clients', companyId] });
+      queryClient.invalidateQueries({ queryKey: ['clients'] });
       setDialogOpen(false);
-      toast.success('Cliente criado com sucesso');
+      toast.success('Cliente cadastrado');
     },
-    onError: (error) => toast.error('Erro ao criar cliente: ' + error.message),
   });
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.Client.update(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['clients', companyId] });
+      queryClient.invalidateQueries({ queryKey: ['clients'] });
       setDialogOpen(false);
       setEditingClient(null);
-      toast.success('Cliente atualizado com sucesso');
+      toast.success('Cliente atualizado');
     },
-    onError: (error) => toast.error('Erro ao atualizar cliente: ' + error.message),
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id) => base44.entities.Client.delete(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['clients', companyId] });
+      queryClient.invalidateQueries({ queryKey: ['clients'] });
       setDeleteConfirm(null);
-      toast.success('Cliente excluído com sucesso');
+      toast.success('Cliente excluído');
     },
-    onError: (error) => toast.error('Erro ao excluir cliente: ' + error.message),
   });
 
   const handleSave = (data) => {
@@ -330,139 +311,42 @@ export default function Clients() {
     setDialogOpen(true);
   };
 
-  const handleNew = () => {
-    setEditingClient(null);
-    setDialogOpen(true);
-  };
-
   const totalTablePages = Math.ceil(totalCount / TABLE_PAGE_SIZE);
-
-  const pagedClients = React.useMemo(() => {
-    if (!clients || !search) return clients;
-    const s = search.toLowerCase();
-    return [...clients].sort((a, b) => {
-      const aName = a.name?.toLowerCase() || '';
-      const bName = b.name?.toLowerCase() || '';
-      const aDoc = a.document?.toLowerCase() || '';
-      const bDoc = b.document?.toLowerCase() || '';
-      const aCode = a.code?.toLowerCase() || '';
-      const bCode = b.code?.toLowerCase() || '';
-
-      // 1. Exact match in name, document or code
-      const aExact = aName === s || aDoc === s || aCode === s;
-      const bExact = bName === s || bDoc === s || bCode === s;
-      if (aExact && !bExact) return -1;
-      if (bExact && !aExact) return 1;
-
-      // 2. Starts with search string
-      const aStarts = aName.startsWith(s) || aDoc.startsWith(s) || aCode.startsWith(s);
-      const bStarts = bName.startsWith(s) || bDoc.startsWith(s) || bCode.startsWith(s);
-      if (aStarts && !bStarts) return -1;
-      if (bStarts && !aStarts) return 1;
-
-      return 0;
-    });
-  }, [clients, search]);
 
   const handleSearchChange = (e) => {
     setSearch(e.target.value);
     setTablePage(0);
   };
 
-  const formatCurrency = (value) => {
-    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value || 0);
-  };
-
   const handleImport = async () => {
-    if (!importFile) {
-      toast.error('Selecione um arquivo Excel');
-      return;
-    }
-
+    if (!importFile) return;
     setImporting(true);
     try {
       const arrayBuffer = await importFile.arrayBuffer();
       const XLSX = await import('xlsx');
       const workbook = XLSX.read(arrayBuffer, { type: 'array' });
-      const firstSheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[firstSheetName];
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
       const data = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
 
-      const clients = data.map((row) => {
-        const getVal = (possibleKeys) => {
-          const key = Object.keys(row).find((k) =>
-            possibleKeys.some((pk) => k.toLowerCase().includes(pk))
-          );
-          return key && row[key] ? String(row[key]).trim() : '';
-        };
-
-        return {
-          name: getVal(['name', 'nome', 'razão', 'razao']),
-          code: getVal(['code', 'código', 'codigo']),
-          document: getVal(['document', 'cpf', 'cnpj', 'doc']),
-          email: getVal(['email', 'e-mail']),
-          phone: getVal(['phone', 'telefone', 'celular', 'contato']),
-          address: getVal(['address', 'endereço', 'endereco', 'rua', 'logradouro']),
-          city: getVal(['city', 'cidade', 'município', 'municipio']),
-          state: getVal(['state', 'estado', 'uf']),
-          credit_limit: parseFloat(getVal(['credit', 'limite'])) || 0,
-        };
-      }).filter((c) => c.name);
-
-      if (clients.length === 0) {
-        throw new Error('Nenhum cliente encontrado no arquivo. Verifique se a coluna "Nome" existe.');
-      }
-
-      // Buscar clientes existentes para verificar duplicidade por documento (CNPJ/CPF)
-      const existingClients = await base44.entities.Client.filter({ company_id: companyId }, '-created_date', 9999);
-      const existingDocs = new Set(existingClients.map(c => c.document?.replace(/\D/g, '')).filter(Boolean));
-      const existingCodes = new Set(existingClients.map(c => c.code?.toUpperCase()).filter(Boolean));
-
-      const newClients = clients.filter(c => {
-        const cleanDoc = c.document?.replace(/\D/g, '');
-        const codeUpper = c.code?.toUpperCase();
-        
-        // Se tem documento e já existe, pula
-        if (cleanDoc && existingDocs.has(cleanDoc)) return false;
-        // Se tem código e já existe, pula
-        if (codeUpper && existingCodes.has(codeUpper)) return false;
-        
-        return true;
-      });
-
-      const skippedCount = clients.length - newClients.length;
-
-      if (newClients.length === 0) {
-        toast.warning(`Todos os ${clients.length} cliente(s) já existem no cadastro (pelo CPF/CNPJ ou Código). Nenhum item foi importado.`);
-        setImportDialogOpen(false);
-        setImportFile(null);
-        return;
-      }
-
-      await base44.entities.Client.bulkCreate(newClients.map(c => ({
+      const newClients = data.map((row) => ({
         company_id: companyId,
-        code: c.code || '',
-        name: c.name,
-        document: c.document || '',
-        email: c.email || '',
-        phone: c.phone || '',
-        address: c.address || '',
-        city: c.city || '',
-        state: c.state || '',
-        credit_limit: c.credit_limit || 0,
+        name: String(row.nome || row.name || '').trim(),
+        document: String(row.document || row.cnpj || row.cpf || '').trim(),
+        code: String(row.code || row.codigo || '').trim(),
+        email: String(row.email || '').trim(),
+        phone: String(row.phone || row.telefone || '').trim(),
+        address: String(row.address || row.endereco || '').trim(),
+        city: String(row.city || row.cidade || '').trim(),
+        state: String(row.state || row.estado || '').trim(),
         active: true
-      })));
+      })).filter(c => c.name);
 
-      queryClient.invalidateQueries({ queryKey: ['clients', companyId] });
+      await base44.entities.Client.bulkCreate(newClients);
+      queryClient.invalidateQueries({ queryKey: ['clients'] });
       setImportDialogOpen(false);
-      setImportFile(null);
-      
-      const msg = skippedCount > 0
-        ? `${newClients.length} cliente(s) importado(s). ${skippedCount} já existiam e foram ignorados para preservar o histórico.`
-        : `${newClients.length} cliente(s) importado(s) com sucesso.`;
-      toast.success(msg);
-    } catch (error) {
-      toast.error('Erro ao importar: ' + error.message);
+      toast.success('Importação concluída');
+    } catch (e) {
+      toast.error('Erro na importação');
     } finally {
       setImporting(false);
     }
@@ -472,15 +356,15 @@ export default function Clients() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Clientes</h1>
-          <p className="text-slate-500">Gerencie sua carteira de clientes</p>
+          <h1 className="text-2xl font-bold text-slate-900">Banco de Clientes (Unificado)</h1>
+          <p className="text-slate-500">Todos os clientes são compartilhados entre suas empresas</p>
         </div>
         <div className="flex gap-2">
           <Button onClick={() => setImportDialogOpen(true)} variant="outline">
             <FileSpreadsheet className="h-4 w-4 mr-2" />
             Importar Excel
           </Button>
-          <Button onClick={handleNew} className="bg-indigo-600 hover:bg-indigo-700">
+          <Button onClick={() => { setEditingClient(null); setDialogOpen(true); }} className="bg-indigo-600 hover:bg-indigo-700">
             <Plus className="h-4 w-4 mr-2" />
             Novo Cliente
           </Button>
@@ -492,7 +376,7 @@ export default function Clients() {
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
             <Input
-              placeholder="Buscar por nome, código, documento ou e-mail..."
+              placeholder="Buscar em todo o banco de clientes..."
               value={search}
               onChange={handleSearchChange}
               className="pl-10"
@@ -504,24 +388,7 @@ export default function Clients() {
       <Card>
         <CardContent className="p-0">
           {isLoading ? (
-            <div className="p-6 space-y-4">
-              {[1, 2, 3, 4, 5].map(i => (
-                <div key={i} className="flex items-center gap-4">
-                  <Skeleton className="h-10 w-20" />
-                  <Skeleton className="h-10 flex-1" />
-                  <Skeleton className="h-10 w-32" />
-                </div>
-              ))}
-            </div>
-          ) : totalCount === 0 ? (
-            <div className="text-center py-12">
-              <Users className="h-12 w-12 mx-auto text-slate-300 mb-4" />
-              <p className="text-slate-500">Nenhum cliente encontrado</p>
-              <Button onClick={handleNew} variant="outline" className="mt-4">
-                <Plus className="h-4 w-4 mr-2" />
-                Criar primeiro cliente
-              </Button>
-            </div>
+            <div className="p-6 space-y-4 text-center">Carregando banco unificado...</div>
           ) : (
             <div className="overflow-x-auto">
               <Table>
@@ -530,86 +397,43 @@ export default function Clients() {
                     <TableHead>Código</TableHead>
                     <TableHead>Nome</TableHead>
                     <TableHead>Documento</TableHead>
-                    <TableHead>Contato</TableHead>
                     <TableHead>Cidade</TableHead>
-                    <TableHead className="text-right">Limite</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="w-12"></TableHead>
+                    <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {pagedClients?.map((client) => (
+                  {clients.map((client) => (
                     <TableRow key={client.id}>
-                      <TableCell className="font-mono text-indigo-600">
-                        {client.code || '-'}
-                      </TableCell>
+                      <TableCell className="font-mono text-indigo-600">{client.code || '-'}</TableCell>
                       <TableCell className="font-medium">{client.name}</TableCell>
                       <TableCell className="text-slate-500">{client.document || '-'}</TableCell>
-                      <TableCell>
-                        <div className="flex flex-col gap-1">
-                          {client.email && (
-                            <span className="flex items-center gap-1 text-sm text-slate-500">
-                              <Mail className="h-3 w-3" />
-                              {client.email}
-                            </span>
-                          )}
-                          {client.phone && (
-                            <span className="flex items-center gap-1 text-sm text-slate-500">
-                              <Phone className="h-3 w-3" />
-                              {client.phone}
-                            </span>
-                          )}
+                      <TableCell>{client.city || '-'}/{client.state || '-'}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button variant="ghost" size="icon" onClick={() => handleEdit(client)}>
+                            <Edit2 className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" onClick={() => setDeleteConfirm(client)} className="text-red-600">
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         </div>
-                      </TableCell>
-                      <TableCell>
-                        {client.city && client.state ? `${client.city}/${client.state}` : client.city || '-'}
-                      </TableCell>
-                      <TableCell className="text-right font-medium">
-                        {formatCurrency(client.credit_limit)}
-                      </TableCell>
-                      <TableCell>
-                        <Badge className={client.active !== false ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-700'}>
-                          {client.active !== false ? 'Ativo' : 'Inativo'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => handleEdit(client)}>
-                              <Edit2 className="h-4 w-4 mr-2" />
-                              Editar
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => setDeleteConfirm(client)}
-                              className="text-red-600"
-                            >
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              Excluir
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
                       </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
+
               {totalTablePages > 1 && (
                 <div className="flex items-center justify-between px-4 py-3 border-t bg-slate-50">
                   <div className="text-sm text-slate-500">
-                    Exibindo <span className="font-medium">{Math.min(totalCount, tablePage * TABLE_PAGE_SIZE + 1)}-{Math.min(totalCount, (tablePage + 1) * TABLE_PAGE_SIZE)}</span> de <span className="font-medium">{totalCount}</span> itens 
-                    {totalCount > 0 && ` · Pág. ${tablePage + 1}/${totalTablePages}`}
+                    Página {tablePage + 1} de {totalTablePages} ({totalCount} clientes)
                   </div>
                   <div className="flex gap-2">
                     <Button variant="outline" size="sm" onClick={() => setTablePage(p => Math.max(0, p - 1))} disabled={tablePage === 0}>
-                      ← Anterior
+                      Anterior
                     </Button>
                     <Button variant="outline" size="sm" onClick={() => setTablePage(p => Math.min(totalTablePages - 1, p + 1))} disabled={tablePage >= totalTablePages - 1}>
-                      Próxima →
+                      Próxima
                     </Button>
                   </div>
                 </div>
@@ -627,10 +451,7 @@ export default function Clients() {
           <ClientForm
             client={editingClient}
             onSave={handleSave}
-            onCancel={() => {
-              setDialogOpen(false);
-              setEditingClient(null);
-            }}
+            onCancel={() => setDialogOpen(false)}
             loading={createMutation.isPending || updateMutation.isPending}
             allClients={clients}
           />
@@ -639,64 +460,24 @@ export default function Clients() {
 
       <Dialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
         <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Confirmar Exclusão</DialogTitle>
-          </DialogHeader>
-          <p className="text-slate-600">
-            Tem certeza que deseja excluir o cliente <strong>{deleteConfirm?.name}</strong>?
-          </p>
+          <DialogHeader><DialogTitle>Excluir Cliente</DialogTitle></DialogHeader>
+          <p>Deseja excluir <strong>{deleteConfirm?.name}</strong>?</p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteConfirm(null)}>Cancelar</Button>
-            <Button
-              variant="destructive"
-              onClick={() => deleteMutation.mutate(deleteConfirm.id)}
-              disabled={deleteMutation.isPending}
-            >
-              {deleteMutation.isPending ? 'Excluindo...' : 'Excluir'}
-            </Button>
+            <Button variant="destructive" onClick={() => deleteMutation.mutate(deleteConfirm.id)}>Excluir</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
         <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Importar Clientes</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>Importar Excel</DialogTitle></DialogHeader>
           <div className="space-y-4">
-            <div>
-              <p className="text-sm text-slate-600 mb-4">
-                Selecione um arquivo Excel (.xlsx) com as seguintes colunas:
-              </p>
-              <div className="bg-slate-50 p-3 rounded-lg text-xs space-y-1">
-                <p><strong>name</strong> - Nome do cliente (obrigatório)</p>
-                <p><strong>code</strong> - Código</p>
-                <p><strong>document</strong> - CPF/CNPJ</p>
-                <p><strong>email</strong> - E-mail</p>
-                <p><strong>phone</strong> - Telefone</p>
-                <p><strong>address</strong> - Endereço</p>
-                <p><strong>city</strong> - Cidade</p>
-                <p><strong>state</strong> - Estado</p>
-                <p><strong>credit_limit</strong> - Limite de crédito</p>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Arquivo Excel</Label>
-              <Input
-                type="file"
-                accept=".xlsx,.xls"
-                onChange={(e) => setImportFile(e.target.files[0])}
-              />
-            </div>
+            <Input type="file" accept=".xlsx,.xls" onChange={(e) => setImportFile(e.target.files[0])} />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setImportDialogOpen(false); setImportFile(null); }}>
-              Cancelar
-            </Button>
-            <Button onClick={handleImport} disabled={importing || !importFile}>
-              {importing ? 'Importando...' : 'Importar'}
-            </Button>
+            <Button variant="outline" onClick={() => setImportDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={handleImport} disabled={importing}>{importing ? 'Importando...' : 'Importar'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

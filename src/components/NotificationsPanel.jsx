@@ -16,6 +16,31 @@ const severityConfig = {
 
 const RECENT_HOURS = 48;
 
+const severityOrder = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
+
+const PAGE_MODULE_MAP = {
+  ProductionOrders: 'Producao',
+  ProductionRequests: 'Producao',
+  ProductionSchedule: 'Producao',
+  FactoryDashboard: 'Producao',
+  InventoryMoves: 'Estoque',
+  MaterialRequests: 'Estoque',
+  ReceivingList: 'Estoque',
+  StockBalances: 'Estoque',
+  SalesOrders: 'Vendas',
+  Quotes: 'Vendas',
+  SalesAppointments: 'Vendas',
+  ProspectionVisits: 'Vendas',
+  ProspectionProjects: 'Vendas',
+  AfterSales: 'PosVendas',
+  ServiceOrders: 'PosVendas',
+  NonConformityReports: 'Qualidade',
+  EngineeringProjects: 'Engenharia',
+  EngineeringDashboard: 'Engenharia',
+  Reports: 'Relatorios',
+  StockReports: 'Relatorios'
+};
+
 function isRecent(dateStr) {
   if (!dateStr) return false;
   return differenceInHours(new Date(), parseISO(dateStr)) <= RECENT_HOURS;
@@ -48,9 +73,15 @@ export default function NotificationsPanel({ open, onClose }) {
   const [companyId, setCompanyId] = useState(null);
   const [toast, setToast] = useState(null);
   const toastTimerRef = useRef(null);
-  // Persiste IDs já vistos no localStorage para não repetir após reload
+  
+  // Persiste IDs já vistos no localStorage para não repetir o Toast
   const shownToastIds = useRef(new Set(
     JSON.parse(localStorage.getItem('notif_seen_ids') || '[]')
+  ));
+
+  // Persiste IDs lidos/dismissed no localStorage para desaparecerem da lista
+  const dismissedIds = useRef(new Set(
+    JSON.parse(localStorage.getItem('notif_dismissed_ids') || '[]')
   ));
 
   useEffect(() => {
@@ -68,11 +99,33 @@ export default function NotificationsPanel({ open, onClose }) {
   const showToast = (notif) => {
     if (shownToastIds.current.has(notif.id)) return;
     shownToastIds.current.add(notif.id);
-    // Persiste no localStorage para não reaparecer após reload
     localStorage.setItem('notif_seen_ids', JSON.stringify([...shownToastIds.current].slice(-200)));
     setToast(notif);
     clearTimeout(toastTimerRef.current);
     toastTimerRef.current = setTimeout(() => setToast(null), 5000);
+  };
+
+  // Função para marcar como lida e fazer sumir
+  const handleReadNotification = async (notif) => {
+    if (!dismissedIds.current.has(notif.id)) {
+      dismissedIds.current.add(notif.id);
+      localStorage.setItem('notif_dismissed_ids', JSON.stringify([...dismissedIds.current].slice(-500)));
+    }
+
+    if (notif.isCustomNotification) {
+      try {
+        await base44.entities.Notification.update(notif.id, { 
+          is_read: true, 
+          read_at: new Date().toISOString() 
+        });
+      } catch (e) {
+        console.error('Erro ao marcar notificação DB como lida:', e);
+      }
+    }
+
+    // Remove localmente para resposta imediata na UI
+    setNotifications(prev => prev.filter(n => n.id !== notif.id));
+    onClose();
   };
 
   useEffect(() => {
@@ -85,13 +138,31 @@ export default function NotificationsPanel({ open, onClose }) {
         const cid = user?.current_company_id || user?.company_ids?.[0] || user?.company_id;
         if (!cid) return;
 
+        // Controle de acesso por módulo
+        const userRole = String(user.role || '').toLowerCase();
+        const rawModules = user.allowed_modules;
+        const parseModules = (val) => {
+          if (!val) return [];
+          if (Array.isArray(val)) return val;
+          try { return JSON.parse(val); } catch (e) { return String(val).split(',').map(s => s.trim()); }
+        };
+        const allowedModules = new Set(parseModules(rawModules).map(m => String(m).toLowerCase()));
+        const isAdmin = userRole === 'admin';
+
+        const hasAccess = (page) => {
+          if (isAdmin) return true;
+          const moduleId = PAGE_MODULE_MAP[page];
+          if (!moduleId) return true; 
+          return allowedModules.has(moduleId.toLowerCase());
+        };
+
         const productionAlertsAction = async () => {
           try {
             const { data, error } = await supabase.rpc('generate_production_alerts', { p_company_id: cid });
             if (error) throw error;
             return data?.alerts || [];
           } catch (e) {
-            console.debug('RPC generate_production_alerts não disponível:', e.message);
+            console.debug('RPC generate_production_alerts falhou:', e.message);
             return [];
           }
         };
@@ -120,81 +191,107 @@ export default function NotificationsPanel({ open, onClose }) {
           base44.entities.Product.filter({ company_id: cid }, 'sku', 500),
         ]);
 
-        const productionAlertsSafe = (productionAlerts && Array.isArray(productionAlerts)) ? productionAlerts : [];
         const productMap = Object.fromEntries((products || []).map(p => [p.id, p]));
-
         const notifs = [];
 
-        productionAlertsSafe.forEach((alert, idx) => {
-          notifs.push({ id: `prod-alert-${idx}-${alert.related_op_id || idx}`, title: alert.title, message: alert.message, severity: alert.severity || 'medium', page: alert.page || 'ProductionOrders' });
-        });
+        // 1. Alertas de Produção (RPC)
+        if (hasAccess('ProductionOrders')) {
+          (productionAlerts || []).forEach((alert, idx) => {
+            notifs.push({ 
+              id: `prod-alert-${alert.related_op_id || idx}`, 
+              title: alert.title, 
+              message: alert.message, 
+              severity: alert.severity || 'medium', 
+              page: alert.page || 'ProductionOrders' 
+            });
+          });
+        }
 
+        // 2. Notificações Customizadas (Entidade DB)
         userNotifications?.forEach(notif => {
-          notifs.push({ id: notif.id, title: notif.title, message: notif.message, severity: notif.type === 'VISITA_PROXIMA' ? 'high' : notif.type === 'VISITA_CANCELADA' ? 'critical' : 'medium', page: 'SalesAppointments', isCustomNotification: true });
+          notifs.push({ 
+            id: notif.id, 
+            title: notif.title, 
+            message: notif.message, 
+            severity: notif.type === 'VISITA_PROXIMA' ? 'high' : notif.type === 'VISITA_CANCELADA' ? 'critical' : 'medium', 
+            page: 'SalesAppointments', 
+            isCustomNotification: true 
+          });
         });
 
-        productionOrders?.forEach(op => {
-          const label = `OP ${op.op_number || op.numero_op_externo || ''} — ${op.product_name}`;
-          if (isRecent(op.created_date)) notifs.push({ id: `op-created-${op.id}`, title: 'Nova OP Aberta', message: label, severity: 'info', page: 'ProductionOrders' });
-          if (op.status === 'EM_ANDAMENTO' && isRecent(op.updated_date)) notifs.push({ id: `op-started-${op.id}`, title: 'OP Iniciada', message: `${label} em andamento`, severity: 'low', page: 'ProductionOrders' });
-          if (op.status === 'ENCERRADA' && isRecent(op.closed_at || op.updated_date)) notifs.push({ id: `op-closed-${op.id}`, title: 'OP Encerrada', message: `${label} — Produzido: ${op.qty_produced}`, severity: 'low', page: 'ProductionOrders' });
-          if (op.qty_produced > 0 && isRecent(op.updated_date) && op.status !== 'ENCERRADA') notifs.push({ id: `op-produced-${op.id}`, title: 'Registro de Produção', message: `${label}: ${op.qty_produced}/${op.qty_planned} produzidos`, severity: 'info', page: 'ProductionOrders' });
-        });
+        // 3. Produção (OPs e Etapas)
+        if (hasAccess('ProductionOrders')) {
+          productionOrders?.forEach(op => {
+            const label = `OP ${op.op_number || op.numero_op_externo || ''} — ${op.product_name}`;
+            if (isRecent(op.created_date)) notifs.push({ id: `op-created-${op.id}`, title: 'Nova OP Aberta', message: label, severity: 'info', page: 'ProductionOrders' });
+            if (op.status === 'ENCERRADA' && isRecent(op.closed_at || op.updated_date)) notifs.push({ id: `op-closed-${op.id}`, title: 'OP Encerrada', message: `${label} finalizada`, severity: 'low', page: 'ProductionOrders' });
+          });
 
-        productionSteps?.forEach(step => {
-          if (step.status !== 'CONCLUIDA' && step.status !== 'PULADA' && step.scheduled_end_date) {
-            const daysLate = differenceInDays(new Date(), parseISO(step.scheduled_end_date));
-            if (daysLate > 0) notifs.push({ id: `step-late-${step.id}`, title: 'Atraso no Cronograma', message: `Etapa "${step.name}" atrasada ${daysLate} dia(s)`, severity: daysLate > 3 ? 'critical' : 'high', page: 'ProductionOrders' });
-          }
-        });
+          productionSteps?.forEach(step => {
+            if (step.status !== 'CONCLUIDA' && step.status !== 'PULADA' && step.scheduled_end_date) {
+              const daysLate = differenceInDays(new Date(), parseISO(step.scheduled_end_date));
+              if (daysLate > 0) notifs.push({ id: `step-late-${step.id}`, title: 'Atraso no Cronograma', message: `Etapa "${step.name}" atrasada ${daysLate} dia(s)`, severity: daysLate > 3 ? 'critical' : 'high', page: 'ProductionOrders' });
+            }
+          });
 
-        inventoryMoves?.forEach(move => {
-          if (isRecent(move.created_date)) {
-            const typeLabel = { ENTRADA: 'Entrada de Estoque', SAIDA: 'Saída de Estoque', TRANSFERENCIA: 'Transferência', RESERVA: 'Reserva', SEPARACAO: 'Separação', PRODUCAO_ENTRADA: 'Entrada de Produção', PRODUCAO_CONSUMO: 'Consumo de Produção', AJUSTE: 'Ajuste de Estoque', BAIXA: 'Baixa de Estoque' }[move.type] || move.type;
-            // Busca SKU do produto nas notificações (produto já pode estar na movimentação via related fields ou não)
-            const prod = productMap[move.product_id];
-            const sku = prod?.sku || move.product_sku || '';
-            const skuInfo = sku ? `${sku} | ` : '';
-            const message = `${skuInfo}${typeLabel} | Qtd: ${move.qty}${move.reason ? ` | ${move.reason}` : ''}`;
-            notifs.push({ id: `inv-${move.id}`, title: typeLabel, message, severity: move.type === 'BAIXA' || move.type === 'SAIDA' ? 'medium' : 'info', page: 'InventoryMoves' });
-          }
-        });
+          productionRequests?.forEach(req => {
+            if ((req.status === 'PENDENTE' || req.status === 'EM_PRODUCAO') && req.due_date) {
+              const days = differenceInDays(parseISO(req.due_date), new Date());
+              if (days < 0) notifs.push({ id: `pr-overdue-${req.id}`, title: 'Solicitação Atrasada', message: `${req.product_name} — ${Math.abs(days)} dias atrasado`, severity: 'critical', page: 'ProductionRequests' });
+              else if (days === 0) notifs.push({ id: `pr-today-${req.id}`, title: 'Vencimento Hoje', message: `${req.product_name} — vence hoje`, severity: 'high', page: 'ProductionRequests' });
+            }
+          });
+        }
 
-        salesOrders?.forEach(order => {
-          if (isRecent(order.created_date)) notifs.push({ id: `so-new-${order.id}`, title: 'Novo Pedido', message: `${order.order_number || ''} — ${order.client_name}`, severity: 'low', page: 'SalesOrders' });
-          if (order.status !== 'CANCELADO' && order.status !== 'EXPEDIDO' && order.delivery_date) {
-            const days = differenceInDays(parseISO(order.delivery_date), new Date());
-            if (days < 0) notifs.push({ id: `so-overdue-${order.id}`, title: 'Pedido Atrasado', message: `${order.client_name} — ${Math.abs(days)} dias atrasado`, severity: 'critical', page: 'SalesOrders' });
-            else if (days === 0) notifs.push({ id: `so-today-${order.id}`, title: 'Entrega Hoje', message: `${order.client_name} — entrega hoje`, severity: 'high', page: 'SalesOrders' });
-          }
-        });
+        // 4. Estoque
+        if (hasAccess('InventoryMoves')) {
+          inventoryMoves?.forEach(move => {
+            if (isRecent(move.created_date)) {
+              const typeLabel = { ENTRADA: 'Entrada de Estoque', SAIDA: 'Saída de Estoque', AJUSTE: 'Ajuste', BAIXA: 'Baixa ⚠️' }[move.type] || move.type;
+              const prod = productMap[move.product_id];
+              const sku = prod?.sku || move.product_sku || '';
+              const message = `${sku ? `${sku} | ` : ''}${typeLabel} | Qtd: ${move.qty}`;
+              notifs.push({ id: `inv-${move.id}`, title: typeLabel, message, severity: move.type === 'BAIXA' ? 'medium' : 'info', page: 'InventoryMoves' });
+            }
+          });
+        }
 
-        quotes?.forEach(quote => {
-          if (isRecent(quote.created_date)) notifs.push({ id: `quote-new-${quote.id}`, title: 'Novo Orçamento', message: `${quote.quote_number || ''} — ${quote.client_name || ''}`, severity: 'info', page: 'Quotes' });
-        });
+        // 5. Vendas
+        if (hasAccess('SalesOrders')) {
+          salesOrders?.forEach(order => {
+            if (isRecent(order.created_date)) notifs.push({ id: `so-new-${order.id}`, title: 'Novo Pedido', message: `${order.order_number || ''} — ${order.client_name}`, severity: 'info', page: 'SalesOrders' });
+            if (order.status !== 'CANCELADO' && order.status !== 'EXPEDIDO' && order.delivery_date) {
+              const days = differenceInDays(parseISO(order.delivery_date), new Date());
+              if (days < 0) notifs.push({ id: `so-overdue-${order.id}`, title: 'Pedido Atrasado', message: `${order.client_name} — ${Math.abs(days)} dias atrasado`, severity: 'critical', page: 'SalesOrders' });
+              else if (days === 0) notifs.push({ id: `so-today-${order.id}`, title: 'Entrega Hoje', message: `${order.client_name} — entrega hoje`, severity: 'high', page: 'SalesOrders' });
+            }
+          });
 
-        appointments?.forEach(appt => {
-          if (isRecent(appt.created_date)) notifs.push({ id: `appt-new-${appt.id}`, title: 'Nova Agenda', message: `${appt.title}${appt.client_name ? ` — ${appt.client_name}` : ''}`, severity: 'info', page: 'SalesAppointments' });
-        });
+          quotes?.forEach(quote => {
+            if (isRecent(quote.created_date)) notifs.push({ id: `quote-new-${quote.id}`, title: 'Novo Orçamento', message: `${quote.quote_number || ''} — ${quote.client_name || ''}`, severity: 'info', page: 'Quotes' });
+          });
 
-        productionRequests?.forEach(req => {
-          if ((req.status === 'PENDENTE' || req.status === 'EM_PRODUCAO') && req.due_date) {
-            const days = differenceInDays(parseISO(req.due_date), new Date());
-            if (days < 0) notifs.push({ id: `pr-overdue-${req.id}`, title: 'Solicitação Atrasada', message: `${req.product_name} — ${Math.abs(days)} dias atrasado`, severity: 'critical', page: 'ProductionRequests' });
-            else if (days === 0) notifs.push({ id: `pr-today-${req.id}`, title: 'Vencimento Hoje', message: `${req.product_name} — vence hoje`, severity: 'high', page: 'ProductionRequests' });
-            else if (days <= 2) notifs.push({ id: `pr-soon-${req.id}`, title: 'Vencimento Próximo', message: `${req.product_name} — vence em ${days} dia(s)`, severity: 'medium', page: 'ProductionRequests' });
-          }
-        });
+          appointments?.forEach(appt => {
+            if (isRecent(appt.created_date)) notifs.push({ id: `appt-new-${appt.id}`, title: 'Nova Agenda', message: `${appt.title}`, severity: 'info', page: 'SalesAppointments' });
+          });
+        }
 
-        const severityOrder = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
-        notifs.sort((a, b) => (severityOrder[a.severity] ?? 4) - (severityOrder[b.severity] ?? 4));
-        const seen = new Set();
+        // Filtragem final: Remover duplicados, Remover Dismissed (Lidos) e Ordenar
         const unique = [];
-        notifs.forEach(n => { if (!seen.has(n.id)) { unique.push(n); seen.add(n.id); } });
+        const seen = new Set();
+        
+        notifs
+          .sort((a, b) => (severityOrder[a.severity] ?? 4) - (severityOrder[b.severity] ?? 4))
+          .forEach(n => {
+            if (!seen.has(n.id) && !dismissedIds.current.has(n.id)) {
+              unique.push(n);
+              seen.add(n.id);
+            }
+          });
 
         setNotifications(unique.slice(0, 30));
 
-        // Mostrar toast automático para qualquer notificação ainda não exibida (prioridade: critical > high > medium > low > info)
+        // Toast Automático (apenas para o primeiro item crítico/alto novo ainda não visto nesta sessão)
         const top = unique.find(n => !shownToastIds.current.has(n.id));
         if (top) showToast(top);
 
@@ -206,7 +303,7 @@ export default function NotificationsPanel({ open, onClose }) {
     };
 
     fetchNotifications();
-    const interval = setInterval(fetchNotifications, 300000); // A cada 5 minutos para economizar recursos
+    const interval = setInterval(fetchNotifications, 180000); 
     return () => clearInterval(interval);
   }, [companyId]);
 
@@ -229,9 +326,10 @@ export default function NotificationsPanel({ open, onClose }) {
             {loading ? (
               <div className="p-6 text-center text-slate-500 text-sm">Carregando...</div>
             ) : notifications.length === 0 ? (
-              <div className="p-6 text-center text-slate-500">
+              <div className="p-12 text-center text-slate-400">
                 <Bell className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                <p className="text-sm">Nenhuma notificação</p>
+                <p className="text-sm">Nenhuma notificação pendente</p>
+                <p className="text-[10px] mt-1">Recém lidas ou filtradas por módulo</p>
               </div>
             ) : (
               <div className="divide-y divide-slate-100">
@@ -241,12 +339,7 @@ export default function NotificationsPanel({ open, onClose }) {
                     <Link
                       key={notif.id}
                       to={createPageUrl(notif.page)}
-                      onClick={async () => {
-                        if (notif.isCustomNotification) {
-                          await base44.entities.Notification.update(notif.id, { is_read: true, read_at: new Date().toISOString() });
-                        }
-                        onClose();
-                      }}
+                      onClick={() => handleReadNotification(notif)}
                       className={`block px-4 py-3 hover:brightness-95 transition-all ${cfg.color}`}
                     >
                       <div className="flex items-start gap-3">
