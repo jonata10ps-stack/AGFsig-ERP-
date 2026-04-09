@@ -354,26 +354,28 @@ export default function MaterialRequestDetail() {
     <div className="space-y-6">
       {/* Estilos para impressão estável em mobile */}
       <style>{`
-        .print-section { display: none !important; }
         @media print {
           body * { visibility: hidden !important; }
-          .print-section, .print-section * { visibility: visible !important; display: block !important; }
-          .print-section { 
+          .print-material-template, .print-material-template * { 
+            visibility: visible !important; 
+            display: block !important; 
+          }
+          .print-material-template { 
             position: absolute !important; 
             left: 0 !important; 
             top: 0 !important; 
             width: 100% !important; 
-            padding: 20px !important;
+            padding: 30px !important;
             background: white !important;
-            z-index: 9999;
           }
           .no-print { display: none !important; }
-          .print-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-          .print-table th, .print-table td { border: 1px solid #000; padding: 8px; text-align: left; font-size: 12px; }
-          .print-header { margin-bottom: 20px; border-bottom: 2px solid #000; padding-bottom: 10px; }
+          .print-table { width: 100%; border-collapse: collapse; margin-top: 25px; }
+          .print-table th, .print-table td { border: 1px solid #000; padding: 10px; text-align: left; font-size: 11px; }
+          .print-header { margin-bottom: 30px; border-bottom: 2px solid #000; padding-bottom: 15px; }
           .print-title { font-size: 18px; font-weight: bold; }
         }
       `}</style>
+
 
 
       <div className="flex items-center justify-between no-print">
@@ -464,9 +466,14 @@ export default function MaterialRequestDetail() {
           </div>
       </div>
 
-      {/* Print Template - Visível apenas na impressão */}
-      <div ref={printRef} className="print-section">
+      {/* Print Template - Totalmente oculto via inline style no modo tela */}
+      <div 
+        ref={printRef} 
+        className="print-material-template" 
+        style={{ display: 'none' }}
+      >
         <div className="print-header">
+
 
 
           <div className="title">Solicitação de Materiais - {request?.request_number}</div>
