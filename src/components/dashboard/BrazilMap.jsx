@@ -22,7 +22,6 @@ const REGIONS_CONFIG = {
   sul: { name: 'Sul', color: '#ec4899', states: ['PR', 'RS', 'SC'], center: [-52, -27], zoom: 4.5 }
 };
 
-// Coordenadas geográficas aproximadas para os estados (para pins se não houver cidade)
 const STATE_GEO_COORDS = {
   'AC': [-70, -9], 'AL': [-36, -9], 'AP': [-51, 1], 'AM': [-63, -3],
   'BA': [-41, -12], 'CE': [-39, -5], 'DF': [-47, -15], 'ES': [-40, -19],
@@ -54,7 +53,6 @@ export default function BrazilInteractiveMap({ services = [] }) {
 
   return (
     <Card className="relative w-full aspect-[16/9] bg-[#0A0C10] border-white/5 shadow-[0_0_80px_rgba(0,0,0,0.8)] overflow-hidden rounded-[3rem] group border">
-      {/* HUD Header */}
       <div className="absolute top-10 left-10 z-30 pointer-events-none">
         <div className="flex items-center gap-6 transition-all duration-500">
            <div className="p-3.5 bg-indigo-500/10 rounded-2xl border border-indigo-500/20 backdrop-blur-3xl shadow-[0_0_30px_rgba(99,102,241,0.2)]">
@@ -72,7 +70,6 @@ export default function BrazilInteractiveMap({ services = [] }) {
         </div>
       </div>
 
-      {/* Floating UI Controls */}
       <div className="absolute top-10 right-10 z-40 flex gap-4">
         <AnimatePresence>
           {selectedRegion && (
@@ -93,7 +90,6 @@ export default function BrazilInteractiveMap({ services = [] }) {
         </AnimatePresence>
       </div>
 
-      {/* Map Implementation using react-simple-maps */}
       <div className="absolute inset-0 flex items-center justify-center">
         <ComposableMap
           projection="geoMercator"
@@ -103,12 +99,12 @@ export default function BrazilInteractiveMap({ services = [] }) {
           <ZoomableGroup
             center={currentZoom.center}
             zoom={currentZoom.zoom}
-            filterZoomEvent={(evt) => evt.type !== "wheel"} // Desativa zoom de scroll p/ não interferir no dashboard
+            filterZoomEvent={(evt) => evt.type !== "wheel"}
           >
             <Geographies geography={BRAZIL_TOPOJSON_URL}>
               {({ geographies }) =>
                 geographies.map((geo) => {
-                  const uf = geo.id; // ruliana topojson utiliza id como UF
+                  const uf = geo.id; 
                   const regionEntry = Object.entries(REGIONS_CONFIG).find(([_, config]) => 
                     config.states.includes(uf)
                   );
@@ -117,7 +113,6 @@ export default function BrazilInteractiveMap({ services = [] }) {
                   
                   const isRegSelected = selectedRegion === regionKey;
                   const isRegDimmed = selectedRegion && !isRegSelected;
-                  const isHovered = hoveredState === uf;
 
                   return (
                     <Geography
@@ -152,30 +147,65 @@ export default function BrazilInteractiveMap({ services = [] }) {
               }
             </Geographies>
 
-            {/* Marcadores de Serviços/OS */}
             {filteredServices.map((service, idx) => {
                 const geoCoords = STATE_GEO_COORDS[service.state_uf];
                 if (!geoCoords) return null;
 
-                // Pequeno jitter geográfico p/ não sobrepor pins no mesmo estado
                 const jitterLat = (idx % 10) * 0.4 - 2;
                 const jitterLong = (idx % 8) * 0.4 - 1.5;
 
                 return (
-                  <Marker key={`pin-${idx}`} coordinates={[geoCoords[0] + jitterLong, geoCoords[1] + jitterLat]}>
-                    <g className="cursor-pointer">
-                        <circle r="8" fill="rgba(99, 102, 241, 0.2)">
-                            <animate attributeName="r" from="4" to="12" dur="2s" repeatCount="indefinite" />
-                            <animate attributeName="opacity" from="0.6" to="0" dur="2s" repeatCount="indefinite" />
+                  <Marker 
+                    key={`pin-${idx}`} 
+                    coordinates={[geoCoords[0] + jitterLong, geoCoords[1] + jitterLat]}
+                  >
+                    <g 
+                      className="cursor-pointer group/pin"
+                      onMouseEnter={() => setHoveredState(`marker-${idx}`)}
+                      onMouseLeave={() => setHoveredState(null)}
+                    >
+                        <circle r={4 / currentZoom.zoom} fill="rgba(239, 68, 68, 0.4)">
+                            <animate attributeName="r" from={2 / currentZoom.zoom} to={8 / currentZoom.zoom} dur="1.5s" repeatCount="indefinite" />
+                            <animate attributeName="opacity" from="0.8" to="0" dur="1.5s" repeatCount="indefinite" />
                         </circle>
-                        <circle r="2.5" fill="white" className="shadow-[0_0_10px_white]" />
+                        
+                        <path 
+                          d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" 
+                          fill="#ef4444" 
+                          transform={`translate(${-12 / currentZoom.zoom}, ${-22 / currentZoom.zoom}) scale(${1 / currentZoom.zoom})`}
+                          className="drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]"
+                        />
                     </g>
                     
-                    {selectedRegion && (
-                        <foreignObject x="8" y="-15" width="160" height="60" style={{ overflow: 'visible' }}>
-                             <div className="bg-black/90 backdrop-blur-2xl p-3 rounded-2xl border border-white/10 shadow-2xl scale-[0.45] origin-left border-l-4 border-l-indigo-500">
-                                <p className="text-[12px] font-black text-white uppercase truncate mb-1">{service.client_name}</p>
-                                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">{service.city_name}</p>
+                    {hoveredState === `marker-${idx}` && (
+                        <foreignObject 
+                            x={14 / currentZoom.zoom} 
+                            y={-42 / currentZoom.zoom} 
+                            width={180 / currentZoom.zoom} 
+                            height={55 / currentZoom.zoom} 
+                            style={{ overflow: 'visible' }}
+                        >
+                             <div 
+                               style={{ 
+                                 transform: `scale(${1.2 / currentZoom.zoom})`, 
+                                 transformOrigin: 'bottom left',
+                                 background: 'rgba(0,0,0,0.98)',
+                                 backdropFilter: 'blur(16px)',
+                                 padding: '8px 12px',
+                                 borderRadius: '12px',
+                                 border: '1px solid rgba(255,255,255,0.2)',
+                                 borderLeft: '5px solid #ef4444',
+                                 boxShadow: '0 15px 50px rgba(0,0,0,0.7)',
+                                 pointerEvents: 'none',
+                                 width: 'fit-content'
+                               }}
+                             >
+                                <p style={{ fontSize: '13px', fontWeight: '900', color: 'white', textTransform: 'uppercase', whiteSpace: 'nowrap', lineHeight: '1.2' }}>
+                                    {(service.technician_name || 'DESCONHECIDO').toUpperCase()}
+                                </p>
+                                <p style={{ fontSize: '11px', fontWeight: '800', color: '#cbd5e1', textTransform: 'uppercase', marginTop: '2px', lineHeight: '1' }}>
+                                    {service.city_name}/{service.state_uf}
+                                </p>
                              </div>
                         </foreignObject>
                     )}
@@ -186,7 +216,6 @@ export default function BrazilInteractiveMap({ services = [] }) {
         </ComposableMap>
       </div>
 
-      {/* Legend & Regional Quick-Select */}
       <div className="absolute bottom-6 left-10 z-30">
         <div className="flex flex-wrap bg-black/60 backdrop-blur-3xl p-1.5 rounded-[2rem] border border-white/10 gap-1.5 shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
             {Object.entries(REGIONS_CONFIG).map(([key, reg]) => (
@@ -206,7 +235,6 @@ export default function BrazilInteractiveMap({ services = [] }) {
         </div>
       </div>
 
-      {/* Connectivity Status */}
       <div className="absolute bottom-6 right-10 z-30">
         <div className="flex items-center gap-4 bg-white/5 backdrop-blur-2xl px-6 py-3 rounded-[1.5rem] border border-white/5 shadow-2xl">
             <div className="flex flex-col gap-0.5">

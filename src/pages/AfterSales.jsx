@@ -23,58 +23,83 @@ export default function AfterSales() {
   const [typeFilter, setTypeFilter] = useState('all');
 
   const { data: serviceRequests = [] } = useQuery({
-    queryKey: ['as-requests-v5', companyId],
+    queryKey: ['as-requests-prod', companyId],
     queryFn: async () => {
       if (!companyId) return [];
       try {
-        const ent = base44.entities.ServiceRequest || base44.entities.service_request;
-        return await ent.filter({ company_id: companyId }, '-created_date');
+        return await base44.entities.ServiceRequest.filter({ company_id: companyId }, '-created_at', 500);
       } catch (e) {
         return [];
       }
     },
     enabled: !!companyId,
+    staleTime: 30000
   });
 
   const { data: serviceOrders = [] } = useQuery({
-    queryKey: ['as-orders-v5', companyId],
+    queryKey: ['as-orders-prod', companyId],
     queryFn: async () => {
       if (!companyId) return [];
       try {
-        const ent = base44.entities.ServiceOrder || base44.entities.service_order;
-        return await ent.filter({ company_id: companyId }, '-created_date');
+        return await base44.entities.ServiceOrder.filter({ company_id: companyId }, '-created_at', 500);
       } catch (e) {
         return [];
       }
     },
     enabled: !!companyId,
+    staleTime: 30000
   });
+
+  // OTIMIZAÇÃO: Buscar apenas clientes que aparecem nas OS/SRs atuais para evitar carregar milhares de registros
+  const clientIdsToFetch = useMemo(() => {
+    const ids = new Set();
+    serviceRequests.forEach(r => r.client_id && ids.add(r.client_id));
+    serviceOrders.forEach(o => o.client_id && ids.add(o.client_id));
+    return Array.from(ids);
+  }, [serviceRequests, serviceOrders]);
 
   const { data: clients = [] } = useQuery({
-    queryKey: ['as-clients-geo', companyId],
+    queryKey: ['as-clients-subset', companyId, clientIdsToFetch.length],
     queryFn: async () => {
-      if (!companyId) return [];
+      if (!companyId || clientIdsToFetch.length === 0) return [];
       try {
-        return await base44.entities.Client.filter({ company_id: companyId });
+        // Busca apenas o lote necessário de clientes
+        return await base44.entities.Client.filter({ 
+            company_id: companyId,
+            id: clientIdsToFetch
+        });
       } catch (e) {
         return [];
       }
     },
-    enabled: !!companyId,
+    enabled: !!companyId && clientIdsToFetch.length > 0,
+    staleTime: 60000
   });
 
+  // Mapeamento geográfico robusto
   const mapData = useMemo(() => {
+    const sReqs = Array.isArray(serviceRequests) ? serviceRequests : [];
     const sOrds = Array.isArray(serviceOrders) ? serviceOrders : [];
-    return sOrds.map(so => {
-      const client = clients.find(c => c.id === so.client_id);
+    
+    const combined = [
+        ...sReqs.map(r => ({ ...r, _type: 'SR' })),
+        ...sOrds.map(o => ({ ...o, _type: 'OS' }))
+    ];
+
+    return combined.map(item => {
+      const client = clients.find(c => c.id === item.client_id);
+      const uf = (client?.state || '').toUpperCase().trim();
+      const city = client?.city || item.contact_address?.split(',')[0] || 'Localidade não informada';
+      
       return {
-        ...so,
-        state_uf: (client?.state || '').toUpperCase().trim(),
-        city_name: client?.city || 'Localidade não informada',
-        client_name: client?.name || so.client_name || 'Cliente Oculto'
+        ...item,
+        state_uf: uf,
+        city_name: city,
+        client_name: client?.name || item.client_name || 'Cliente Oculto',
+        technician_name: item.technician_name || null
       };
-    }).filter(s => s.state_uf);
-  }, [serviceOrders, clients]);
+    }).filter(s => s.state_uf && s.technician_name); 
+  }, [serviceRequests, serviceOrders, clients]);
 
   const kpis = useMemo(() => {
     const sReqs = Array.isArray(serviceRequests) ? serviceRequests : [];
@@ -101,7 +126,7 @@ export default function AfterSales() {
     return { 
         total: filteredSubset.length, 
         pending: filteredSubset.filter(i => i._status === 'ABERTA' || i._status === 'PENDENTE').length, 
-        inProgress: filteredSubset.filter(i => ['EM_ANDAMENTO', 'EM_ATENDIMENTO', 'PAUSADA', 'AGUARDANDO_PECA'].includes(i._status)).length, 
+        inProgress: filteredSubset.filter(i => ['EM_ANDAMENTO', 'EM_ATENDIMENTO', 'PAUSADA', 'AGUARDANDO_PECA'].includes(item._status)).length, 
         efficiency: globalEfficiency 
     };
   }, [serviceRequests, serviceOrders, typeFilter, statusFilter]);
@@ -110,11 +135,19 @@ export default function AfterSales() {
       const sReqs = Array.isArray(serviceRequests) ? serviceRequests : [];
       const sOrds = Array.isArray(serviceOrders) ? serviceOrders : [];
       const combined = [
-          ...sReqs.map(sr => ({ ...sr, _type: 'SR', date: sr.created_date || sr.created_at, status: sr.status || 'Aberta' })),
-          ...sOrds.map(so => ({ ...so, _type: 'OS', date: so.created_date || so.created_at, status: so.status || 'Pendente' }))
+          ...sReqs.map(sr => ({ ...sr, _type: 'SR', date: sr.created_date || sr.created_at || new Date().toISOString(), status: sr.status || 'Aberta' })),
+          ...sOrds.map(so => ({ ...so, _type: 'OS', date: so.created_date || so.created_at || new Date().toISOString(), status: so.status || 'Pendente' }))
       ];
-      combined.sort((a, b) => moment(b.date).valueOf() - moment(a.date).valueOf());
+      
+      combined.sort((a, b) => {
+          const dateA = moment(a.date).isValid() ? moment(a.date).valueOf() : 0;
+          const dateB = moment(b.date).isValid() ? moment(b.date).valueOf() : 0;
+          return dateB - dateA;
+      });
+
       return combined.filter(item => {
+        const client = clients.find(c => c.id === item.client_id);
+        item._location = client ? `${client.city || 'S/C'}/${client.state || 'UF'}` : 'Não informada';
         if (typeFilter !== 'all' && item._type !== typeFilter) return false;
         const s = String(item?.status || '').toUpperCase();
         if (statusFilter === 'active') return s === 'ABERTA' || s === 'PENDENTE';
@@ -122,12 +155,11 @@ export default function AfterSales() {
         if (statusFilter === 'done') return ['ENCERRADA', 'CONCLUIDA', 'FINALIZADA'].includes(s);
         return true;
       }).slice(0, 50);
-  }, [serviceRequests, serviceOrders, typeFilter, statusFilter]);
+  }, [serviceRequests, serviceOrders, typeFilter, statusFilter, clients]);
 
   return (
     <div className="bg-[#0A0C10] min-h-screen text-slate-200 selection:bg-indigo-500/30">
       <div className="max-w-[1800px] mx-auto p-4 lg:p-8 space-y-8">
-        {/* Header Section - Glassmorphism */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 bg-white/5 backdrop-blur-xl p-6 rounded-[2rem] border border-white/10 shadow-2xl relative overflow-hidden group">
           <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
           <div className="relative z-10">
@@ -150,9 +182,7 @@ export default function AfterSales() {
           </div>
         </div>
 
-        {/* Main Grid Layout */}
         <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
-          {/* Main Visual Center (Map + KPIs) */}
           <div className="xl:col-span-9 space-y-8">
             <BrazilInteractiveMap services={mapData} />
             
@@ -180,7 +210,6 @@ export default function AfterSales() {
             </div>
           </div>
           
-          {/* Quick Actions / Sidebar Area */}
           <div className="xl:col-span-3 space-y-8">
             <div className="space-y-4">
               <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] px-4">Operações Rápidas</h3>
@@ -210,7 +239,6 @@ export default function AfterSales() {
               </div>
             </div>
 
-            {/* Live Feed Dinâmico */}
             <div className="p-6 bg-gradient-to-b from-indigo-500/10 to-transparent border border-white/5 rounded-[2rem] space-y-4">
                <div className="flex items-center gap-2">
                   <div className="w-2 h-2 bg-emerald-500 rounded-full animate-ping" />
@@ -221,7 +249,6 @@ export default function AfterSales() {
                       const clientFirst = (item.client_name || 'Cliente').split(' ')[0].toUpperCase();
                       const status = String(item.status || '').toUpperCase();
                       let message = '';
-                      
                       if (item._type === 'SR') {
                           message = `SOLICITAÇÃO #${item.request_number} RECEBIDA DE ${clientFirst}`;
                       } else {
@@ -233,7 +260,6 @@ export default function AfterSales() {
                               message = `OS #${item.os_number} AGENDADA PARA ${clientFirst}`;
                           }
                       }
-
                       return (
                           <div key={idx} className="group/feed relative">
                              <div className="absolute -left-3 top-0 bottom-0 w-[2px] bg-white/5 group-hover/feed:bg-indigo-500 transition-colors" />
@@ -249,15 +275,11 @@ export default function AfterSales() {
                           </div>
                       );
                   })}
-                  {technicalOperations.length === 0 && (
-                      <p className="text-[10px] text-slate-600 italic pl-3 uppercase font-black">Aguardando pulso do sistema...</p>
-                  )}
                </div>
             </div>
           </div>
         </div>
 
-        {/* Operational Panel - Dark Theme */}
         <Card className="shadow-2xl border border-white/5 rounded-[2.5rem] overflow-hidden bg-white/[0.02] backdrop-blur-sm">
           <CardHeader className="border-b border-white/5 bg-white/[0.02] p-6 flex flex-col lg:flex-row items-center justify-between gap-6">
             <CardTitle className="text-xs font-black uppercase tracking-[0.2em] flex items-center gap-3 text-slate-400">
@@ -327,7 +349,9 @@ export default function AfterSales() {
                                 </td>
                                 <td className="px-6 py-5">
                                     <p className="text-white font-bold uppercase truncate max-w-[300px]">{item.client_name || '-'}</p>
-                                    <p className="text-[10px] text-slate-500 font-medium">Data: {moment(item.date).format('DD/MM/YYYY')}</p>
+                                    <p className="text-[10px] text-slate-500 font-medium">
+                                        <span className="text-indigo-400 font-bold">{item._location}</span> • {moment(item.date).format('DD/MM/YYYY')}
+                                    </p>
                                 </td>
                                 <td className="px-6 py-5">
                                     <div className="flex items-center gap-2 text-slate-400 font-semibold italic text-[10px]">
@@ -357,16 +381,6 @@ export default function AfterSales() {
                                 </td>
                             </tr>
                         ))}
-                        {technicalOperations.length === 0 && (
-                            <tr>
-                                <td colSpan={5} className="p-20 text-center">
-                                    <div className="flex flex-col items-center gap-4 opacity-20">
-                                      <ClipboardList className="h-16 w-16 text-slate-400" />
-                                      <p className="text-sm font-black uppercase tracking-widest">Nenhuma Operação Monitorada</p>
-                                    </div>
-                                </td>
-                            </tr>
-                        )}
                     </tbody>
                 </table>
             </div>
