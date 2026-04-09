@@ -43,7 +43,7 @@ export const AuthProvider = ({ children }) => {
       const fullUser = { ...currentUser, ...userProfile };
       
       // PERSISTÊNCIA: Recuperar última empresa selecionada do localStorage
-      const storedCompanyId = localStorage.getItem('agfsig_last_company_id');
+      const storedCompanyId = localStorage.getItem('selectedCompanyId');
       if (storedCompanyId) {
         // Verifica se o usuário ainda tem acesso a essa empresa antes de aplicar
         const hasAccess = fullUser.company_ids?.includes(storedCompanyId) || fullUser.company_id === storedCompanyId;
@@ -87,7 +87,7 @@ export const AuthProvider = ({ children }) => {
   const updateUser = (updatedUser) => {
     // PERSISTÊNCIA: Se a empresa mudou, salvar no localStorage
     if (updatedUser.company_id) {
-      localStorage.setItem('agfsig_last_company_id', updatedUser.company_id);
+      localStorage.setItem('selectedCompanyId', updatedUser.company_id);
     }
     setUser(prev => ({ ...prev, ...updatedUser }));
   };

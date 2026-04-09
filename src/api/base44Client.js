@@ -271,7 +271,7 @@ export const base44 = {
         };
 
         // PERSISTÊNCIA: Se houver uma empresa salva no localStorage, usa ela
-        const storedCompanyId = localStorage.getItem('agfsig_last_company_id');
+        const storedCompanyId = localStorage.getItem('selectedCompanyId');
         if (storedCompanyId) {
           const hasAccess = cachedUser.company_ids?.includes(storedCompanyId) || cachedUser.company_id === storedCompanyId;
           if (hasAccess) {
@@ -293,7 +293,7 @@ export const base44 = {
       const { error } = await supabase.from('User').update(data).eq('email', session.user.email);
       if (error) throw error;
       if (data.company_id) {
-        localStorage.setItem('agfsig_last_company_id', data.company_id);
+        localStorage.setItem('selectedCompanyId', data.company_id);
       }
       if (typeof base44.auth.me.clearCache === 'function') {
         base44.auth.me.clearCache();
