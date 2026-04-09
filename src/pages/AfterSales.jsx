@@ -21,6 +21,9 @@ export default function AfterSales() {
   const [search, setSearch] = useState(searchParams.get('search') || '');
   const [statusFilter, setStatusFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 5;
+
 
   const { data: serviceRequests = [] } = useQuery({
     queryKey: ['as-requests-prod', companyId],
@@ -154,8 +157,16 @@ export default function AfterSales() {
         if (statusFilter === 'progress') return ['EM_ANDAMENTO', 'EM_ATENDIMENTO', 'PAUSADA', 'AGUARDANDO_PECA'].includes(s);
         if (statusFilter === 'done') return ['ENCERRADA', 'CONCLUIDA', 'FINALIZADA'].includes(s);
         return true;
-      }).slice(0, 50);
+      });
   }, [serviceRequests, serviceOrders, typeFilter, statusFilter, clients]);
+
+  const totalOperations = technicalOperations.length;
+  const totalPages = Math.ceil(totalOperations / PAGE_SIZE);
+  const paginatedOperations = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return technicalOperations.slice(start, start + PAGE_SIZE);
+  }, [technicalOperations, currentPage, PAGE_SIZE]);
+
 
   return (
     <div className="bg-[#0A0C10] min-h-screen text-slate-200 selection:bg-indigo-500/30">
@@ -335,7 +346,7 @@ export default function AfterSales() {
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5">
-                        {technicalOperations.map((item, i) => (
+                        {paginatedOperations.map((item, i) => (
                             <tr key={item.id || i} className="hover:bg-white/[0.03] transition-all group">
                                 <td className="px-6 py-5">
                                     <div className="flex items-center gap-3">
@@ -384,6 +395,43 @@ export default function AfterSales() {
                     </tbody>
                 </table>
             </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between px-8 py-6 border-t border-white/5 bg-white/[0.01]">
+                <div className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                  Exibindo <span className="text-white">{(currentPage - 1) * PAGE_SIZE + 1}-{Math.min(currentPage * PAGE_SIZE, totalOperations)}</span> de <span className="text-indigo-400">{totalOperations}</span> resultados
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-1">
+                      <Button
+                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                        disabled={currentPage === 1}
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-8 p-0 rounded-lg hover:bg-indigo-500 hover:text-white transition-all disabled:opacity-20"
+                      >
+                        ←
+                      </Button>
+                      <div className="px-4 py-1.5 bg-indigo-500/10 rounded-xl border border-indigo-500/20">
+                         <span className="text-xs font-black text-indigo-400 tracking-tighter">{currentPage}</span>
+                         <span className="text-[10px] text-slate-600 font-bold px-1">/</span>
+                         <span className="text-xs font-black text-slate-400 tracking-tighter">{totalPages}</span>
+                      </div>
+                      <Button
+                        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                        disabled={currentPage === totalPages}
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-8 p-0 rounded-lg hover:bg-indigo-500 hover:text-white transition-all disabled:opacity-20"
+                      >
+                        →
+                      </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+
           </CardContent>
         </Card>
       </div>
