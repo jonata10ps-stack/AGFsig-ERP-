@@ -214,6 +214,31 @@ export default function Layout({ children, currentPageName }) {
     loadUser();
   }, []);
 
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      if (!document.fullscreenElement && sidebarCollapsed) {
+        setSidebarCollapsed(false);
+      }
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, [sidebarCollapsed]);
+
+  const toggleSidebar = (collapsed) => {
+    setSidebarCollapsed(collapsed);
+    if (collapsed) {
+      if (document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen().catch(err => {
+          console.error(`Error attempting to enable full-screen mode: ${err.message}`);
+        });
+      }
+    } else {
+      if (document.fullscreenElement && document.exitFullscreen) {
+        document.exitFullscreen();
+      }
+    }
+  };
+
   const handleLogout = () => {
     base44.auth.logout();
   };
@@ -334,7 +359,7 @@ export default function Layout({ children, currentPageName }) {
             </Link>
             {!sidebarCollapsed && (
               <button 
-                onClick={() => setSidebarCollapsed(true)} 
+                onClick={() => toggleSidebar(true)} 
                 className="hidden lg:flex p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-indigo-600 transition-colors"
                 title="Recolher menu"
               >
@@ -347,7 +372,7 @@ export default function Layout({ children, currentPageName }) {
           {sidebarCollapsed && (
             <div className="hidden lg:flex justify-center py-4 border-b border-slate-50">
               <button 
-                onClick={() => setSidebarCollapsed(false)} 
+                onClick={() => toggleSidebar(false)} 
                 className="p-2 rounded-xl bg-slate-50 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-all shadow-sm border border-slate-100"
                 title="Expandir menu"
               >
@@ -355,6 +380,7 @@ export default function Layout({ children, currentPageName }) {
               </button>
             </div>
           )}
+
 
 
 
