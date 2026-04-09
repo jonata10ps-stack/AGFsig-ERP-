@@ -187,39 +187,39 @@ export default function BrazilInteractiveMap({ services = [] }) {
       </div>
 
       {/* Legend & Regional Quick-Select */}
-      <div className="absolute bottom-10 left-10 z-30">
-        <div className="flex flex-wrap bg-black/40 backdrop-blur-3xl p-3 rounded-[2.5rem] border border-white/10 gap-3 shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
+      <div className="absolute bottom-6 left-10 z-30">
+        <div className="flex flex-wrap bg-black/60 backdrop-blur-3xl p-1.5 rounded-[2rem] border border-white/10 gap-1.5 shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
             {Object.entries(REGIONS_CONFIG).map(([key, reg]) => (
                 <button 
                   key={key} 
                   onClick={() => handleRegionClick(key)}
-                  className={`flex items-center gap-4 px-6 py-3.5 rounded-3xl transition-all duration-500 border border-transparent ${
+                  className={`flex items-center gap-2 px-4 py-2 rounded-2xl transition-all duration-500 border border-transparent ${
                     selectedRegion === key 
-                    ? 'bg-white/10 border-white/10 shadow-[0_0_25px_rgba(255,255,255,0.1)]' 
-                    : 'hover:bg-white/5 opacity-40 hover:opacity-70'
+                    ? 'bg-white/10 border-white/10 shadow-[0_0_20px_rgba(255,255,255,0.1)]' 
+                    : 'hover:bg-white/5 opacity-50 hover:opacity-100'
                   }`}
                 >
-                  <div className="w-3.5 h-3.5 rounded-full" style={{ backgroundColor: reg.color, boxShadow: `0 0 15px ${reg.color}` }} />
-                  <span className="text-[10px] font-black text-white uppercase tracking-[0.4em]">{reg.name}</span>
+                  <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: reg.color, boxShadow: `0 0 10px ${reg.color}` }} />
+                  <span className="text-[9px] font-black text-white uppercase tracking-[0.2em]">{reg.name}</span>
                 </button>
             ))}
         </div>
       </div>
 
       {/* Connectivity Status */}
-      <div className="absolute bottom-10 right-10 z-30">
-        <div className="flex items-center gap-6 bg-white/5 backdrop-blur-2xl px-10 py-5 rounded-[2rem] border border-white/5 shadow-2xl">
-            <div className="flex flex-col gap-1">
-                <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Active Links</span>
-                <span className="text-xl font-black text-white tabular-nums tracking-tighter">{services.length}</span>
+      <div className="absolute bottom-6 right-10 z-30">
+        <div className="flex items-center gap-4 bg-white/5 backdrop-blur-2xl px-6 py-3 rounded-[1.5rem] border border-white/5 shadow-2xl">
+            <div className="flex flex-col gap-0.5">
+                <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest leading-none">Links</span>
+                <span className="text-sm font-black text-white tabular-nums tracking-tighter leading-none">{services.length}</span>
             </div>
-            <div className="w-[1px] h-8 bg-white/10" />
-            <div className="flex items-center gap-3">
-                 <div className="flex flex-col items-end">
-                    <span className="text-[9px] font-black text-emerald-500/80 uppercase tracking-widest">System Health</span>
-                    <span className="text-[10px] font-bold text-slate-400">99.4% Uptime</span>
+            <div className="w-[1px] h-6 bg-white/10" />
+            <div className="flex items-center gap-2.5">
+                 <div className="flex flex-col items-end gap-0.5">
+                    <span className="text-[8px] font-black text-emerald-500/80 uppercase tracking-widest leading-none">Health</span>
+                    <span className="text-[9px] font-bold text-slate-400 leading-none">99.4%</span>
                  </div>
-                 <div className="w-3 h-3 rounded-full bg-emerald-500 shadow-[0_0_15px_#10b981] animate-pulse" />
+                 <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_10px_#10b981] animate-pulse" />
             </div>
         </div>
       </div>
