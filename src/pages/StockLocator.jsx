@@ -33,11 +33,25 @@ export default function StockLocator() {
     qty: 0
   });
 
-  const { data: products } = useQuery({
-    queryKey: ['products', companyId],
-    queryFn: () => companyId ? base44.entities.Product.filter({ company_id: companyId, active: true }) : Promise.resolve([]),
-    enabled: !!companyId,
+  const { data: searchResult, isLoading: isSearching } = useQuery({
+    queryKey: ['products-search', companyId, searchTerm],
+    queryFn: async () => {
+      if (!companyId || searchTerm.length < 2) return { data: [], count: 0 };
+      
+      return base44.entities.Product.queryPaginated(
+        { company_id: companyId, active: true },
+        'sku',
+        10,
+        0,
+        ['sku', 'name'],
+        searchTerm
+      );
+    },
+    enabled: !!companyId && searchTerm.length >= 2,
   });
+
+  const searchedProducts = searchResult?.data || [];
+
 
   const { data: warehouses } = useQuery({
     queryKey: ['warehouses', companyId],
@@ -157,25 +171,8 @@ export default function StockLocator() {
   const warehouseMap = warehouses?.reduce((acc, w) => ({ ...acc, [w.id]: w }), {}) || {};
   const locationMap = locations?.reduce((acc, l) => ({ ...acc, [l.id]: l }), {}) || {};
 
-  const filteredProducts = React.useMemo(() => {
-    if (!products || searchTerm === '') return [];
-    const term = searchTerm.toLowerCase();
-    return products
-      .filter(p =>
-        p.sku?.toLowerCase().includes(term) ||
-        p.name?.toLowerCase().includes(term)
-      )
-      .sort((a, b) => {
-        const skuA = (a.sku || '').toLowerCase();
-        const skuB = (b.sku || '').toLowerCase();
-        // Exact match first
-        if (skuA === term && skuB !== term) return -1;
-        if (skuB === term && skuA !== term) return 1;
-        // Shorter SKU first (more "exact" match)
-        return skuA.length - skuB.length;
-      })
-      .slice(0, 10);
-  }, [products, searchTerm]);
+  const productsToShow = searchTerm.length >= 2 ? searchedProducts : [];
+
 
   const handleProductSelect = (product) => {
     setSelectedProduct(product);
@@ -230,9 +227,15 @@ export default function StockLocator() {
             />
           </div>
 
-          {searchTerm && filteredProducts && filteredProducts.length > 0 && (
+          {isSearching && (
+            <div className="flex items-center justify-center p-4">
+              <Loader2 className="h-6 w-6 animate-spin text-indigo-500" />
+            </div>
+          )}
+
+          {searchTerm.length >= 2 && productsToShow.length > 0 && (
             <div className="border border-slate-200 rounded-lg divide-y">
-              {filteredProducts.map(product => (
+              {productsToShow.map(product => (
                 <button
                   key={product.id}
                   onClick={() => handleProductSelect(product)}
@@ -247,6 +250,11 @@ export default function StockLocator() {
               ))}
             </div>
           )}
+
+          {searchTerm.length >= 2 && !isSearching && productsToShow.length === 0 && (
+            <p className="text-sm text-slate-500 text-center py-4">Nenhum produto encontrado para "{searchTerm}"</p>
+          )}
+
         </CardContent>
       </Card>
 
