@@ -306,10 +306,10 @@ export default function MaterialRequestDetail() {
     document.body.appendChild(iframe);
     
     const doc = iframe.contentWindow.document;
-    doc.write(\`
+    doc.write(`
       <html>
         <head>
-          <title>Solicitação - \${request?.request_number || ''}</title>
+          <title>Solicitação - ${request?.request_number || ''}</title>
           <style>
             body { font-family: sans-serif; padding: 20px; color: #333; }
             .header { border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 20px; }
@@ -323,10 +323,10 @@ export default function MaterialRequestDetail() {
         </head>
         <body>
           <div class="header">
-            <div class="title">Solicitação de Materiais - \${request?.request_number || ''}</div>
-            <p><strong>Solicitante:</strong> \${request?.requester || form.requester || ''}</p>
-            <p><strong>Departamento:</strong> \${request?.department || form.department || ''}</p>
-            <p><strong>Data:</strong> \${format(new Date(), 'dd/MM/yyyy')}</p>
+            <div class="title">Solicitação de Materiais - ${request?.request_number || ''}</div>
+            <p><strong>Solicitante:</strong> ${request?.requester || form.requester || ''}</p>
+            <p><strong>Departamento:</strong> ${request?.department || form.department || ''}</p>
+            <p><strong>Data:</strong> ${format(new Date(), 'dd/MM/yyyy')}</p>
           </div>
           <table>
             <thead>
@@ -340,16 +340,16 @@ export default function MaterialRequestDetail() {
               </tr>
             </thead>
             <tbody>
-              \${(items || []).map(item => \`
+              ${(items || []).map(item => `
                 <tr>
-                  <td>\${item.product_sku || ''}</td>
-                  <td>\${item.product_name || ''}</td>
-                  <td style="text-align:right">\${item.qty_requested || 0}</td>
-                  <td style="text-align:right">\${item.qty_received || 0}</td>
-                  <td style="text-align:right">\${item.qty_pending ?? item.qty_requested}</td>
-                  <td>\${item.notes || '-'}</td>
+                  <td>${item.product_sku || ''}</td>
+                  <td>${item.product_name || ''}</td>
+                  <td style="text-align:right">${item.qty_requested || 0}</td>
+                  <td style="text-align:right">${item.qty_received || 0}</td>
+                  <td style="text-align:right">${item.qty_pending ?? item.qty_requested}</td>
+                  <td>${item.notes || '-'}</td>
                 </tr>
-              \`).join('')}
+              `).join('')}
             </tbody>
           </table>
           <div class="footer">
@@ -358,7 +358,7 @@ export default function MaterialRequestDetail() {
           </div>
         </body>
       </html>
-    \`);
+    `);
     doc.close();
     
     setTimeout(() => {
@@ -386,7 +386,7 @@ export default function MaterialRequestDetail() {
           </Link>
           <div>
             <h1 className="text-2xl font-bold text-slate-900">
-              {isNew ? 'Nova Solicitação' : \`Solicitação \${request?.request_number}\`}
+              {isNew ? 'Nova Solicitação' : `Solicitação ${request?.request_number}`}
             </h1>
             {request && (
               <Badge className={STATUS_CONFIG[request.status]?.color}>
@@ -417,7 +417,7 @@ export default function MaterialRequestDetail() {
                     <Ban className="h-4 w-4 mr-2" />
                     {cancelRequestMutation.isPending ? 'Cancelando...' : 'Cancelar Solicitação'}
                   </Button>
-                  <Link to={createPageUrl(\`InventoryReceive?request=\${requestId}\`)}>
+                  <Link to={createPageUrl(`InventoryReceive?request=${requestId}`)}>
                     <Button className="bg-emerald-600 hover:bg-emerald-700">
                       <Package className="h-4 w-4 mr-2" />
                       Receber
