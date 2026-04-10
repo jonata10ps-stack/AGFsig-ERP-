@@ -82,39 +82,31 @@ export default function ServiceRequests() {
     enabled: !!companyId,
   });
 
-  const { data: availableSerials } = useQuery({
-    queryKey: ['available-serials', form.client_id, form.product_id],
-    queryFn: async () => {
-      if (!form.client_id || !form.product_id) return [];
-      
-      // Busca 1: Pelo ID exato do cliente
-      const byId = await base44.entities.SerialNumber.filter({ 
-          client_id: form.client_id, 
-          company_id: companyId 
-      });
-
-      // Busca 2: Pelo Nome do Cliente (Redundância para cadastros importados ou manuais)
-      const client = clients?.find(c => c.id === form.client_id);
-      let byName = [];
-      if (client?.name && byId.length === 0) {
-        byName = await base44.entities.SerialNumber.filter({ 
-          client_name: client.name,
-          company_id: companyId 
-        });
-      }
-
-      const combined = [...byId, ...byName];
-      // Desduplicação por ID do registro
-      const unique = combined.filter((v, i, a) => a.findIndex(t => t.id === v.id) === i);
-
-      // Filtro Final por Produto (Tenta por ID e depois por SKU como redundância)
-      return unique.filter(s => 
-        String(s.product_id) === String(form.product_id) || 
-        (s.product_sku === form.product_sku && form.product_sku)
-      );
-    },
-    enabled: !!(form.client_id && form.product_id && companyId),
+  const { data: allCompanySerials, isLoading: isLoadingSerials } = useQuery({
+    queryKey: ['all-serials-company', companyId],
+    queryFn: () => companyId ? base44.entities.SerialNumber.filter({ company_id: companyId }) : Promise.resolve([]),
+    enabled: !!companyId,
   });
+
+  const availableSerials = React.useMemo(() => {
+    if (!form.client_id || !form.product_id || !allCompanySerials) return [];
+    
+    const client = clients?.find(c => c.id === form.client_id);
+    const clientNameSearch = client?.name?.toLowerCase().trim();
+    const productSkuSearch = form.product_sku?.toLowerCase().trim();
+
+    return allCompanySerials.filter(s => {
+      // Tenta bater por ID ou por Nome (ignorando espaços e maiúsculas)
+      const matchClient = s.client_id === form.client_id || 
+                          (clientNameSearch && s.client_name?.toLowerCase().trim().includes(clientNameSearch));
+      
+      // Tenta bater por ID ou por SKU (mais seguro se IDs mudarem)
+      const matchProduct = String(s.product_id) === String(form.product_id) || 
+                           (productSkuSearch && s.product_sku?.toLowerCase().trim() === productSkuSearch);
+      
+      return matchClient && matchProduct;
+    });
+  }, [form.client_id, form.product_id, allCompanySerials, clients, form.product_sku]);
 
   const createMutation = useMutation({
     mutationFn: async (data) => {
