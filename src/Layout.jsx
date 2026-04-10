@@ -216,6 +216,15 @@ export default function Layout({ children, currentPageName }) {
   }, []);
 
   useEffect(() => {
+    if (sidebarCollapsed) {
+      document.body.classList.add('scrollbar-hide');
+    } else {
+      document.body.classList.remove('scrollbar-hide');
+    }
+    return () => document.body.classList.remove('scrollbar-hide');
+  }, [sidebarCollapsed]);
+
+  useEffect(() => {
     let idleTimeout;
     const INACTIVITY_LIMIT = 30000; // 30 seconds
 
