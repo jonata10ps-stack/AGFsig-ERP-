@@ -85,7 +85,7 @@ export default function ServiceRequests() {
   const { data: availableSerials } = useQuery({
     queryKey: ['available-serials', form.client_id, form.product_id],
     queryFn: () => (form.client_id && form.product_id) 
-      ? base44.entities.SerialNumberControl.filter({ 
+      ? base44.entities.SerialNumber.filter({ 
           client_id: form.client_id, 
           product_id: form.product_id,
           company_id: companyId 
