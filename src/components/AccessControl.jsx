@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { base44 } from '@/api/base44Client';
 import { Card, CardContent } from '@/components/ui/card';
-import { AlertCircle, Clock, LogOut } from 'lucide-react';
+import { AlertCircle, Clock, LogOut, ShieldAlert } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { navigation } from '@/navigation';
 
-export default function AccessControl({ children }) {
+export default function AccessControl({ children, currentPageName }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -33,12 +34,12 @@ export default function AccessControl({ children }) {
     );
   }
 
-  // Allow admins full access
+  // Admins have bypass
   if (user?.role === 'admin') {
     return children;
   }
 
-  // Check if user is inactive
+  // 1. Check if user is active
   if (user?.active === false) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center p-4">
@@ -51,11 +52,7 @@ export default function AccessControl({ children }) {
             <p className="text-slate-600 mb-6">
               Sua conta foi desativada. Entre em contato com o administrador para mais informações.
             </p>
-            <Button
-              onClick={() => base44.auth.logout()}
-              variant="outline"
-              className="w-full"
-            >
+            <Button onClick={() => base44.auth.logout()} variant="outline" className="w-full">
               <LogOut className="h-4 w-4 mr-2" />
               Sair
             </Button>
@@ -65,47 +62,8 @@ export default function AccessControl({ children }) {
     );
   }
 
-  // Check if regular user is approved
-  const isApproved = user?.account_status === 'APROVADO';
-  const isPending = !user?.account_status || user?.account_status === 'PENDENTE';
-  const isRejected = user?.account_status === 'REJEITADO';
-
-  if (isPending) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center p-4">
-        <Card className="max-w-md w-full">
-          <CardContent className="p-8 text-center">
-            <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Clock className="h-8 w-8 text-amber-600" />
-            </div>
-            <h2 className="text-2xl font-bold text-slate-900 mb-2">Aguardando Aprovação</h2>
-            <p className="text-slate-600 mb-6">
-              Seu acesso está pendente de aprovação por um administrador. 
-              Você receberá um email quando seu acesso for liberado.
-            </p>
-            <div className="bg-slate-50 rounded-lg p-4 mb-6 text-left">
-              <p className="text-sm text-slate-600 mb-1">
-                <strong>Usuário:</strong> {user?.full_name || 'Sem nome'}
-              </p>
-              <p className="text-sm text-slate-600">
-                <strong>Email:</strong> {user?.email}
-              </p>
-            </div>
-            <Button
-              onClick={() => base44.auth.logout()}
-              variant="outline"
-              className="w-full"
-            >
-              <LogOut className="h-4 w-4 mr-2" />
-              Sair
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  if (isRejected) {
+  // 2. Check if user is rejected
+  if (user?.account_status === 'REJEITADO') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center p-4">
         <Card className="max-w-md w-full">
@@ -117,11 +75,7 @@ export default function AccessControl({ children }) {
             <p className="text-slate-600 mb-6">
               Seu acesso a este sistema foi negado. Entre em contato com o administrador para mais informações.
             </p>
-            <Button
-              onClick={() => base44.auth.logout()}
-              variant="outline"
-              className="w-full"
-            >
+            <Button onClick={() => base44.auth.logout()} variant="outline" className="w-full">
               <LogOut className="h-4 w-4 mr-2" />
               Sair
             </Button>
@@ -131,6 +85,79 @@ export default function AccessControl({ children }) {
     );
   }
 
-  // User is approved, show normal content
+  // 3. Check if user is pending
+  if (!user?.account_status || user?.account_status === 'PENDENTE') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center p-4">
+        <Card className="max-w-md w-full">
+          <CardContent className="p-8 text-center">
+            <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Clock className="h-8 w-8 text-amber-600" />
+            </div>
+            <h2 className="text-2xl font-bold text-slate-900 mb-2">Aguardando Aprovação</h2>
+            <p className="text-slate-600 mb-6">
+              Seu acesso está pendente de aprovação por um administrador.
+            </p>
+            <Button onClick={() => base44.auth.logout()} variant="outline" className="w-full">
+              <LogOut className="h-4 w-4 mr-2" />
+              Sair
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // 4. MODULE ENFORCEMENT
+  const parseModules = (val) => {
+    if (!val) return [];
+    if (Array.isArray(val)) return val;
+    if (typeof val === 'string' && val.startsWith('[')) {
+      try { return JSON.parse(val); } catch (e) { return []; }
+    }
+    if (typeof val === 'string') return val.split(',').map(s => s.trim());
+    return [];
+  };
+
+  const allowedModules = parseModules(user?.allowed_modules).map(m => String(m).toLowerCase());
+
+  const findModuleForPage = (navItems, pageName) => {
+    for (const item of navItems) {
+      if (item.page === pageName) return item.moduleId;
+      if (item.children) {
+        const found = findModuleForPage(item.children, pageName);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+
+  const requiredModule = findModuleForPage(navigation, currentPageName);
+
+  if (requiredModule && !allowedModules.includes(requiredModule.toLowerCase())) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center p-4">
+        <Card className="max-w-md w-full">
+          <CardContent className="p-8 text-center">
+            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <ShieldAlert className="h-8 w-8 text-red-600" />
+            </div>
+            <h2 className="text-2xl font-bold text-slate-900 mb-2">Acesso Restrito</h2>
+            <p className="text-slate-600 mb-6">
+              Você não possui permissão para acessar o módulo <strong>{requiredModule}</strong>.
+              Dúvidas? Fale com seu gestor.
+            </p>
+            <Button
+              onClick={() => window.location.href = '#/Dashboard'}
+              className="w-full bg-indigo-600"
+            >
+              Voltar ao Início
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return children;
 }
