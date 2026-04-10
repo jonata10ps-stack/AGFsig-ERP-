@@ -157,7 +157,7 @@ export default function AfterSalesQuality() {
                 <ShieldCheck className="h-8 w-8 text-indigo-400" />
                 Controle de Qualidade de Campo
               </h1>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.3em] mt-1">Inteligência de Pós-Vendas & Engenharia</p>
+              <p className="text-[10px] font-bold text-slate-300 uppercase tracking-[0.3em] mt-1">Inteligência de Pós-Vendas & Engenharia</p>
             </div>
           </div>
           <div className="flex gap-3 relative z-10">
@@ -181,7 +181,7 @@ export default function AfterSalesQuality() {
               {/* Pie Chart: Problem Categories */}
               <Card className="bg-white/[0.02] border-white/5 rounded-[2rem] overflow-hidden shadow-2xl">
                 <CardHeader className="p-8 pb-0">
-                  <CardTitle className="text-xs font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
+                  <CardTitle className="text-xs font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
                     <AlertTriangle className="h-4 w-4 text-amber-500" />
                     Categorias de Falhas Recorrentes
                   </CardTitle>
@@ -214,7 +214,7 @@ export default function AfterSalesQuality() {
                     {analytics?.chartProblems.map((item, idx) => (
                       <div key={idx} className="flex items-center gap-2">
                         <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
-                        <span className="text-[10px] font-bold uppercase text-slate-400 truncate">{item.name}</span>
+                        <span className="text-[10px] font-bold uppercase text-slate-300 truncate">{item.name}</span>
                         <span className="text-[10px] font-black text-white ml-auto">{item.value}</span>
                       </div>
                     ))}
@@ -225,7 +225,7 @@ export default function AfterSalesQuality() {
               {/* Bar Chart: Top Products with Issues */}
               <Card className="bg-white/[0.02] border-white/5 rounded-[2rem] overflow-hidden shadow-2xl">
                 <CardHeader className="p-8 pb-0">
-                  <CardTitle className="text-xs font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
+                  <CardTitle className="text-xs font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
                     <Package className="h-4 w-4 text-indigo-400" />
                     Top Produtos em Assistência
                   </CardTitle>
@@ -239,9 +239,9 @@ export default function AfterSalesQuality() {
                           dataKey="name" 
                           axisLine={false} 
                           tickLine={false} 
-                          tick={{ fill: '#64748b', fontSize: 8 }}
+                          tick={{ fill: '#94a3b8', fontSize: 8 }}
                         />
-                        <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 8 }} />
+                        <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 8 }} />
                         <Tooltip 
                           cursor={{ fill: '#ffffff05' }}
                           contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '12px' }}
@@ -265,7 +265,7 @@ export default function AfterSalesQuality() {
               <CardContent className="p-0">
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs text-left">
-                    <thead className="bg-black/20 text-slate-500 font-bold uppercase text-[9px] tracking-widest">
+                    <thead className="bg-black/20 text-slate-400 font-bold uppercase text-[9px] tracking-widest">
                       <tr>
                         <th className="px-8 py-5">Produto</th>
                         <th className="px-6 py-5 text-center">Frequência</th>
@@ -291,7 +291,7 @@ export default function AfterSalesQuality() {
                             </Badge>
                           </td>
                           <td className="px-8 py-6">
-                            <p className="text-[11px] text-slate-400 leading-relaxed max-w-[300px]">
+                            <p className="text-[11px] text-slate-300 leading-relaxed max-w-[300px]">
                               {item.insight}
                             </p>
                           </td>
@@ -350,7 +350,7 @@ export default function AfterSalesQuality() {
 
             {/* Improvement Feed */}
             <div className="space-y-4">
-              <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] px-4">Insights Sugeridos</h3>
+              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] px-4">Insights Sugeridos</h3>
               <div className="space-y-3">
                 {[
                   { title: 'Revisão Filtro Hidráulico', type: 'ENGENHARIA', priority: 'ALTA', color: 'text-rose-400 bg-rose-500/10 border-rose-500/20' },
