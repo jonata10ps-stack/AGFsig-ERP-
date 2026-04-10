@@ -84,13 +84,15 @@ export default function ServiceRequests() {
 
   const { data: availableSerials } = useQuery({
     queryKey: ['available-serials', form.client_id, form.product_id],
-    queryFn: () => (form.client_id && form.product_id) 
-      ? base44.entities.SerialNumber.filter({ 
+    queryFn: async () => {
+      if (!form.client_id || !form.product_id) return [];
+      const res = await base44.entities.SerialNumber.filter({ 
           client_id: form.client_id, 
-          product_id: form.product_id,
           company_id: companyId 
-        }) 
-      : Promise.resolve([]),
+      });
+      // Filtramos por produto no JS para ser mais resiliente caso o produto tenha IDs duplicados ou problemas de tipo
+      return res.filter(s => String(s.product_id) === String(form.product_id));
+    },
     enabled: !!(form.client_id && form.product_id && companyId),
   });
 
