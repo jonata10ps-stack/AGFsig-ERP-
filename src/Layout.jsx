@@ -142,6 +142,7 @@ const navigation = [
       { name: 'Técnicos', icon: Users, page: 'Technicians' },
       { name: 'Devoluções', icon: Package, page: 'Returns' },
       { name: 'Controle de Séries', icon: Package, page: 'SerialNumberControl' },
+      { name: 'Controle de Qualidade', icon: BarChart3, page: 'AfterSalesQuality' },
       { name: 'Relatórios', icon: BarChart3, page: 'ServiceReports' },
       { name: 'Templates de Relatórios IA', icon: BarChart3, page: 'ReportTemplates' },
     ]
