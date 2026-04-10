@@ -86,12 +86,32 @@ export default function ServiceRequests() {
     queryKey: ['available-serials', form.client_id, form.product_id],
     queryFn: async () => {
       if (!form.client_id || !form.product_id) return [];
-      const res = await base44.entities.SerialNumber.filter({ 
+      
+      // Busca 1: Pelo ID exato do cliente
+      const byId = await base44.entities.SerialNumber.filter({ 
           client_id: form.client_id, 
           company_id: companyId 
       });
-      // Filtramos por produto no JS para ser mais resiliente caso o produto tenha IDs duplicados ou problemas de tipo
-      return res.filter(s => String(s.product_id) === String(form.product_id));
+
+      // Busca 2: Pelo Nome do Cliente (Redundância para cadastros importados ou manuais)
+      const client = clients?.find(c => c.id === form.client_id);
+      let byName = [];
+      if (client?.name && byId.length === 0) {
+        byName = await base44.entities.SerialNumber.filter({ 
+          client_name: client.name,
+          company_id: companyId 
+        });
+      }
+
+      const combined = [...byId, ...byName];
+      // Desduplicação por ID do registro
+      const unique = combined.filter((v, i, a) => a.findIndex(t => t.id === v.id) === i);
+
+      // Filtro Final por Produto (Tenta por ID e depois por SKU como redundância)
+      return unique.filter(s => 
+        String(s.product_id) === String(form.product_id) || 
+        (s.product_sku === form.product_sku && form.product_sku)
+      );
     },
     enabled: !!(form.client_id && form.product_id && companyId),
   });
