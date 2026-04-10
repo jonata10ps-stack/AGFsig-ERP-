@@ -6,7 +6,7 @@ import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { 
   Wrench, ClipboardList, AlertCircle, Clock, 
-  ArrowRight, Filter, Search, MoreHorizontal, Activity, BarChart3
+  ArrowRight, Filter, Search, MoreHorizontal, Activity, BarChart2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -228,7 +228,7 @@ export default function AfterSales() {
                 {[
                     { title: 'Solicitações', desc: 'Gerenciar chamados', icon: ClipboardList, page: 'ServiceRequests', color: 'hover:border-blue-500/50 hover:bg-blue-500/5', iconBg: 'bg-blue-500/10 text-blue-400' },
                     { title: 'Ordens Técnicas', desc: 'Controle de campo', icon: Wrench, page: 'ServiceOrders', color: 'hover:border-indigo-500/50 hover:bg-indigo-500/5', iconBg: 'bg-indigo-500/10 text-indigo-400' },
-                    { title: 'Controle de Qualidade', desc: 'Gargalos & Melhorias', icon: BarChart3, page: 'AfterSalesQuality', color: 'hover:border-amber-500/50 hover:bg-amber-500/5', iconBg: 'bg-amber-500/10 text-amber-400' },
+                    { title: 'Controle de Qualidade', desc: 'Gargalos & Melhorias', icon: BarChart2, page: 'AfterSalesQuality', color: 'hover:border-amber-500/50 hover:bg-amber-500/5', iconBg: 'bg-amber-500/10 text-amber-400' },
                     { title: 'Relatórios Full', desc: 'Análise de KPIs', icon: Clock, page: 'ServiceReports', color: 'hover:border-emerald-500/50 hover:bg-emerald-500/5', iconBg: 'bg-emerald-500/10 text-emerald-400' },
                 ].map((link, i) => (
                     <Link key={i} to={createPageUrl(link.page)} className="block group">

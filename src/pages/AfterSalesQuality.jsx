@@ -5,8 +5,8 @@ import { useCompanyId } from '@/components/useCompanyId';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { 
-  ShieldCheck, AlertTriangle, TrendingUp, Tool, 
-  ArrowLeft, Search, BarChart3, Settings, Lightbulb,
+  ShieldCheck, AlertTriangle, TrendingUp, Wrench, 
+  ArrowLeft, Search, BarChart2, Settings, Lightbulb,
   Clock, Package, ChevronRight, MessageSquare
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
