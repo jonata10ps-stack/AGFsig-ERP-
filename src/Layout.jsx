@@ -410,7 +410,7 @@ export default function Layout({ children, currentPageName }) {
           {/* Navigation */}
           <nav className={cn(
             "flex-1 py-6 space-y-1 overflow-y-auto overflow-x-hidden transition-all",
-            sidebarCollapsed ? "px-2" : "px-4"
+            sidebarCollapsed ? "px-2 scrollbar-hide" : "px-4"
           )}>
 
             {navigation
