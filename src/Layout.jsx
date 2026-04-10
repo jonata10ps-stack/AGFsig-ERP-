@@ -64,8 +64,12 @@ export default function Layout({ children, currentPageName }) {
   useEffect(() => {
     const loadUser = async () => {
       try {
-        const userData = await base44.auth.me();
-        setUser(userData);
+        const authData = await base44.auth.me();
+        if (authData?.id) {
+          // Busca o perfil completo direto na tabela User para garantir dados frescos
+          const profile = await base44.entities.User.filter({ email: authData.email }).then(res => res?.[0]);
+          setUser({ ...authData, ...profile });
+        }
       } catch (e) {
         console.log('User not logged in');
       }

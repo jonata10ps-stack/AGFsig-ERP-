@@ -12,8 +12,11 @@ export default function AccessControl({ children, currentPageName }) {
   useEffect(() => {
     const checkAccess = async () => {
       try {
-        const userData = await base44.auth.me();
-        setUser(userData);
+        const authData = await base44.auth.me();
+        if (authData?.id) {
+          const profile = await base44.entities.User.filter({ email: authData.email }).then(res => res?.[0]);
+          setUser({ ...authData, ...profile });
+        }
       } catch (e) {
         console.error('User not authenticated');
       } finally {
@@ -21,7 +24,7 @@ export default function AccessControl({ children, currentPageName }) {
       }
     };
     checkAccess();
-  }, []);
+  }, [currentPageName]); // Re-check on page change for maximum security
 
   if (loading) {
     return (
