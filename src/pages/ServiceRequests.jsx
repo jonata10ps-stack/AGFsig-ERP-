@@ -82,6 +82,18 @@ export default function ServiceRequests() {
     enabled: !!companyId,
   });
 
+  const { data: availableSerials } = useQuery({
+    queryKey: ['available-serials', form.client_id, form.product_id],
+    queryFn: () => (form.client_id && form.product_id) 
+      ? base44.entities.SerialNumberControl.filter({ 
+          client_id: form.client_id, 
+          product_id: form.product_id,
+          company_id: companyId 
+        }) 
+      : Promise.resolve([]),
+    enabled: !!(form.client_id && form.product_id && companyId),
+  });
+
   const createMutation = useMutation({
     mutationFn: async (data) => {
       const requestNumber = `SR-${Date.now().toString().slice(-8)}`;
@@ -467,11 +479,33 @@ export default function ServiceRequests() {
             />
 
             <div className="space-y-2">
-              <Label>Número de Série</Label>
-              <Input
-                value={form.serial_number}
-                onChange={(e) => setForm({ ...form, serial_number: e.target.value })}
-              />
+              <div className="flex justify-between items-center">
+                <Label>Número de Série</Label>
+                {availableSerials?.length > 0 && (
+                  <span className="text-[10px] font-bold text-indigo-600 uppercase">Sugestões encontradas: {availableSerials.length}</span>
+                )}
+              </div>
+              <div className="relative">
+                <Input
+                  value={form.serial_number}
+                  onChange={(e) => setForm({ ...form, serial_number: e.target.value })}
+                  placeholder="Selecione ou digite..."
+                />
+                {availableSerials?.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-1.5">
+                    {availableSerials.map((s, i) => (
+                      <Badge 
+                        key={i} 
+                        variant="secondary" 
+                        className="cursor-pointer hover:bg-indigo-100 hover:text-indigo-700 transition-colors py-0.5 text-[10px]"
+                        onClick={() => setForm({ ...form, serial_number: s.serial_number })}
+                      >
+                        {s.serial_number}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="space-y-2">
