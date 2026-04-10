@@ -216,12 +216,19 @@ export default function Layout({ children, currentPageName }) {
   }, []);
 
   useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
     if (sidebarCollapsed) {
-      document.body.classList.add('scrollbar-hide');
+      html.classList.add('scrollbar-hide');
+      body.classList.add('scrollbar-hide');
     } else {
-      document.body.classList.remove('scrollbar-hide');
+      html.classList.remove('scrollbar-hide');
+      body.classList.remove('scrollbar-hide');
     }
-    return () => document.body.classList.remove('scrollbar-hide');
+    return () => {
+      html.classList.remove('scrollbar-hide');
+      body.classList.remove('scrollbar-hide');
+    };
   }, [sidebarCollapsed]);
 
   useEffect(() => {
