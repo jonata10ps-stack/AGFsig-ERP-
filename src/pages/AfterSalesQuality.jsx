@@ -240,11 +240,17 @@ export default function AfterSalesQuality() {
                           axisLine={false} 
                           tickLine={false} 
                           tick={{ fill: '#94a3b8', fontSize: 8 }}
+                          interval={0}
+                          angle={-45}
+                          textAnchor="end"
+                          height={60}
                         />
                         <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 8 }} />
                         <Tooltip 
                           cursor={{ fill: '#ffffff05' }}
                           contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '12px' }}
+                          labelStyle={{ color: '#ffffff', fontWeight: 'bold', fontSize: '10px', marginBottom: '4px' }}
+                          itemStyle={{ color: '#818cf8', fontSize: '10px' }}
                         />
                         <Bar dataKey="count" fill="#6366f1" radius={[8, 8, 0, 0]} barSize={40} />
                       </BarChart>
