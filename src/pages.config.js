@@ -48,6 +48,7 @@
  * The mainPage value must match a key in the PAGES object exactly.
  */
 import AfterSales from './pages/AfterSales';
+import AfterSalesQuality from './pages/AfterSalesQuality';
 import BOMDeliveryPicking from './pages/BOMDeliveryPicking';
 import BOMDeliveryPickingList from './pages/BOMDeliveryPickingList';
 import BOMDetail from './pages/BOMDetail';
@@ -151,6 +152,7 @@ import __Layout from './Layout.jsx';
 export const PAGES = {
     "PublicServiceOrderReport": PublicServiceOrderReport,
     "AfterSales": AfterSales,
+    "AfterSalesQuality": AfterSalesQuality,
     "BOMDeliveryPicking": BOMDeliveryPicking,
     "BOMDeliveryPickingList": BOMDeliveryPickingList,
     "BOMDetail": BOMDetail,
