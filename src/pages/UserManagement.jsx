@@ -23,14 +23,17 @@ import {
 
 const AVAILABLE_MODULES = [
   { id: 'Cadastros', name: 'Cadastros', description: 'Produtos, Clientes, Vendedores, Armazéns, etc.' },
-  { id: 'Vendas', name: 'Vendas', description: 'Pedidos e Separação' },
-  { id: 'Estoque', name: 'Estoque', description: 'Solicitações, Recebimentos, Movimentações, Saldos' },
-  { id: 'Producao', name: 'Produção', description: 'Solicitações, OPs, Roteiros, Recursos' },
-  { id: 'PosVendas', name: 'Pós-Vendas', description: 'Solicitações de Serviço, OSs, Controle de Séries' },
-  { id: 'Qualidade', name: 'Qualidade', description: 'Não Conformidades' },
-  { id: 'Relatorios', name: 'Relatórios', description: 'Relatórios Gerais e de Estoque' },
-  { id: 'Engenharia', name: 'Engenharia', description: 'Projetos, Componentes e Histórico de Componentes' },
-  { id: 'GerenciamentoDados', name: 'Gerenciamento de Dados', description: 'Dados Gerais, Integração ERP, Consistência' },
+  { id: 'Vendas', name: 'Vendas', description: 'Pedidos, Orçamentos, Remessas e Separação' },
+  { id: 'Estoque', name: 'Estoque', description: 'Solicitações, Recebimentos, Saldos e Kardex' },
+  { id: 'Producao', name: 'Produção', description: 'Solicitações, OPs, Roteiros, BOM e Simulação' },
+  { id: 'PosVendas', name: 'Pós-Vendas', description: 'Solicitações de Serviço, OSs e Controle de Séries' },
+  { id: 'Qualidade', name: 'Qualidade', description: 'Relatório de Não Conformidades' },
+  { id: 'Relatorios', name: 'Relatórios', description: 'Relatórios Gerais, de Estoque e Pendentes' },
+  { id: 'Engenharia', name: 'Engenharia', description: 'Projetos, Componentes e Histórico' },
+  { id: 'GerenciamentoDados', name: 'Gerenciamento de Dados', description: 'Dados Gerais, Integração ERP e Consistência' },
+  { id: 'DashboardFabrica', name: 'Dashboard Fábrica', description: 'Visão Geral da Produção e Indicadores' },
+  { id: 'Etiquetas', name: 'Gerador de Etiquetas', description: 'Geração e Impressão de Etiquetas de Produtos' },
+  { id: 'Agenda', name: 'Minha Agenda', description: 'Agenda de Visitas, Prospecção e Projetos' },
 ];
 
 // Converte texto JSON ou array para array de forma segura
