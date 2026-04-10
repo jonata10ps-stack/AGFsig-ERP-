@@ -630,6 +630,20 @@ export default function ProductionOrders() {
     },
   });
 
+  const linkMutation = useMutation({
+    mutationFn: async ({ childId, parentId }) => {
+      const data = { parent_op_id: parentId || null };
+      return base44.entities.ProductionOrder.update(childId, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['production-orders', companyId] });
+      toast.success('Vínculo atualizado com sucesso');
+    },
+    onError: (error) => {
+      toast.error('Erro ao atualizar vínculo: ' + error.message);
+    }
+  });
+
   const totalTablePages = Math.ceil(totalCount / TABLE_PAGE_SIZE);
 
   const handleSearchChange = (e) => {

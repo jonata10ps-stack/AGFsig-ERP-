@@ -16,7 +16,7 @@ import {
 } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Check, ChevronsUpDown } from 'lucide-react';
+import { Check, ChevronsUpDown, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export default function OPSearchSelect({ 
@@ -65,6 +65,20 @@ export default function OPSearchSelect({
             <CommandInput placeholder="Buscar por número ou produto..." />
             <CommandList className="max-h-[300px]">
               <CommandEmpty>Nenhuma OP ativa encontrada.</CommandEmpty>
+              {value && (
+                <CommandGroup>
+                  <CommandItem
+                    onSelect={() => {
+                      onSelect(null);
+                      setOpen(false);
+                    }}
+                    className="text-red-600 font-medium"
+                  >
+                    <X className="mr-2 h-4 w-4" />
+                    Limpar Seleção (Desvincular)
+                  </CommandItem>
+                </CommandGroup>
+              )}
               <CommandGroup>
                 {ops?.map((op) => (
                   <CommandItem
