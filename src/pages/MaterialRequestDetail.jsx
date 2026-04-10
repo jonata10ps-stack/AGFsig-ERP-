@@ -306,55 +306,189 @@ export default function MaterialRequestDetail() {
     document.body.appendChild(iframe);
     
     const doc = iframe.contentWindow.document;
+    const statusLabel = STATUS_CONFIG[request?.status]?.label || 'Aberta';
+    
     doc.write(`
       <html>
         <head>
           <title>Solicitação - ${request?.request_number || ''}</title>
           <style>
-            body { font-family: sans-serif; padding: 20px; color: #333; }
-            .header { border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 20px; }
-            .title { font-size: 18px; font-weight: bold; }
-            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-            th, td { border: 1px solid #000; padding: 10px; text-align: left; font-size: 11px; }
-            th { background: #f4f4f4; }
-            .footer { margin-top: 60px; display: flex; justify-content: space-around; text-align: center; }
-            .sign { border-top: 1px solid #000; padding-top: 5px; width: 250px; font-size: 10px; }
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+            
+            @media print {
+              body { margin: 0; padding: 0; }
+              @page { margin: 20mm; }
+              .no-print { display: none; }
+              tr { page-break-inside: avoid; }
+              .footer { page-break-inside: avoid; }
+            }
+
+            body { 
+              font-family: 'Inter', sans-serif; 
+              color: #1e293b; 
+              line-height: 1.5;
+              padding: 0;
+            }
+
+            .header { 
+              display: flex; 
+              justify-content: space-between; 
+              align-items: flex-start;
+              border-bottom: 2px solid #e2e8f0; 
+              padding-bottom: 20px; 
+              margin-bottom: 30px; 
+            }
+
+            .company-info h1 { 
+              margin: 0; 
+              font-size: 24px; 
+              color: #0f172a;
+              font-weight: 700;
+              letter-spacing: -0.025em;
+            }
+
+            .doc-info { text-align: right; }
+            .doc-info .doc-id { 
+              font-size: 18px; 
+              font-weight: 700; 
+              color: #4f46e5;
+              margin-bottom: 4px;
+            }
+
+            .meta-grid {
+              display: grid;
+              grid-template-columns: repeat(2, 1fr);
+              gap: 20px;
+              margin-bottom: 30px;
+              background: #f8fafc;
+              padding: 15px;
+              border-radius: 8px;
+            }
+
+            .meta-item { font-size: 12px; }
+            .meta-item strong { color: #64748b; text-transform: uppercase; font-size: 10px; display: block; margin-bottom: 2px; }
+            .meta-item span { font-weight: 600; color: #1e293b; font-size: 13px; }
+
+            table { width: 100%; border-collapse: collapse; margin-top: 10px; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }
+            th { 
+              background: #f1f5f9; 
+              color: #475569; 
+              text-transform: uppercase; 
+              font-size: 10px; 
+              font-weight: 700; 
+              padding: 12px 10px;
+              text-align: left;
+              border-bottom: 2px solid #e2e8f0;
+            }
+            td { 
+              padding: 12px 10px; 
+              font-size: 11px; 
+              border-bottom: 1px solid #f1f5f9;
+              vertical-align: middle;
+            }
+            
+            .sku { font-family: monospace; color: #4f46e5; font-weight: 600; }
+            .qty { font-weight: 700; text-align: right; }
+            .notes { color: #64748b; font-style: italic; max-width: 200px; }
+
+            .footer { 
+              margin-top: 60px; 
+              display: flex; 
+              justify-content: space-between; 
+              gap: 40px;
+            }
+            .sign-box { 
+              flex: 1;
+              border-top: 1px solid #cbd5e1; 
+              padding-top: 8px; 
+              text-align: center; 
+              font-size: 10px;
+              color: #64748b;
+            }
+
+            .badge {
+              display: inline-block;
+              padding: 2px 8px;
+              border-radius: 4px;
+              font-size: 10px;
+              font-weight: 700;
+              text-transform: uppercase;
+              background: #e2e8f0;
+            }
           </style>
         </head>
         <body>
           <div class="header">
-            <div class="title">Solicitação de Materiais - ${request?.request_number || ''}</div>
-            <p><strong>Solicitante:</strong> ${request?.requester || form.requester || ''}</p>
-            <p><strong>Departamento:</strong> ${request?.department || form.department || ''}</p>
-            <p><strong>Data:</strong> ${format(new Date(), 'dd/MM/yyyy')}</p>
+            <div class="company-info">
+              <h1>AGF EQUIPAMENTOS</h1>
+              <p style="font-size: 11px; color: #64748b; margin-top: 4px;">Solicitação de Materiais Interna</p>
+            </div>
+            <div class="doc-info">
+              <div class="doc-id">${request?.request_number || ''}</div>
+              <div class="badge">${statusLabel}</div>
+            </div>
           </div>
+
+          <div class="meta-grid">
+            <div class="meta-item">
+              <strong>Solicitante</strong>
+              <span>${request?.requester || form.requester || 'Não informado'}</span>
+            </div>
+            <div class="meta-item">
+              <strong>Departamento</strong>
+              <span>${request?.department || form.department || 'Não informado'}</span>
+            </div>
+            <div class="meta-item">
+              <strong>Prioridade</strong>
+              <span>${form.priority || 'NORMAL'}</span>
+            </div>
+            <div class="meta-item">
+              <strong>Data de Emissão</strong>
+              <span>${format(new Date(), 'dd/MM/yyyy HH:mm')}</span>
+            </div>
+          </div>
+
           <table>
             <thead>
               <tr>
-                <th>SKU</th>
-                <th>Produto</th>
-                <th style="text-align:right">Solicitado</th>
-                <th style="text-align:right">Recebido</th>
-                <th style="text-align:right">Pendente</th>
-                <th>Observações</th>
+                <th width="15%">SKU</th>
+                <th width="40%">Produto</th>
+                <th width="10%" style="text-align:right">Solicitado</th>
+                <th width="10%" style="text-align:right">Recebido</th>
+                <th width="10%" style="text-align:right">Pendente</th>
+                <th width="15%">Observações</th>
               </tr>
             </thead>
             <tbody>
               ${(items || []).map(item => `
                 <tr>
-                  <td>${item.product_sku || ''}</td>
-                  <td>${item.product_name || ''}</td>
-                  <td style="text-align:right">${item.qty_requested || 0}</td>
-                  <td style="text-align:right">${item.qty_received || 0}</td>
-                  <td style="text-align:right">${item.qty_pending ?? item.qty_requested}</td>
-                  <td>${item.notes || '-'}</td>
+                  <td class="sku">${item.product_sku || 'N/A'}</td>
+                  <td style="font-weight: 600;">${item.product_name || 'Item sem nome'}</td>
+                  <td class="qty">${item.qty_requested || 0}</td>
+                  <td class="qty">${item.qty_received || 0}</td>
+                  <td class="qty" style="color: ${(item.qty_pending ?? item.qty_requested) > 0 ? '#b45309' : '#059669'}">
+                    ${item.qty_pending ?? item.qty_requested}
+                  </td>
+                  <td class="notes">${item.notes || '-'}</td>
                 </tr>
               `).join('')}
             </tbody>
           </table>
+
+          <div style="margin-top: 30px; font-size: 11px;">
+            <strong style="color: #64748b; font-size: 10px; display: block; margin-bottom: 5px;">Observações Gerais:</strong>
+            <p>${form.notes || 'Sem observações adicionais.'}</p>
+          </div>
+
           <div class="footer">
-            <div class="sign">Assinatura Solicitante</div>
-            <div class="sign">Assinatura Almoxarifado</div>
+            <div class="sign-box">
+              <strong>${request?.requester || form.requester || 'Solicitante'}</strong><br/>
+              Assinatura do Solicitante
+            </div>
+            <div class="sign-box">
+              <strong>Almoxarifado</strong><br/>
+              Conferência e Recebimento
+            </div>
           </div>
         </body>
       </html>
@@ -365,7 +499,7 @@ export default function MaterialRequestDetail() {
       iframe.contentWindow.focus();
       iframe.contentWindow.print();
       document.body.removeChild(iframe);
-    }, 500);
+    }, 1000);
   };
 
   if (loadingRequest && requestId) {
