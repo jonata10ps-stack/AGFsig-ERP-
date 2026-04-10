@@ -102,9 +102,15 @@ export default function AfterSalesQuality() {
 
     // Engineering Insights
     const engineeringInsights = topProducts.map(prod => {
-      const mainProblem = prod.problems.length > 0 
-        ? prod.problems.reduce((a, b) => a.length > b.length ? a : b).slice(0, 100) + '...'
-        : 'Recorrência identificada em campo';
+      // Find the most frequent problem description (simple count)
+      const problemCounts = {};
+      prod.problems.forEach(p => {
+        const key = p.slice(0, 50);
+        problemCounts[key] = (problemCounts[key] || 0) + 1;
+      });
+      
+      const mainProblem = Object.entries(problemCounts)
+        .sort((a, b) => b[1] - a[1])[0]?.[0] || 'Falha recorrente';
       
       const avgTime = Math.round(prod.time / prod.count);
       
@@ -114,8 +120,31 @@ export default function AfterSalesQuality() {
         frequency: prod.count,
         avgTime,
         status: avgTime > 48 ? 'Crítico' : 'Atenção',
-        insight: `Alta ocorrência em ${prod.name}. Sugerimos revisão do componente baseado em ${prod.count} OSs concluídas.`
+        insight: `Observado padrão de "${mainProblem}". Analisar componente de ${prod.name} (Amostra: ${prod.count} OSs).`
       };
+    });
+
+    // Top Suggestions based on categories
+    const dynamicInsights = chartProblems.slice(0, 3).map(cat => {
+      let title = `Reforçar ${cat.name}`;
+      let type = 'ENGENHARIA';
+      let priority = 'ALTA';
+      let color = 'text-indigo-400 bg-indigo-500/10 border-indigo-500/20';
+
+      if (cat.name === 'Vazamento') {
+        title = 'Revisão de Vedação e Válvulas';
+        color = 'text-rose-400 bg-rose-500/10 border-rose-500/20';
+      } else if (cat.name === 'Elétrico/Eletrônico') {
+        title = 'Update de Placas e Sensores';
+        priority = 'CRÍTICA';
+        color = 'text-amber-400 bg-amber-500/10 border-amber-500/20';
+      } else if (cat.name === 'Configuração/Calibração') {
+        title = 'Novo Treinamento de Setup';
+        type = 'TREINAMENTO';
+        priority = 'NORMAL';
+      }
+
+      return { title, type, priority, color, count: cat.value };
     });
 
     return {
@@ -124,7 +153,8 @@ export default function AfterSalesQuality() {
       topProducts,
       chartProblems,
       timelineData,
-      engineeringInsights
+      engineeringInsights,
+      dynamicInsights
     };
   }, [serviceOrders]);
 
@@ -358,11 +388,7 @@ export default function AfterSalesQuality() {
             <div className="space-y-4">
               <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] px-4">Insights Sugeridos</h3>
               <div className="space-y-3">
-                {[
-                  { title: 'Revisão Filtro Hidráulico', type: 'ENGENHARIA', priority: 'ALTA', color: 'text-rose-400 bg-rose-500/10 border-rose-500/20' },
-                  { title: 'Novo Treinamento: Calibração', type: 'TREINAMENTO', priority: 'NORMAL', color: 'text-indigo-400 bg-indigo-500/10 border-indigo-500/20' },
-                  { title: 'Update Firmware v2.1 (Sensores)', type: 'ENGENHARIA', priority: 'CRÍTICA', color: 'text-amber-400 bg-amber-500/10 border-amber-500/20' },
-                ].map((insight, i) => (
+                {analytics?.dynamicInsights.map((insight, i) => (
                   <div key={i} className="p-5 bg-white/[0.03] border border-white/5 rounded-3xl hover:bg-white/[0.05] transition-all cursor-pointer group">
                     <div className="flex justify-between items-start mb-2">
                       <Badge variant="outline" className={`text-[8px] font-black tracking-widest ${insight.color}`}>
@@ -375,7 +401,7 @@ export default function AfterSalesQuality() {
                     </p>
                     <div className="flex items-center gap-1 mt-3 text-slate-600">
                       <MessageSquare className="h-3 w-3" />
-                      <span className="text-[9px] font-bold">Baseado em 14 OSs</span>
+                      <span className="text-[9px] font-bold">Baseado em {insight.count} OSs</span>
                     </div>
                   </div>
                 ))}
