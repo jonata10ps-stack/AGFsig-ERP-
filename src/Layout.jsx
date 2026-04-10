@@ -360,7 +360,7 @@ export default function Layout({ children, currentPageName }) {
 
       {/* Sidebar */}
       <aside className={cn(
-        "fixed top-0 left-0 z-50 h-full bg-white border-r border-slate-200 transform transition-all duration-300 ease-in-out lg:translate-x-0 scrollbar-hide",
+        "fixed top-0 left-0 z-50 h-full bg-white border-r border-slate-200 transform transition-all duration-300 ease-in-out lg:translate-x-0",
         sidebarOpen ? "translate-x-0" : "-translate-x-full",
         sidebarCollapsed ? "lg:w-20" : "lg:w-72",
         !sidebarCollapsed && "w-72"
@@ -409,7 +409,7 @@ export default function Layout({ children, currentPageName }) {
 
           {/* Navigation */}
           <nav className={cn(
-            "flex-1 py-6 space-y-1 overflow-y-auto overflow-x-hidden scrollbar-hide transition-all",
+            "flex-1 py-6 space-y-1 overflow-y-auto overflow-x-hidden transition-all",
             sidebarCollapsed ? "px-2" : "px-4"
           )}>
 
