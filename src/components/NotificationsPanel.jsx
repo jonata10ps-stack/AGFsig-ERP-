@@ -22,7 +22,7 @@ const PAGE_MODULE_MAP = {
   ProductionOrders: 'Producao',
   ProductionRequests: 'Producao',
   ProductionSchedule: 'Producao',
-  FactoryDashboard: 'Producao',
+  FactoryDashboard: 'DashboardFabrica',
   InventoryMoves: 'Estoque',
   MaterialRequests: 'Estoque',
   ReceivingList: 'Estoque',
@@ -30,10 +30,12 @@ const PAGE_MODULE_MAP = {
   SalesOrders: 'Vendas',
   Quotes: 'Vendas',
   SalesAppointments: 'Vendas',
-  ProspectionVisits: 'Vendas',
-  ProspectionProjects: 'Vendas',
+  ProspectionVisits: 'Agenda',
+  ProspectionProjects: 'Agenda',
+  DailyVehicleLog: 'Agenda',
   AfterSales: 'PosVendas',
   ServiceOrders: 'PosVendas',
+  ServiceRequests: 'PosVendas',
   NonConformityReports: 'Qualidade',
   EngineeringProjects: 'Engenharia',
   EngineeringDashboard: 'Engenharia',
@@ -85,9 +87,13 @@ export default function NotificationsPanel({ open, onClose }) {
   ));
 
   useEffect(() => {
-    base44.auth.me().then(u => {
-      const cid = u?.current_company_id || u?.company_ids?.[0] || u?.company_id || null;
-      setCompanyId(cid);
+    base44.auth.me().then(async (u) => {
+      if (u?.email) {
+        // Busca perfil fresco para garantir allowed_modules correto
+        const profile = await base44.entities.User.filter({ email: u.email }).then(res => res?.[0]);
+        const cid = profile?.current_company_id || profile?.company_ids?.[0] || profile?.company_id || null;
+        setCompanyId(cid);
+      }
     }).catch(() => {});
   }, []);
 
@@ -134,18 +140,31 @@ export default function NotificationsPanel({ open, onClose }) {
     const fetchNotifications = async () => {
       try {
         setLoading(true);
-        const user = await base44.auth.me();
+        const authData = await base44.auth.me();
+        if (!authData?.email) return;
+
+        // Busca o perfil atualizado para evitar cachê de permissões
+        const user = await base44.entities.User.filter({ email: authData.email }).then(res => res?.[0]);
+        if (!user) return;
+
         const cid = user?.current_company_id || user?.company_ids?.[0] || user?.company_id;
         if (!cid) return;
 
         // Controle de acesso por módulo
         const userRole = String(user.role || '').toLowerCase();
         const rawModules = user.allowed_modules;
+        
         const parseModules = (val) => {
           if (!val) return [];
           if (Array.isArray(val)) return val;
-          try { return JSON.parse(val); } catch (e) { return String(val).split(',').map(s => s.trim()); }
+          try { 
+            const p = JSON.parse(val); 
+            return Array.isArray(p) ? p : []; 
+          } catch (e) { 
+            return String(val).split(',').map(s => s.trim()); 
+          }
         };
+        
         const allowedModules = new Set(parseModules(rawModules).map(m => String(m).toLowerCase()));
         const isAdmin = userRole === 'admin';
 
@@ -208,16 +227,18 @@ export default function NotificationsPanel({ open, onClose }) {
         }
 
         // 2. Notificações Customizadas (Entidade DB)
-        userNotifications?.forEach(notif => {
-          notifs.push({ 
-            id: notif.id, 
-            title: notif.title, 
-            message: notif.message, 
-            severity: notif.type === 'VISITA_PROXIMA' ? 'high' : notif.type === 'VISITA_CANCELADA' ? 'critical' : 'medium', 
-            page: 'SalesAppointments', 
-            isCustomNotification: true 
+        if (hasAccess('SalesAppointments')) {
+          userNotifications?.forEach(notif => {
+            notifs.push({ 
+              id: notif.id, 
+              title: notif.title, 
+              message: notif.message, 
+              severity: notif.type === 'VISITA_PROXIMA' ? 'high' : notif.type === 'VISITA_CANCELADA' ? 'critical' : 'medium', 
+              page: 'SalesAppointments', 
+              isCustomNotification: true 
+            });
           });
-        });
+        }
 
         // 3. Produção (OPs e Etapas)
         if (hasAccess('ProductionOrders')) {
