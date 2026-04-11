@@ -361,20 +361,39 @@ export default function Separation() {
      // Pre-flight check de saldo global do banco de dados
      const prodId = component ? component.component_id : item.product_id;
      
-     const [bals, locs, whs, prods] = await Promise.all([
-       base44.entities.StockBalance.filter({ company_id: companyId, product_id: prodId }),
-       base44.entities.Location.filter({ company_id: companyId }),
-       base44.entities.Warehouse.filter({ company_id: companyId }),
-       base44.entities.Product.filter({ id: prodId })
+     // 1. Buscar detalhes do produto e saldos pelo ID exato
+     const [prods, initialBals] = await Promise.all([
+        base44.entities.Product.filter({ id: prodId }),
+        base44.entities.StockBalance.filter({ company_id: companyId, product_id: prodId })
      ]);
+
+     let bals = initialBals;
+     let available = bals.filter(b => (parseFloat(b.qty_available) || 0) + (parseFloat(b.qty_reserved) || 0) > 0);
+     const skuToSearch = prods[0]?.sku || item.product_sku;
      
-     const available = bals.filter(b => parseFloat(b.qty_available) > 0);
+     // 2. Fallback: Se não achou saldo pelo ID, tenta pelo SKU (Deduplicação "On-the-fly")
+     if (available.length === 0 && skuToSearch) {
+        console.log(`Buscando saldo por SKU fallback: ${skuToSearch}`);
+        const sameSkuProds = await base44.entities.Product.filter({ sku: skuToSearch, active: true });
+        const allProdIds = sameSkuProds.map(p => p.id);
+        
+        if (allProdIds.length > 1) {
+           bals = await base44.entities.StockBalance.filter({ company_id: companyId, product_id: allProdIds });
+           available = bals.filter(b => (parseFloat(b.qty_available) || 0) + (parseFloat(b.qty_reserved) || 0) > 0);
+        }
+     }
+
      if (available.length === 0) {
-        toast.error(`Aviso Crítico: O item ${prods[0]?.sku || ''} está sem saldo físico na empresa e não pode ser separado.`);
+        toast.error(`Aviso Crítico: O item ${skuToSearch || ''} está sem saldo físico na empresa e não pode ser separado.`);
         return;
      }
 
-     const availQtyTotal = available.reduce((acc, b) => acc + (parseFloat(b.qty_available) || 0), 0);
+     const [locs, whs] = await Promise.all([
+       base44.entities.Location.filter({ company_id: companyId }),
+       base44.entities.Warehouse.filter({ company_id: companyId })
+     ]);
+
+     const availQtyTotal = available.reduce((acc, b) => acc + (parseFloat(b.qty_available) || 0) + (parseFloat(b.qty_reserved) || 0), 0);
      const defaultQty = Math.min(requiredQty, availQtyTotal);
      setPickQty(defaultQty);
      setPickConfig({ open: true, item, qty: requiredQty, component, available, locs, whs, prods });
@@ -423,8 +442,9 @@ export default function Separation() {
          return;
      }
      
-     if (manualQty > parseFloat(sourceMatch.qty_available)) {
-         toast.error(`A prateleira ${scanLoc} possui apenas ${sourceMatch.qty_available} un. disponível.`);
+     const physicalInShelf = (parseFloat(sourceMatch.qty_available) || 0) + (parseFloat(sourceMatch.qty_reserved) || 0);
+     if (manualQty > physicalInShelf) {
+         toast.error(`A prateleira ${scanLoc} possui apenas ${physicalInShelf} un. físico disponível.`);
          return;
      }
 
@@ -776,14 +796,15 @@ export default function Separation() {
             </div>
             
             <div className="pt-2 border-t text-xs">
-              <p className="text-slate-500 font-semibold mb-2">Sugestões (Saldos Livres Ativos):</p>
+              <p className="text-slate-500 font-semibold mb-2">Sugestões (Saldos Ativos):</p>
               {pickConfig.available?.map(b => {
                  const l = pickConfig.locs?.find(lx => lx.id === b.location_id);
                  const w = pickConfig.whs?.find(wx => wx.id === b.warehouse_id);
+                 const phys = (parseFloat(b.qty_available) || 0) + (parseFloat(b.qty_reserved) || 0);
                  return (
                    <div key={b.id} className="flex justify-between py-1 px-2 mb-1 bg-slate-100 rounded">
                      <span>{w?.code} {l ? `- ${l.rua}/${l.modulo}/${l.nivel} (${l.barcode})` : ''}</span>
-                     <strong className="text-emerald-700">{b.qty_available} un.</strong>
+                     <strong className="text-emerald-700">{phys} un.</strong>
                    </div>
                  )
               })}
