@@ -247,11 +247,11 @@ export const base44 = {
         if (!force && cachedUser && (now - lastFetch < CACHE_TTL)) return cachedUser;
         
         // Busca o perfil mais completo (caso existam duplicados por erro de cadastro)
-        const { data: profiles } = await supabase
+        const { data: profiles, error: profileError } = await supabase
           .from('User')
           .select('*')
           .ilike('email', session.user.email.toLowerCase())
-          .order('updated_at', { ascending: false });
+          .order('created_at', { ascending: false });
         
         // Pega o melhor perfil disponível (prioriza admin e ativos de forma estável)
         const profile = (profiles || []).find(p => String(p.role).toLowerCase() === 'admin') 
