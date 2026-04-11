@@ -26,6 +26,7 @@ export default function Shipping() {
   const { companyId } = useCompanyId();
   const [search, setSearch] = useState('');
   const [selectedOrder, setSelectedOrder] = useState(null);
+  const [selectedIds, setSelectedIds] = useState([]); // Support for multiple selection
   const [printLabel, setPrintLabel] = useState(null);
   const [showReport, setShowReport] = useState(false);
 
@@ -41,7 +42,8 @@ export default function Shipping() {
     driver_cpf: '',
     shipping_notes: '',
     signed_nf_photo: '',
-    load_photos: []
+    load_photos: [],
+    shipping_batch_id: '' // Novo campo para vincular envios conjuntos
   });
 
   const handleImageCapture = (e, field) => {
@@ -147,114 +149,94 @@ export default function Shipping() {
   }, [rawItems, products]);
 
   const shipOrderMutation = useMutation({
-    mutationFn: async (order) => {
-      // 1. Buscar itens do pedido (filtrando serviços)
-      const allItems = await base44.entities.SalesOrderItem.filter({ order_id: order.id });
-      const products = await base44.entities.Product.filter({ company_id: companyId });
-      
-      const orderItems = allItems.filter(i => {
-         const p = products.find(prod => prod.id === i.product_id);
-         return !isProductService(p || i);
-      });
+    mutationFn: async (orderOrIds) => {
+      const ids = Array.isArray(orderOrIds) ? orderOrIds : [orderOrIds.id];
+      const ordersToShip = orders.filter(o => ids.includes(o.id));
 
-      // 2. Buscar movimentações existentes de SEPARACAO, SAIDA e ESTORNO
-      const moves = await base44.entities.InventoryMove.filter({ related_id: order.id });
-      const separationMoves = moves.filter(m => m.type === 'SEPARACAO');
-      const existingSaidas = moves.filter(m => m.type === 'SAIDA');
-      const existingEstornos = moves.filter(m => m.type === 'ESTORNO');
-
-      // 3. Buscar e concluir reservas (se existirem)
-      const reservations = await base44.entities.Reservation.filter({ order_id: order.id });
-      for (const res of reservations) {
-        if (res.status === 'CANCELADA' || res.status === 'CONCLUIDA') continue;
-        // Atualizar status da reserva para CONCLUIDA (pois foi expedida)
-        await base44.entities.Reservation.update(res.id, { status: 'CONCLUIDA' });
-      }
-
-      // 4. Efetuar a baixa real do estoque disponível (SAIDA) usando histórico de separação
-      // APENAS se a remessa/pedido movimentar estoque!
-      if (order.moves_stock !== false) {
-        for (const item of orderItems) {
-        const itemQty = parseFloat(item.qty) || 0;
-        if (!item.product_id || itemQty <= 0) continue;
-
-        // Calcular o saldo LÍQUIDO que já saiu (IDEMPOTÊNCIA REAL: Saídas - Estornos)
-        const totalSaida = existingSaidas
-          .filter(s => s.product_id === item.product_id)
-          .reduce((acc, curr) => acc + (parseFloat(curr.qty) || 0), 0);
+      for (const order of ordersToShip) {
+        // 1. Buscar itens do pedido (filtrando serviços)
+        const allItems = await base44.entities.SalesOrderItem.filter({ order_id: order.id });
+        const productsList = products || (await base44.entities.Product.filter({ company_id: companyId }));
         
-        const totalEstorno = existingEstornos
-          .filter(s => s.product_id === item.product_id)
-          .reduce((acc, curr) => acc + (parseFloat(curr.qty) || 0), 0);
-        
-        // Faltando sair = Total do Item - (Saídas que não foram estornadas)
-        let remainingToShip = itemQty - (totalSaida - totalEstorno);
-        if (remainingToShip <= 0.0001) continue; // Já foi totalmente expedido!
+        const orderItems = allItems.filter(i => {
+           const p = productsList.find(prod => prod.id === i.product_id);
+           return !isProductService(p || i);
+        });
 
-        // Filtrar as movimentações de SEPARACAO Deste item
-        const itemSeparations = separationMoves.filter(m => m.product_id === item.product_id);
-        
-        // 4. Efetuar a baixa real do estoque disponível (SAIDA) usando histórico de separação
-        for (const sep of itemSeparations) {
-           if (remainingToShip <= 0) break;
-           const qtyToDeduct = Math.min(parseFloat(sep.qty), remainingToShip);
-           
-           if (qtyToDeduct > 0) {
-              const fromWhId = sep.to_warehouse_id;
-              
-              if (!fromWhId) {
-                throw new Error(`Dados de separação inválidos para o item ${item.product_name || item.product_sku}. Cancele a separação e refaça para corrigir.`);
-              }
+        // 2. Buscar movimentações existentes
+        const moves = await base44.entities.InventoryMove.filter({ related_id: order.id });
+        const separationMoves = moves.filter(m => m.type === 'SEPARACAO');
+        const existingSaidas = moves.filter(m => m.type === 'SAIDA');
+        const existingEstornos = moves.filter(m => m.type === 'ESTORNO');
 
-              // Utiliza função central com bloqueio atômico de saldo negativo!
-              await executeInventoryTransaction({
-                type: 'SAIDA',
-                product_id: item.product_id,
-                qty: qtyToDeduct,
-                from_warehouse_id: fromWhId,
-                from_location_id: sep.to_location_id,
-                related_type: 'PEDIDO',
-                related_id: order.id,
-                reason: `Expedição rastreada (Picking) do pedido ${order.order_number || order.id}`,
-              }, order.company_id);
-             
-             remainingToShip -= qtyToDeduct;
-           }
+        // 3. Concluir reservas
+        const reservations = await base44.entities.Reservation.filter({ order_id: order.id });
+        for (const res of reservations) {
+          if (res.status === 'CANCELADA' || res.status === 'CONCLUIDA') continue;
+          await base44.entities.Reservation.update(res.id, { status: 'CONCLUIDA' });
         }
 
-        // Se após varrer o Picking faltar algo (pedido sem picking ou incompleto)
-        if (remainingToShip > 0) {
-           throw new Error(`O item ${item.product_name || item.product_sku} não possui separação (picking) suficiente. Realize a Separação/Bipagem antes de expedir para garantir o endereçamento correto.`);
+        // 4. Baixa de estoque
+        if (order.moves_stock !== false) {
+          for (const item of orderItems) {
+            const itemQty = parseFloat(item.qty) || 0;
+            if (!item.product_id || itemQty <= 0) continue;
+
+            const totalSaida = existingSaidas.filter(s => s.product_id === item.product_id).reduce((acc, curr) => acc + (parseFloat(curr.qty) || 0), 0);
+            const totalEstorno = existingEstornos.filter(s => s.product_id === item.product_id).reduce((acc, curr) => acc + (parseFloat(curr.qty) || 0), 0);
+            let remainingToShip = itemQty - (totalSaida - totalEstorno);
+            if (remainingToShip <= 0.0001) continue;
+
+            const itemSeparations = separationMoves.filter(m => m.product_id === item.product_id);
+            for (const sep of itemSeparations) {
+               if (remainingToShip <= 0) break;
+               const qtyToDeduct = Math.min(parseFloat(sep.qty), remainingToShip);
+               if (qtyToDeduct > 0) {
+                  await executeInventoryTransaction({
+                    type: 'SAIDA',
+                    product_id: item.product_id,
+                    qty: qtyToDeduct,
+                    from_warehouse_id: sep.to_warehouse_id,
+                    from_location_id: sep.to_location_id,
+                    related_id: order.id,
+                    reason: `Expedição ${ids.length > 1 ? 'coletiva ' : ''}(Picking) do pedido ${order.order_number || order.id}`,
+                  }, order.company_id);
+                 remainingToShip -= qtyToDeduct;
+               }
+            }
+            if (remainingToShip > 0) {
+               throw new Error(`O item ${item.product_name || item.product_sku} (Pedido ${order.order_number}) não possui separação suficiente.`);
+            }
+            await base44.entities.SalesOrderItem.update(item.id, { qty_separated: itemQty });
+          }
         }
 
-        // Registrar no item para histórico visual
-        await base44.entities.SalesOrderItem.update(item.id, {
-          qty_separated: itemQty
+        // 5. Atualizar pedido
+        await base44.entities.SalesOrder.update(order.id, { 
+          status: 'EXPEDIDO',
+          nf_number: ids.length === 1 ? (shippingData.nf_number || order.nf_number) : order.nf_number,
+          carrier: shippingData.carrier || order.carrier,
+          weight: ids.length === 1 ? (shippingData.weight || order.weight) : order.weight,
+          volume: ids.length === 1 ? (shippingData.volume || order.volume) : order.volume,
+          driver_name: shippingData.driver_name || order.driver_name,
+          driver_cpf: shippingData.driver_cpf || order.driver_cpf,
+          shipping_notes: shippingData.shipping_notes || order.shipping_notes,
+          signed_nf_photo: shippingData.signed_nf_photo || order.signed_nf_photo,
+          load_photos: shippingData.load_photos?.length > 0 ? shippingData.load_photos : order.load_photos,
+          shipping_batch_id: shippingData.shipping_batch_id || order.shipping_batch_id
         });
       }
-    } else {
-      // Se NÃO movimenta estoque, apenas marcamos os itens como "separados" para histórico visual
-      for (const item of orderItems) {
-        await base44.entities.SalesOrderItem.update(item.id, {
-          qty_separated: parseFloat(item.qty) || 0
-        });
-      }
-    }
-
-      // 3. Atualizar status do pedido
-      await base44.entities.SalesOrder.update(order.id, { 
-        status: 'EXPEDIDO',
-        nf_number: shippingData.nf_number || order.nf_number,
-        carrier: shippingData.carrier || order.carrier,
-        weight: shippingData.weight || order.weight,
-        volume: shippingData.volume || order.volume,
-        driver_name: shippingData.driver_name || order.driver_name,
-        driver_cpf: shippingData.driver_cpf || order.driver_cpf,
-        shipping_notes: shippingData.shipping_notes || order.shipping_notes,
-        signed_nf_photo: shippingData.signed_nf_photo || order.signed_nf_photo,
-        load_photos: shippingData.load_photos?.length > 0 ? shippingData.load_photos : order.load_photos
-      });
     },
+    onSuccess: () => {
+       queryClient.invalidateQueries({ queryKey: ['orders-for-shipping'] });
+       setEditingOrder(null);
+       setSelectedIds([]);
+       toast.success('Pedidos expedidos com sucesso');
+     },
+     onError: (error) => {
+       toast.error('Erro na expedição: ' + error.message);
+     }
+  });
     onSuccess: () => {
        queryClient.invalidateQueries({ queryKey: ['orders-for-shipping', companyId] });
        setEditingOrder(null);
@@ -391,6 +373,7 @@ export default function Shipping() {
 
   const handleSelectOrder = (order) => {
     setSelectedOrder(order);
+    setSelectedIds([order.id]); // Ao clicar, assume seleção única por padrão
     setShippingData({
       nf_number: order.nf_number || '',
       carrier: order.carrier || '',
@@ -400,7 +383,19 @@ export default function Shipping() {
       driver_cpf: order.driver_cpf || '',
       shipping_notes: order.shipping_notes || '',
       signed_nf_photo: order.signed_nf_photo || '',
-      load_photos: Array.isArray(order.load_photos) ? order.load_photos : []
+      load_photos: Array.isArray(order.load_photos) ? order.load_photos : [],
+      shipping_batch_id: order.shipping_batch_id || ''
+    });
+  };
+
+  const toggleSelectOrder = (id) => {
+    setSelectedIds(prev => {
+      const isSelected = prev.includes(id);
+      if (isSelected) {
+        return prev.filter(x => x !== id);
+      } else {
+        return [...prev, id];
+      }
     });
   };
 
@@ -504,48 +499,44 @@ export default function Shipping() {
                 return (
                   <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
                     {searchResults?.map((order) => (
-                    <button
-                      key={order.id}
-                      onClick={() => handleSelectOrder(order)}
-                      className={`w-full text-left p-3 rounded-lg border transition-all ${
-                        selectedOrder?.id === order.id
-                          ? 'border-indigo-500 bg-indigo-50'
-                          : 'border-slate-200 hover:border-slate-300 bg-white'
-                      }`}
-                    >
-                      <p className="font-mono text-sm text-indigo-600 font-medium">
-                        {order.order_number || `#${order.id.slice(0, 8)}`}
-                      </p>
-                      <p className="text-sm text-slate-600">{order.client_name}</p>
-                      {order.nf_number && (
-                        <p className="text-xs text-slate-500">NF: {order.nf_number}</p>
-                      )}
-                      <div className="flex justify-between items-center mt-2">
-                        <Badge className={`text-xs ${
-                          order.status === 'EXPEDIDO' ? 'bg-emerald-100 text-emerald-700' :
-                          order.status === 'FATURADO' ? 'bg-blue-100 text-blue-700' :
-                          order.status === 'SEPARADO' ? 'bg-purple-100 text-purple-700' :
-                          order.status === 'SEPARANDO' ? 'bg-yellow-100 text-yellow-700' :
-                          order.status === 'RESERVADO' ? 'bg-orange-100 text-orange-700' :
-                          order.status === 'CONFIRMADO' ? 'bg-indigo-100 text-indigo-700' :
-                          'bg-slate-100 text-slate-700'
-                        }`}>
-                          {order.status}
-                        </Badge>
-                        <div className="flex gap-1">
-                          {order.is_shipment && (
-                            <Badge variant="outline" className="text-[9px] border-indigo-200 text-indigo-700 bg-indigo-50 font-bold uppercase">
-                              Remessa
-                            </Badge>
-                          )}
+                    <div key={order.id} className="relative flex items-center gap-2">
+                       <input 
+                         type="checkbox" 
+                         checked={selectedIds.includes(order.id)}
+                         onChange={() => toggleSelectOrder(order.id)}
+                         className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                       />
+                       <button
+                        onClick={() => handleSelectOrder(order)}
+                        className={`flex-1 text-left p-2.5 rounded-lg border transition-all ${
+                          selectedOrder?.id === order.id
+                            ? 'border-indigo-500 bg-indigo-50'
+                            : 'border-slate-200 hover:border-slate-300 bg-white'
+                        }`}
+                      >
+                        <div className="flex justify-between items-start">
+                          <p className="font-mono text-xs text-indigo-600 font-bold">
+                            {order.order_number || `#${order.id.slice(0, 8)}`}
+                          </p>
+                          {order.shipping_batch_id && <Badge variant="outline" className="text-[9px] bg-slate-100">Batch: {order.shipping_batch_id}</Badge>}
+                        </div>
+                        <p className="text-[13px] text-slate-700 font-medium truncate">{order.client_name}</p>
+                        <div className="flex justify-between items-center mt-1">
+                          <Badge className={`text-[10px] px-1.5 py-0 ${
+                            order.status === 'EXPEDIDO' ? 'bg-emerald-100 text-emerald-700' :
+                            order.status === 'FATURADO' ? 'bg-blue-100 text-blue-700' :
+                            'bg-slate-100 text-slate-700'
+                          }`}>
+                            {order.status}
+                          </Badge>
                           {order.delivery_date && (
-                            <span className="text-xs text-slate-500">
+                            <span className="text-[10px] text-slate-500">
                               {format(new Date(order.delivery_date), 'dd/MM', { locale: ptBR })}
                             </span>
                           )}
                         </div>
-                      </div>
-                    </button>
+                      </button>
+                    </div>
                   ))}
                 </div>
               );
@@ -556,31 +547,47 @@ export default function Shipping() {
 
         {/* Items & Labels */}
         <div className="lg:col-span-2 space-y-4">
-          {selectedOrder && (editingOrder || selectedOrder.status !== 'EXPEDIDO') && (
-            <Card>
+          {(selectedIds.length > 0) && (editingOrder || (selectedOrder?.status !== 'EXPEDIDO')) && (
+            <Card className={selectedIds.length > 1 ? "border-amber-200 bg-amber-50/10" : ""}>
               <CardHeader>
-                <CardTitle>Dados de Expedição</CardTitle>
+                <CardTitle className="flex justify-between items-center">
+                   <span>{selectedIds.length > 1 ? `Expedição Coletiva (${selectedIds.length} pedidos)` : 'Dados de Expedição'}</span>
+                   {selectedIds.length > 1 && <Badge className="bg-amber-100 text-amber-800">Frete Compartilhado</Badge>}
+                </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-sm font-medium text-slate-700">NF</label>
-                    <Input
-                      placeholder="Número da nota fiscal"
-                      value={shippingData.nf_number}
-                      onChange={(e) => setShippingData({...shippingData, nf_number: e.target.value})}
-                      className="mt-1"
-                      disabled={selectedOrder.status === 'EXPEDIDO' && !editingOrder}
-                    />
-                  </div>
-                  <div>
+                  {selectedIds.length === 1 && (
+                    <div>
+                      <label className="text-sm font-medium text-slate-700">NF</label>
+                      <Input
+                        placeholder="Número da nota fiscal"
+                        value={shippingData.nf_number}
+                        onChange={(e) => setShippingData({...shippingData, nf_number: e.target.value})}
+                        className="mt-1"
+                        disabled={selectedOrder?.status === 'EXPEDIDO' && !editingOrder}
+                      />
+                    </div>
+                  )}
+                  {selectedIds.length > 1 && (
+                    <div className="col-span-1">
+                      <label className="text-sm font-medium text-slate-700">Lote / Vínculo de Carga</label>
+                      <Input
+                        placeholder="Ex: CARGA-SUL-2204"
+                        value={shippingData.shipping_batch_id}
+                        onChange={(e) => setShippingData({...shippingData, shipping_batch_id: e.target.value.toUpperCase()})}
+                        className="mt-1 bg-amber-50 border-amber-200"
+                      />
+                    </div>
+                  )}
+                  <div className={selectedIds.length > 1 ? "col-span-1" : ""}>
                     <label className="text-sm font-medium text-slate-700">Transportadora</label>
                     <Input
                       placeholder="Nome da transportadora"
                       value={shippingData.carrier}
                       onChange={(e) => setShippingData({...shippingData, carrier: e.target.value})}
                       className="mt-1"
-                      disabled={selectedOrder.status === 'EXPEDIDO' && !editingOrder}
+                      disabled={selectedOrder?.status === 'EXPEDIDO' && !editingOrder}
                     />
                   </div>
                   <div>
@@ -688,40 +695,41 @@ export default function Shipping() {
                                 <X className="h-3 w-3" />
                              </button>
                            </div>
-                         ))}
-                       </div>
-                     )}
+                          ))}
+                        </div>
+                      )}
 
-                     {!(selectedOrder.status === 'EXPEDIDO' && !editingOrder) && (
+                      {!(selectedOrder?.status === 'EXPEDIDO' && !editingOrder) && (
                         <label className="flex items-center justify-center w-full h-10 border border-slate-300 rounded-lg cursor-pointer bg-white hover:bg-slate-50 transition-colors text-slate-600 font-medium text-sm gap-2 mt-4">
                            <Upload className="w-4 h-4" />
                            Adicionar Foto
                            <input type="file" className="hidden" accept="image/*" capture="environment" onChange={(e) => handleImageCapture(e, 'load_photos')} />
                         </label>
-                     )}
+                      )}
                   </div>
                 </div>
+
                 <div className="flex gap-2">
-                   {!(selectedOrder.status === 'EXPEDIDO' && !editingOrder) && (
-                     <Button
-                       onClick={() => updateShippingInfoMutation.mutate(selectedOrder)}
-                       disabled={updateShippingInfoMutation.isPending}
-                       className="bg-indigo-600 hover:bg-indigo-700"
-                     >
-                       {selectedOrder.status === 'EXPEDIDO' ? 'Salvar Edição' : 'Atualizar Dados'}
-                     </Button>
-                   )}
-                   {selectedOrder.status !== 'EXPEDIDO' && (
-                       <Button
-                         onClick={() => shipOrderMutation.mutate(selectedOrder)}
-                         disabled={shipOrderMutation.isPending}
-                         className="bg-emerald-600 hover:bg-emerald-700"
-                       >
-                         <Truck className="h-4 w-4 mr-2" />
-                         Expedir Agora
-                       </Button>
-                   )}
-                 </div>
+                    {!(selectedOrder?.status === 'EXPEDIDO' && !editingOrder) && (
+                      <Button
+                        onClick={() => updateShippingInfoMutation.mutate(selectedOrder)}
+                        disabled={updateShippingInfoMutation.isPending || selectedIds.length > 1}
+                        className="bg-indigo-600 hover:bg-indigo-700"
+                      >
+                        {selectedOrder?.status === 'EXPEDIDO' ? 'Salvar Edição' : 'Atualizar Dados'}
+                      </Button>
+                    )}
+                    {(selectedIds.length > 0) && (selectedOrder?.status !== 'EXPEDIDO' || selectedIds.length > 1) && (
+                        <Button
+                          onClick={() => shipOrderMutation.mutate(selectedIds.length > 1 ? selectedIds : selectedOrder)}
+                          disabled={shipOrderMutation.isPending}
+                          className="bg-emerald-600 hover:bg-emerald-700 flex-1"
+                        >
+                          <Truck className="h-4 w-4 mr-2" />
+                          {selectedIds.length > 1 ? `Expedir ${selectedIds.length} Pedidos` : 'Expedir Agora'}
+                        </Button>
+                    )}
+                </div>
               </CardContent>
             </Card>
           )}
