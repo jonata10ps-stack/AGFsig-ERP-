@@ -241,14 +241,14 @@ export default function Separation() {
   });
 
   const separateItemMutation = useMutation({
-    mutationFn: async ({ item, qty, from_warehouse_id, from_location_id, to_warehouse_id, to_location_id }) => {
+    mutationFn: async ({ item, product_id, qty, from_warehouse_id, from_location_id, to_warehouse_id, to_location_id }) => {
       const newSeparated = (item.qty_separated || 0) + qty;
       
       // APENAS se a remessa/pedido movimentar estoque!
       if (selectedOrder.moves_stock !== false) {
         await executeInventoryTransaction({
           type: 'SEPARACAO',
-          product_id: item.product_id,
+          product_id: product_id || item.product_id,
           qty: qty,
           from_warehouse_id,
           from_location_id,
@@ -448,14 +448,15 @@ export default function Separation() {
          return;
      }
 
-     separateItemMutation.mutate({ 
-        item: pickConfig.item, 
-        qty: manualQty, 
-        from_warehouse_id: sourceMatch.warehouse_id, 
-        from_location_id: sourceMatch.location_id,
-        to_warehouse_id: destWh ? destWh.id : destLoc.warehouse_id,
-        to_location_id: destLoc ? destLoc.id : null
-     });
+      separateItemMutation.mutate({ 
+         item: pickConfig.item, 
+         product_id: sourceMatch.product_id, // Força o uso do ID que realmente possui o saldo (resolve duplicatas)
+         qty: manualQty, 
+         from_warehouse_id: sourceMatch.warehouse_id, 
+         from_location_id: sourceMatch.location_id,
+         to_warehouse_id: destWh ? destWh.id : destLoc.warehouse_id,
+         to_location_id: destLoc ? destLoc.id : null
+      });
   };
 
   const completeSeparationMutation = useMutation({
