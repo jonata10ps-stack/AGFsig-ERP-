@@ -103,7 +103,11 @@ export default function InventoryMoves() {
     queryKey: ['products-by-ids', companyId, productIds.sort().join(',')],
     queryFn: async () => {
       if (!companyId || productIds.length === 0) return [];
-      const results = await Promise.all(productIds.map(id => base44.entities.Product.filter({ id, company_id: companyId }).then(r => r[0])));
+      // Procura o produto pelo ID único, sem restringir obrigatoriamente à empresa atual
+      // Isso resolve casos onde o produto pode ter sido movido ou criado em contexto compartilhado
+      const results = await Promise.all(
+        productIds.map(id => base44.entities.Product.filter({ id }).then(r => r[0]))
+      );
       return results.filter(Boolean);
     },
     enabled: !!companyId && productIds.length > 0,
@@ -113,7 +117,7 @@ export default function InventoryMoves() {
     queryKey: ['warehouses-by-ids', companyId, warehouseIds.sort().join(',')],
     queryFn: async () => {
       if (!companyId || warehouseIds.length === 0) return [];
-      const results = await Promise.all(warehouseIds.map(id => base44.entities.Warehouse.filter({ id, company_id: companyId }).then(r => r[0])));
+      const results = await Promise.all(warehouseIds.map(id => base44.entities.Warehouse.filter({ id }).then(r => r[0])));
       return results.filter(Boolean);
     },
     enabled: !!companyId && warehouseIds.length > 0,
@@ -123,7 +127,7 @@ export default function InventoryMoves() {
     queryKey: ['locations-by-ids', companyId, locationIds.sort().join(',')],
     queryFn: async () => {
       if (!companyId || locationIds.length === 0) return [];
-      const results = await Promise.all(locationIds.map(id => base44.entities.Location.filter({ id, company_id: companyId }).then(r => r[0])));
+      const results = await Promise.all(locationIds.map(id => base44.entities.Location.filter({ id }).then(r => r[0])));
       return results.filter(Boolean);
     },
     enabled: !!companyId && locationIds.length > 0,
