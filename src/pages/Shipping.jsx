@@ -154,6 +154,10 @@ export default function Shipping() {
       const ordersToShip = orders.filter(o => ids.includes(o.id));
 
       for (const order of ordersToShip) {
+        if (order.status === 'EXPEDIDO') {
+           console.log(`Pedido ${order.order_number} já expedido. Ignorando.`);
+           continue;
+        }
         // 1. Buscar itens do pedido (filtrando serviços)
         const allItems = await base44.entities.SalesOrderItem.filter({ order_id: order.id });
         const productsList = products || (await base44.entities.Product.filter({ company_id: companyId }));
@@ -379,6 +383,12 @@ export default function Shipping() {
     o.client_name?.toLowerCase().includes(search.toLowerCase()) ||
     o.nf_number?.toLowerCase().includes(search.toLowerCase())
   );
+
+  const pendingSelected = orders?.filter(o => 
+    selectedIds.includes(o.id) && 
+    o.status !== 'EXPEDIDO' && 
+    o.status !== 'FATURADO'
+  ) || [];
 
   return (
     <div className="space-y-6">
@@ -694,14 +704,14 @@ export default function Shipping() {
                         {selectedOrder?.status === 'EXPEDIDO' ? 'Salvar Edição' : 'Atualizar Dados'}
                       </Button>
                     )}
-                    {(selectedIds.length > 0) && (selectedOrder?.status !== 'EXPEDIDO' || selectedIds.length > 1) && (
+                    {(pendingSelected.length > 0) && (
                         <Button
-                          onClick={() => shipOrderMutation.mutate(selectedIds.length > 1 ? selectedIds : selectedOrder)}
+                          onClick={() => shipOrderMutation.mutate(pendingSelected.map(o => o.id))}
                           disabled={shipOrderMutation.isPending}
                           className="bg-emerald-600 hover:bg-emerald-700 flex-1"
                         >
                           <Truck className="h-4 w-4 mr-2" />
-                          {selectedIds.length > 1 ? `Expedir ${selectedIds.length} Pedidos` : 'Expedir Agora'}
+                          {pendingSelected.length > 1 ? `Expedir ${pendingSelected.length} Pedidos` : 'Expedir Agora'}
                         </Button>
                     )}
                 </div>
