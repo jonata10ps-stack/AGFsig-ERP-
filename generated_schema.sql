@@ -1,5 +1,5 @@
 -- ====================================================
--- Script Gerado Automaticamente em 2026-04-11T14:35:25.859Z
+-- Script Gerado Automaticamente em 2026-04-11T20:52:17.716Z
 -- Execute no SQL Editor do Supabase
 -- ====================================================
 
@@ -697,6 +697,7 @@ ALTER TABLE public."InventoryMove"
   ADD COLUMN IF NOT EXISTS "seller_id" text,
   ADD COLUMN IF NOT EXISTS "seller_name" text,
   ADD COLUMN IF NOT EXISTS "sequence" text,
+  ADD COLUMN IF NOT EXISTS "shipping_batch_id" text,
   ADD COLUMN IF NOT EXISTS "shipping_notes" text,
   ADD COLUMN IF NOT EXISTS "signed_nf_photo" text,
   ADD COLUMN IF NOT EXISTS "startDate" text,
@@ -802,6 +803,7 @@ ALTER TABLE public."Location"
   ADD COLUMN IF NOT EXISTS "rua" text,
   ADD COLUMN IF NOT EXISTS "scheduled_date" text,
   ADD COLUMN IF NOT EXISTS "sequence" text,
+  ADD COLUMN IF NOT EXISTS "shipping_batch_id" text,
   ADD COLUMN IF NOT EXISTS "shipping_notes" text,
   ADD COLUMN IF NOT EXISTS "signed_nf_photo" text,
   ADD COLUMN IF NOT EXISTS "startDate" text,
@@ -1216,6 +1218,7 @@ ALTER TABLE public."Product"
   ADD COLUMN IF NOT EXISTS "seller_name" text,
   ADD COLUMN IF NOT EXISTS "sequence" text,
   ADD COLUMN IF NOT EXISTS "serial_number" text,
+  ADD COLUMN IF NOT EXISTS "shipping_batch_id" text,
   ADD COLUMN IF NOT EXISTS "shipping_notes" text,
   ADD COLUMN IF NOT EXISTS "signed_nf_photo" text,
   ADD COLUMN IF NOT EXISTS "sku" text,
@@ -1973,6 +1976,7 @@ ALTER TABLE public."Reservation"
   ADD COLUMN IF NOT EXISTS "reason" text,
   ADD COLUMN IF NOT EXISTS "related_id" text,
   ADD COLUMN IF NOT EXISTS "related_type" text,
+  ADD COLUMN IF NOT EXISTS "shipping_batch_id" text,
   ADD COLUMN IF NOT EXISTS "shipping_notes" text,
   ADD COLUMN IF NOT EXISTS "signed_nf_photo" text,
   ADD COLUMN IF NOT EXISTS "status" text,
@@ -2144,6 +2148,7 @@ ALTER TABLE public."SalesOrder"
   ADD COLUMN IF NOT EXISTS "seller_name" text,
   ADD COLUMN IF NOT EXISTS "serial_number" text,
   ADD COLUMN IF NOT EXISTS "shipment_type" text,
+  ADD COLUMN IF NOT EXISTS "shipping_batch_id" text,
   ADD COLUMN IF NOT EXISTS "shipping_notes" text,
   ADD COLUMN IF NOT EXISTS "signed_nf_photo" text,
   ADD COLUMN IF NOT EXISTS "status" text,
@@ -2237,6 +2242,7 @@ ALTER TABLE public."SalesOrderItem"
   ADD COLUMN IF NOT EXISTS "seller_id" text,
   ADD COLUMN IF NOT EXISTS "seller_name" text,
   ADD COLUMN IF NOT EXISTS "shipment_type" text,
+  ADD COLUMN IF NOT EXISTS "shipping_batch_id" text,
   ADD COLUMN IF NOT EXISTS "shipping_notes" text,
   ADD COLUMN IF NOT EXISTS "signed_nf_photo" text,
   ADD COLUMN IF NOT EXISTS "status" text,
@@ -2384,6 +2390,7 @@ ALTER TABLE public."SerialNumber"
   ADD COLUMN IF NOT EXISTS "sale_date" text,
   ADD COLUMN IF NOT EXISTS "scheduled_date" text,
   ADD COLUMN IF NOT EXISTS "serial_number" text,
+  ADD COLUMN IF NOT EXISTS "shipping_batch_id" text,
   ADD COLUMN IF NOT EXISTS "shipping_notes" text,
   ADD COLUMN IF NOT EXISTS "signed_nf_photo" text,
   ADD COLUMN IF NOT EXISTS "status" text,
@@ -2800,6 +2807,7 @@ ALTER TABLE public."Warehouse"
   ADD COLUMN IF NOT EXISTS "rua" text,
   ADD COLUMN IF NOT EXISTS "scheduled_date" text,
   ADD COLUMN IF NOT EXISTS "sequence" text,
+  ADD COLUMN IF NOT EXISTS "shipping_batch_id" text,
   ADD COLUMN IF NOT EXISTS "shipping_notes" text,
   ADD COLUMN IF NOT EXISTS "signed_nf_photo" text,
   ADD COLUMN IF NOT EXISTS "startDate" text,
