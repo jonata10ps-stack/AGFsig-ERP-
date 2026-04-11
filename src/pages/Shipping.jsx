@@ -237,31 +237,6 @@ export default function Shipping() {
        toast.error('Erro na expedição: ' + error.message);
      }
   });
-    onSuccess: () => {
-       queryClient.invalidateQueries({ queryKey: ['orders-for-shipping', companyId] });
-       setEditingOrder(null);
-       setSelectedOrder(prev => {
-         if (!prev) return null;
-         return {
-           ...prev,
-           status: 'EXPEDIDO',
-           nf_number: shippingData.nf_number || prev.nf_number,
-           carrier: shippingData.carrier || prev.carrier,
-           weight: shippingData.weight || prev.weight,
-           volume: shippingData.volume || prev.volume,
-           driver_name: shippingData.driver_name || prev.driver_name,
-           driver_cpf: shippingData.driver_cpf || prev.driver_cpf,
-           shipping_notes: shippingData.shipping_notes || prev.shipping_notes,
-           signed_nf_photo: shippingData.signed_nf_photo || prev.signed_nf_photo,
-           load_photos: shippingData.load_photos?.length > 0 ? shippingData.load_photos : prev.load_photos
-         };
-       });
-       toast.success('Pedido expedido e estoque baixado com sucesso');
-     },
-     onError: (error) => {
-       toast.error('Erro na expedição: ' + error.message);
-     }
-  });
 
   const updateShippingInfoMutation = useMutation({
     mutationFn: async (order) => {
