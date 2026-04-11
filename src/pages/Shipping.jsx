@@ -573,7 +573,7 @@ export default function Shipping() {
                       value={shippingData.weight}
                       onChange={(e) => setShippingData({...shippingData, weight: e.target.value})}
                       className="mt-1"
-                      disabled={selectedOrder.status === 'EXPEDIDO' && !editingOrder}
+                      disabled={selectedOrder?.status === 'EXPEDIDO' && !editingOrder}
                     />
                   </div>
                   <div>
@@ -584,7 +584,7 @@ export default function Shipping() {
                       value={shippingData.volume}
                       onChange={(e) => setShippingData({...shippingData, volume: e.target.value})}
                       className="mt-1"
-                      disabled={selectedOrder.status === 'EXPEDIDO' && !editingOrder}
+                      disabled={selectedOrder?.status === 'EXPEDIDO' && !editingOrder}
                     />
                   </div>
                 </div>
@@ -600,7 +600,7 @@ export default function Shipping() {
                       value={shippingData.driver_name}
                       onChange={(e) => setShippingData({...shippingData, driver_name: e.target.value})}
                       className="mt-1"
-                      disabled={selectedOrder.status === 'EXPEDIDO' && !editingOrder}
+                      disabled={selectedOrder?.status === 'EXPEDIDO' && !editingOrder}
                     />
                   </div>
                   <div>
@@ -610,7 +610,7 @@ export default function Shipping() {
                       value={shippingData.driver_cpf}
                       onChange={(e) => setShippingData({...shippingData, driver_cpf: e.target.value})}
                       className="mt-1"
-                      disabled={selectedOrder.status === 'EXPEDIDO' && !editingOrder}
+                      disabled={selectedOrder?.status === 'EXPEDIDO' && !editingOrder}
                     />
                   </div>
                   <div className="col-span-2">
@@ -620,7 +620,7 @@ export default function Shipping() {
                       value={shippingData.shipping_notes}
                       onChange={(e) => setShippingData({...shippingData, shipping_notes: e.target.value})}
                       className="w-full mt-1 min-h-20 text-sm p-3 rounded-md border border-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent"
-                      disabled={selectedOrder.status === 'EXPEDIDO' && !editingOrder}
+                      disabled={selectedOrder?.status === 'EXPEDIDO' && !editingOrder}
                     />
                   </div>
                 </div>
