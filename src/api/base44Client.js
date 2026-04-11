@@ -253,36 +253,50 @@ export const base44 = {
           .ilike('email', session.user.email.toLowerCase())
           .order('updated_at', { ascending: false });
         
-        // Pega o primeiro perfil que tiver módulos, ou o mais recente
-        const profile = profiles?.find(p => p.allowed_modules && p.allowed_modules.length > 5) || profiles?.[0];
+        // Pega o perfil mais recente que tenha dados mínimos (email)
+        const profile = profiles?.[0];
+
+        if (!profile) {
+          throw new Error('User profile not found in database');
+        }
         
-        cachedUser = {
-          id: session.user.id,
-          email: session.user.email,
-          ...profile,
-          ...session.user.user_metadata,
-          full_name: profile?.full_name || session.user.user_metadata?.full_name || 'Autenticado(a)',
-          role: profile?.role || 'admin',
-          company_id: profile?.company_id || '00000000-0000-0000-0000-000000000000',
-          current_company_id: profile?.company_id || '00000000-0000-0000-0000-000000000000',
-          company_ids: profile?.company_ids || [],
-          account_status: profile?.account_status || 'PENDENTE',
-          active: profile?.active !== false
+        // Utilitário de parsing robusto
+        const parseArr = (val) => {
+          if (!val) return [];
+          if (Array.isArray(val)) return val;
+          if (typeof val === 'string' && val.startsWith('[')) {
+            try { return JSON.parse(val); } catch (e) { return []; }
+          }
+          if (typeof val === 'string') return val.split(',').map(s => s.trim().replace(/^"|"$/g, ''));
+          return [];
         };
 
-        // PERSISTÊNCIA: Se houver uma empresa salva no localStorage, usa ela
+        const allowed_modules = parseArr(profile?.allowed_modules);
+        const company_ids = parseArr(profile?.company_ids);
+
+        cachedUser = {
+          ...session.user,
+          ...profile,
+          allowed_modules,
+          company_ids,
+          company_id: profile?.company_id || '00000000-0000-0000-0000-000000000000',
+          current_company_id: profile?.company_id || '00000000-0000-0000-0000-000000000000',
+        };
+
+        // PERSISTÊNCIA: Se houver uma empresa salva no localStorage, tenta carregar ela
         const storedCompanyId = localStorage.getItem('selectedCompanyId');
         if (storedCompanyId) {
-          // Garantir que company_ids seja um array para verificação
-          const accessList = Array.isArray(cachedUser.company_ids) 
-            ? cachedUser.company_ids 
-            : (typeof cachedUser.company_ids === 'string' ? cachedUser.company_ids : '');
+          const isAdmin = String(cachedUser.role).toLowerCase() === 'admin';
+          const isLinkedCompany = cachedUser.company_ids?.includes(storedCompanyId);
+          const isPrimaryCompany = cachedUser.company_id === storedCompanyId;
           
-          const hasAccess = accessList.includes(storedCompanyId) || cachedUser.company_id === storedCompanyId;
+          const hasAccess = isAdmin || isLinkedCompany || isPrimaryCompany;
           
           if (hasAccess) {
             cachedUser.company_id = storedCompanyId;
             cachedUser.current_company_id = storedCompanyId;
+          } else {
+             console.debug("[Auth] Acesso negado à empresa salva:", storedCompanyId);
           }
         }
 
