@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { createPageUrl } from './utils';
 import { base44 } from '@/api/base44Client';
 import NotificationsPanel from '@/components/NotificationsPanel';
+import { useAuth } from '@/lib/AuthContext';
 import {
   LayoutDashboard,
   Package,
