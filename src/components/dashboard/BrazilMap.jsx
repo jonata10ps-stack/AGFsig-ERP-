@@ -123,19 +123,21 @@ export default function BrazilInteractiveMap({ services = [] }) {
                       onClick={() => regionKey && handleRegionClick(regionKey)}
                       style={{
                         default: {
-                          fill: isRegDimmed ? "rgba(255,255,255,0.02)" : (isRegSelected ? regionColor : "rgba(255,255,255,0.05)"),
-                          fillOpacity: isRegSelected ? 0.2 : 1,
-                          stroke: isRegDimmed ? "rgba(255,255,255,0.01)" : (isRegSelected ? regionColor : "rgba(255,255,255,0.1)"),
-                          strokeWidth: 0.5,
+                          fill: isRegDimmed ? "rgba(255,255,255,0.03)" : (isRegSelected ? regionColor : regionColor),
+                          fillOpacity: isRegDimmed ? 1 : (isRegSelected ? 0.35 : 0.15),
+                          stroke: isRegDimmed ? "rgba(255,255,255,0.05)" : (isRegSelected ? regionColor : "rgba(255,255,255,0.25)"),
+                          strokeWidth: isRegSelected ? 1.2 : 0.6,
                           outline: "none",
+                          filter: isRegSelected ? `drop-shadow(0 0 6px ${regionColor})` : "none",
                         },
                         hover: {
                           fill: regionColor,
-                          fillOpacity: 0.4,
+                          fillOpacity: 0.5,
                           stroke: regionColor,
-                          strokeWidth: 1,
+                          strokeWidth: 1.5,
                           outline: "none",
-                          cursor: "pointer"
+                          cursor: "pointer",
+                          filter: `drop-shadow(0 0 8px ${regionColor})`,
                         },
                         pressed: {
                           outline: "none",
