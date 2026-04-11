@@ -253,8 +253,11 @@ export const base44 = {
           .ilike('email', session.user.email.toLowerCase())
           .order('updated_at', { ascending: false });
         
-        // Pega o perfil mais recente
-        const profile = profiles?.[0] || null;
+        // Pega o melhor perfil disponível (prioriza admin e ativos de forma estável)
+        const profile = (profiles || []).find(p => String(p.role).toLowerCase() === 'admin') 
+                        || (profiles || []).find(p => p.account_status === 'ATIVO' || p.account_status === 'APROVADO')
+                        || (profiles || [])[0] 
+                        || null;
 
         // Utilitário de parsing robusto
         const parseArr = (val) => {
