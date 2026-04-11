@@ -273,7 +273,13 @@ export const base44 = {
         // PERSISTÊNCIA: Se houver uma empresa salva no localStorage, usa ela
         const storedCompanyId = localStorage.getItem('selectedCompanyId');
         if (storedCompanyId) {
-          const hasAccess = cachedUser.company_ids?.includes(storedCompanyId) || cachedUser.company_id === storedCompanyId;
+          // Garantir que company_ids seja um array para verificação
+          const accessList = Array.isArray(cachedUser.company_ids) 
+            ? cachedUser.company_ids 
+            : (typeof cachedUser.company_ids === 'string' ? cachedUser.company_ids : '');
+          
+          const hasAccess = accessList.includes(storedCompanyId) || cachedUser.company_id === storedCompanyId;
+          
           if (hasAccess) {
             cachedUser.company_id = storedCompanyId;
             cachedUser.current_company_id = storedCompanyId;

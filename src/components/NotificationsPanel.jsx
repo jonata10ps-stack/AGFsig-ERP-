@@ -5,6 +5,7 @@ import { base44, supabase } from '@/api/base44Client';
 import { Bell, X, AlertTriangle, Clock, Factory, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { differenceInDays, differenceInHours, parseISO } from 'date-fns';
+import { useAuth } from '@/lib/AuthContext';
 
 const severityConfig = {
   critical: { color: 'bg-red-50 border-l-4 border-red-500',     icon: <AlertTriangle className="h-4 w-4 text-red-600 flex-shrink-0 mt-0.5" /> },
@@ -70,9 +71,10 @@ export function NotificationToast({ notification, onDismiss }) {
 }
 
 export default function NotificationsPanel({ open, onClose }) {
+  const { user } = useAuth();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [companyId, setCompanyId] = useState(null);
+  const companyId = user?.company_id || user?.current_company_id || null;
   const [toast, setToast] = useState(null);
   const toastTimerRef = useRef(null);
   
@@ -86,16 +88,7 @@ export default function NotificationsPanel({ open, onClose }) {
     JSON.parse(localStorage.getItem('notif_dismissed_ids') || '[]')
   ));
 
-  useEffect(() => {
-    base44.auth.me().then(async (u) => {
-      if (u?.email) {
-        // Busca perfil fresco para garantir allowed_modules correto
-        const profile = await base44.entities.User.filter({ email: u.email }).then(res => res?.[0]);
-        const cid = profile?.current_company_id || profile?.company_ids?.[0] || profile?.company_id || null;
-        setCompanyId(cid);
-      }
-    }).catch(() => {});
-  }, []);
+
 
   const dismissToast = () => {
     clearTimeout(toastTimerRef.current);
@@ -139,16 +132,9 @@ export default function NotificationsPanel({ open, onClose }) {
 
     const fetchNotifications = async () => {
       try {
+        if (!user?.email || !companyId) return;
         setLoading(true);
-        const authData = await base44.auth.me();
-        if (!authData?.email) return;
-
-        // Busca o perfil atualizado para evitar cachê de permissões
-        const user = await base44.entities.User.filter({ email: authData.email }).then(res => res?.[0]);
-        if (!user) return;
-
-        const cid = user?.current_company_id || user?.company_ids?.[0] || user?.company_id;
-        if (!cid) return;
+        const cid = companyId;
 
         // Controle de acesso por módulo
         const userRole = String(user.role || '').toLowerCase();

@@ -25,34 +25,18 @@ export const AuthProvider = ({ children }) => {
       setIsLoadingAuth(true);
       setAuthError(null);
       
-      // 1. Autenticação básica
+      // 1. O base44.auth.me() já busca o perfil, trata localStorage e retorna o usuário completo
       const currentUser = await base44.auth.me();
       
-      // 2. Buscar perfil expandido na entidade User para checar aprovação
-      const profiles = await base44.entities.User.filter({ email: currentUser.email });
-      const userProfile = profiles?.[0];
-      
-      const isAdminEmail = currentUser.email.toLowerCase() === 'jonata.santos@agfequipamentos.com.br';
+      const isAdminEmail = currentUser.email?.toLowerCase() === 'jonata.santos@agfequipamentos.com.br';
 
       // SEGURANÇA REFORÇADA: Só entra se estiver APROVADO
       // Exceção apenas para o e-mail do Jonata (Admin principal)
-      if (!isAdminEmail && (!userProfile || userProfile.account_status !== 'APROVADO')) {
+      if (!isAdminEmail && currentUser.account_status !== 'APROVADO') {
         throw new Error('PENDING_APPROVAL');
       }
 
-      const fullUser = { ...currentUser, ...userProfile };
-      
-      // PERSISTÊNCIA: Recuperar última empresa selecionada do localStorage
-      const storedCompanyId = localStorage.getItem('selectedCompanyId');
-      if (storedCompanyId) {
-        // Verifica se o usuário ainda tem acesso a essa empresa antes de aplicar
-        const hasAccess = fullUser.company_ids?.includes(storedCompanyId) || fullUser.company_id === storedCompanyId;
-        if (hasAccess) {
-          fullUser.company_id = storedCompanyId;
-        }
-      }
-
-      setUser(fullUser);
+      setUser(currentUser);
       setIsAuthenticated(true);
     } catch (error) {
       console.error('Usuário não autenticado ou pendente:', error.message);
@@ -88,6 +72,11 @@ export const AuthProvider = ({ children }) => {
     // PERSISTÊNCIA: Se a empresa mudou, salvar no localStorage
     if (updatedUser.company_id) {
       localStorage.setItem('selectedCompanyId', updatedUser.company_id);
+      
+      // Sincroniza current_company_id também para evitar que componentes usem o valor antigo
+      if (!updatedUser.current_company_id) {
+        updatedUser.current_company_id = updatedUser.company_id;
+      }
     }
     setUser(prev => ({ ...prev, ...updatedUser }));
   };

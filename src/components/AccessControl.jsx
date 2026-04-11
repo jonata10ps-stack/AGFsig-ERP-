@@ -4,29 +4,12 @@ import { Card, CardContent } from '@/components/ui/card';
 import { AlertCircle, Clock, LogOut, ShieldAlert } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { navigation } from '@/navigation';
+import { useAuth } from '@/lib/AuthContext';
 
 export default function AccessControl({ children, currentPageName }) {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const { user, isLoadingAuth } = useAuth();
 
-  useEffect(() => {
-    const checkAccess = async () => {
-      try {
-        const authData = await base44.auth.me();
-        if (authData?.id) {
-          const profile = await base44.entities.User.filter({ email: authData.email }).then(res => res?.[0]);
-          setUser({ ...authData, ...profile });
-        }
-      } catch (e) {
-        console.error('User not authenticated');
-      } finally {
-        setLoading(false);
-      }
-    };
-    checkAccess();
-  }, [currentPageName]); // Re-check on page change for maximum security
-
-  if (loading) {
+  if (isLoadingAuth) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="text-center">
