@@ -28,11 +28,14 @@ export const AuthProvider = ({ children }) => {
       // 1. O base44.auth.me() já busca o perfil, trata localStorage e retorna o usuário completo
       const currentUser = await base44.auth.me();
       
+      // Verificações de acesso
       const isAdminEmail = currentUser.email?.toLowerCase() === 'jonata.santos@agfequipamentos.com.br';
+      const isAdminRole = String(currentUser.role).toLowerCase() === 'admin';
+      const isApproved = ['APROVADO', 'ATIVO'].includes(currentUser.account_status);
 
-      // SEGURANÇA REFORÇADA: Só entra se estiver APROVADO
-      // Exceção apenas para o e-mail do Jonata (Admin principal)
-      if (!isAdminEmail && currentUser.account_status !== 'APROVADO') {
+      // SEGURANÇA: Admins por role ou email sempre entram.
+      // Outros usuários precisam de account_status APROVADO ou ATIVO.
+      if (!isAdminEmail && !isAdminRole && !isApproved) {
         throw new Error('PENDING_APPROVAL');
       }
 

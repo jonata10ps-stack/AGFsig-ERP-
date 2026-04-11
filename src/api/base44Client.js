@@ -274,19 +274,16 @@ export const base44 = {
         const company_ids = parseArr(profile?.company_ids);
 
         cachedUser = {
-          // Valores padrão baseados no Auth do Supabase
+          // Dados do Perfil primeiro (base)
+          ...profile,
+          
+          // Campos críticos DEPOIS do spread para não serem sobrescritos por null
           id: session.user.id,
           email: session.user.email,
-          full_name: session.user.user_metadata?.full_name || profile?.full_name || 'Usuário',
+          full_name: profile?.full_name || session.user.user_metadata?.full_name || 'Usuário',
           role: profile?.role || 'user',
           active: profile?.active !== false,
           account_status: profile?.account_status || (profile ? 'ATIVO' : 'PENDENTE'),
-          
-          // Dados do Perfil (se existir)
-          ...profile,
-          
-          // Sobrescreve campos críticos para garantir consistência
-          id: session.user.id, // Garante que o ID do Auth ganhe do ID da tabela User
           allowed_modules,
           company_ids,
           company_id: profile?.company_id || '00000000-0000-0000-0000-000000000000',
