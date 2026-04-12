@@ -78,7 +78,7 @@ export default function BrazilInteractiveMap({ services = [] }) {
       if (!isManualHover.current) {
         setAutoRotateIdx(prev => (prev + 1) % filteredServices.length);
       }
-    }, 10000);
+    }, 20000);
     return () => clearInterval(interval);
   }, [filteredServices.length]);
 
@@ -135,7 +135,19 @@ export default function BrazilInteractiveMap({ services = [] }) {
     return 'Território Nacional';
   }, [selectedState, selectedRegion]);
 
+  // Determina qual marcador está ativo (hover manual ou auto-rotate)
+  const activeMarkerIdx = useMemo(() => {
+    if (hoveredState?.startsWith('marker-')) {
+      return parseInt(hoveredState.split('-')[1]);
+    }
+    if (filteredServices.length > 0) {
+      return autoRotateIdx % filteredServices.length;
+    }
+    return -1;
+  }, [hoveredState, autoRotateIdx, filteredServices.length]);
+
   return (
+    <>
     <Card className="relative w-full aspect-[16/9] bg-[#0A0C10] border-white/5 shadow-[0_0_80px_rgba(0,0,0,0.8)] overflow-hidden rounded-[3rem] group border">
       <div className="absolute top-10 left-10 z-30 pointer-events-none">
         <div className="flex items-center gap-6 transition-all duration-500">
@@ -250,6 +262,7 @@ export default function BrazilInteractiveMap({ services = [] }) {
 
                 const jitterLat = (idx % 10) * 0.4 - 2;
                 const jitterLong = (idx % 8) * 0.4 - 1.5;
+                const isActive = idx === activeMarkerIdx;
 
                 return (
                   <Marker 
@@ -261,16 +274,31 @@ export default function BrazilInteractiveMap({ services = [] }) {
                       onMouseEnter={() => handleMarkerEnter(idx)}
                       onMouseLeave={handleMarkerLeave}
                     >
-                        <circle r={4 / currentZoom.zoom} fill="rgba(239, 68, 68, 0.4)">
+                        {/* Pulso de radar do marcador ativo */}
+                        {isActive && (
+                          <>
+                            <circle r={12 / currentZoom.zoom} fill="none" stroke="#facc15" strokeWidth={2 / currentZoom.zoom}>
+                              <animate attributeName="r" from={6 / currentZoom.zoom} to={20 / currentZoom.zoom} dur="1.2s" repeatCount="indefinite" />
+                              <animate attributeName="opacity" from="1" to="0" dur="1.2s" repeatCount="indefinite" />
+                            </circle>
+                            <circle r={8 / currentZoom.zoom} fill="none" stroke="#facc15" strokeWidth={1.5 / currentZoom.zoom}>
+                              <animate attributeName="r" from={4 / currentZoom.zoom} to={14 / currentZoom.zoom} dur="1.2s" begin="0.4s" repeatCount="indefinite" />
+                              <animate attributeName="opacity" from="0.8" to="0" dur="1.2s" begin="0.4s" repeatCount="indefinite" />
+                            </circle>
+                          </>
+                        )}
+
+                        <circle r={4 / currentZoom.zoom} fill={isActive ? "rgba(250, 204, 21, 0.5)" : "rgba(239, 68, 68, 0.4)"}>
                             <animate attributeName="r" from={2 / currentZoom.zoom} to={8 / currentZoom.zoom} dur="1.5s" repeatCount="indefinite" />
                             <animate attributeName="opacity" from="0.8" to="0" dur="1.5s" repeatCount="indefinite" />
                         </circle>
                         
                         <path 
                           d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" 
-                          fill="#ef4444" 
+                          fill={isActive ? "#facc15" : "#ef4444"}
                           transform={`translate(${-12 / currentZoom.zoom}, ${-22 / currentZoom.zoom}) scale(${1 / currentZoom.zoom})`}
                           className="drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]"
+                          style={isActive ? { filter: 'drop-shadow(0 0 6px #facc15)' } : {}}
                         />
                     </g>
                   </Marker>
@@ -279,58 +307,6 @@ export default function BrazilInteractiveMap({ services = [] }) {
           </ZoomableGroup>
         </ComposableMap>
       </div>
-
-      {/* Tooltip fixo no container - manual hover ou auto-rotate */}
-      {(() => {
-        // Prioridade: hover manual > auto-rotate
-        let activeService = null;
-        let activeIdx = -1;
-        let isAuto = false;
-
-        if (hoveredState?.startsWith('marker-')) {
-          activeIdx = parseInt(hoveredState.split('-')[1]);
-          activeService = filteredServices[activeIdx];
-        } else if (filteredServices.length > 0) {
-          activeIdx = autoRotateIdx % filteredServices.length;
-          activeService = filteredServices[activeIdx];
-          isAuto = true;
-        }
-
-        if (!activeService) return null;
-        return (
-          <div key={`tooltip-${activeIdx}-${isAuto}`} className="absolute top-10 left-1/2 -translate-x-1/2 z-50 pointer-events-none" style={{ animation: 'tooltipFade 0.4s ease-out' }}>
-            <div className="bg-black/95 backdrop-blur-xl px-5 py-3 rounded-2xl border border-white/20 border-l-4 border-l-red-500 shadow-2xl shadow-black/50">
-              <div className="flex items-center gap-3">
-                <div>
-                  <p className="text-sm font-black text-white uppercase tracking-tight leading-tight">
-                    {(activeService.technician_name || 'TÉCNICO').toUpperCase()}
-                  </p>
-                  <p className="text-xs font-bold text-slate-400 uppercase mt-0.5">
-                    <span className="text-indigo-400">{activeService.city_name}</span> / {activeService.state_uf}
-                  </p>
-                  {activeService.client_name && (
-                    <p className="text-[10px] font-medium text-slate-500 mt-1 truncate max-w-[250px]">
-                      Cliente: {activeService.client_name}
-                    </p>
-                  )}
-                </div>
-                {isAuto && filteredServices.length > 1 && (
-                  <div className="flex items-center gap-1 ml-2 pl-3 border-l border-white/10">
-                    <span className="text-[9px] font-bold text-slate-600 tabular-nums">{activeIdx + 1}/{filteredServices.length}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
-      <style>{`
-        @keyframes tooltipFade {
-          0% { opacity: 0; transform: translateX(-50%) translateY(-8px); }
-          100% { opacity: 1; transform: translateX(-50%) translateY(0); }
-        }
-      `}</style>
 
       <div className="absolute bottom-6 left-10 z-30">
         <div className="flex flex-wrap bg-black/60 backdrop-blur-3xl p-1.5 rounded-[2rem] border border-white/10 gap-1.5 shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
@@ -368,5 +344,49 @@ export default function BrazilInteractiveMap({ services = [] }) {
         </div>
       </div>
     </Card>
+
+      {/* Tooltip ABAIXO do mapa - não sobrepõe */}
+      {(() => {
+        const activeService = activeMarkerIdx >= 0 ? filteredServices[activeMarkerIdx] : null;
+        const isAuto = !hoveredState?.startsWith('marker-') && activeService;
+        if (!activeService) return null;
+        return (
+          <div key={`tooltip-${activeMarkerIdx}-${isAuto}`} className="mt-4" style={{ animation: 'tooltipSlide 0.4s ease-out' }}>
+            <div className="bg-white/5 backdrop-blur-xl px-6 py-4 rounded-2xl border border-white/10 flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="w-3 h-3 rounded-full bg-yellow-400 shadow-[0_0_12px_#facc15] animate-pulse" />
+                <div>
+                  <p className="text-sm font-black text-white uppercase tracking-tight leading-tight">
+                    {(activeService.technician_name || 'TÉCNICO').toUpperCase()}
+                  </p>
+                  <p className="text-xs font-bold text-slate-400 uppercase mt-0.5">
+                    <span className="text-indigo-400">{activeService.city_name}</span> / {activeService.state_uf}
+                    {activeService.client_name && <span className="text-slate-600 ml-2">• {activeService.client_name}</span>}
+                  </p>
+                </div>
+              </div>
+              {isAuto && filteredServices.length > 1 && (
+                <div className="flex items-center gap-3">
+                  <div className="flex gap-1">
+                    {filteredServices.slice(0, 12).map((_, i) => (
+                      <div key={i} className={`w-1.5 h-1.5 rounded-full transition-all ${i === activeMarkerIdx ? 'bg-yellow-400 w-4' : 'bg-white/10'}`} />
+                    ))}
+                    {filteredServices.length > 12 && <span className="text-[8px] text-slate-600 ml-1">+{filteredServices.length - 12}</span>}
+                  </div>
+                  <span className="text-[9px] font-bold text-slate-600 tabular-nums">{activeMarkerIdx + 1}/{filteredServices.length}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
+      <style>{`
+        @keyframes tooltipSlide {
+          0% { opacity: 0; transform: translateY(-4px); }
+          100% { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
+    </>
   );
 }
