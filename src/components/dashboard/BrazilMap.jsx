@@ -216,45 +216,36 @@ export default function BrazilInteractiveMap({ services = [] }) {
                           className="drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]"
                         />
                     </g>
-                    
-                    {hoveredState === `marker-${idx}` && (
-                        <foreignObject 
-                            x={14 / currentZoom.zoom} 
-                            y={-42 / currentZoom.zoom} 
-                            width={180 / currentZoom.zoom} 
-                            height={55 / currentZoom.zoom} 
-                            style={{ overflow: 'visible' }}
-                        >
-                             <div 
-                               style={{ 
-                                 transform: `scale(${1.2 / currentZoom.zoom})`, 
-                                 transformOrigin: 'bottom left',
-                                 background: 'rgba(0,0,0,0.98)',
-                                 backdropFilter: 'blur(16px)',
-                                 padding: '8px 12px',
-                                 borderRadius: '12px',
-                                 border: '1px solid rgba(255,255,255,0.2)',
-                                 borderLeft: '5px solid #ef4444',
-                                 boxShadow: '0 15px 50px rgba(0,0,0,0.7)',
-                                 pointerEvents: 'none',
-                                 width: 'fit-content'
-                               }}
-                             >
-                                <p style={{ fontSize: '13px', fontWeight: '900', color: 'white', textTransform: 'uppercase', whiteSpace: 'nowrap', lineHeight: '1.2' }}>
-                                    {(service.technician_name || 'DESCONHECIDO').toUpperCase()}
-                                </p>
-                                <p style={{ fontSize: '11px', fontWeight: '800', color: '#cbd5e1', textTransform: 'uppercase', marginTop: '2px', lineHeight: '1' }}>
-                                    {service.city_name}/{service.state_uf}
-                                </p>
-                             </div>
-                        </foreignObject>
-                    )}
                   </Marker>
                 );
             })}
           </ZoomableGroup>
         </ComposableMap>
       </div>
+
+      {/* Tooltip fixo no container - sempre visível */}
+      {hoveredState?.startsWith('marker-') && (() => {
+        const idx = parseInt(hoveredState.split('-')[1]);
+        const service = filteredServices[idx];
+        if (!service) return null;
+        return (
+          <div className="absolute top-10 left-1/2 -translate-x-1/2 z-50 pointer-events-none animate-in fade-in duration-150">
+            <div className="bg-black/95 backdrop-blur-xl px-5 py-3 rounded-2xl border border-white/20 border-l-4 border-l-red-500 shadow-2xl shadow-black/50">
+              <p className="text-sm font-black text-white uppercase tracking-tight leading-tight">
+                {(service.technician_name || 'TÉCNICO').toUpperCase()}
+              </p>
+              <p className="text-xs font-bold text-slate-400 uppercase mt-0.5">
+                <span className="text-indigo-400">{service.city_name}</span> / {service.state_uf}
+              </p>
+              {service.client_name && (
+                <p className="text-[10px] font-medium text-slate-500 mt-1 truncate max-w-[250px]">
+                  Cliente: {service.client_name}
+                </p>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       <div className="absolute bottom-6 left-10 z-30">
         <div className="flex flex-wrap bg-black/60 backdrop-blur-3xl p-1.5 rounded-[2rem] border border-white/10 gap-1.5 shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
