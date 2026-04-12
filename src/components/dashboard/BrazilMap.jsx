@@ -57,38 +57,55 @@ const STATE_GEO_COORDS = {
 
 export default function BrazilInteractiveMap({ services = [] }) {
   const [selectedState, setSelectedState] = useState(null);
+  const [selectedRegion, setSelectedRegion] = useState(null);
   const [hoveredState, setHoveredState] = useState(null);
 
-  // Descobre a região do estado selecionado
-  const selectedRegionKey = useMemo(() => {
-    if (!selectedState) return null;
-    const entry = Object.entries(REGIONS_CONFIG).find(([_, config]) => config.states.includes(selectedState));
-    return entry ? entry[0] : null;
-  }, [selectedState]);
-
   const currentZoom = useMemo(() => {
-    if (!selectedState) return { center: [-55, -15], zoom: 1 };
-    return STATE_ZOOM_CONFIG[selectedState] || { center: [-55, -15], zoom: 1 };
-  }, [selectedState]);
+    if (selectedState) return STATE_ZOOM_CONFIG[selectedState] || { center: [-55, -15], zoom: 1 };
+    if (selectedRegion) return REGIONS_CONFIG[selectedRegion];
+    return { center: [-55, -15], zoom: 1 };
+  }, [selectedState, selectedRegion]);
 
   const handleStateClick = (uf) => {
-    setSelectedState(selectedState === uf ? null : uf);
-  };
-
-  const handleRegionClick = (key) => {
-    // Ao clicar na legenda de região, seleciona o primeiro estado da região
-    const regionStates = REGIONS_CONFIG[key].states;
-    if (selectedRegionKey === key) {
+    if (selectedState === uf) {
       setSelectedState(null);
     } else {
-      setSelectedState(regionStates[0]);
+      setSelectedState(uf);
+      setSelectedRegion(null); // limpa seleção de região ao clicar no estado
     }
   };
 
+  const handleRegionClick = (key) => {
+    if (selectedRegion === key) {
+      setSelectedRegion(null);
+    } else {
+      setSelectedRegion(key);
+      setSelectedState(null); // limpa seleção de estado ao clicar na região
+    }
+  };
+
+  const handleReset = () => {
+    setSelectedState(null);
+    setSelectedRegion(null);
+  };
+
+  const hasSelection = selectedState || selectedRegion;
+
+  // Subtítulo dinâmico
+  const subtitle = useMemo(() => {
+    if (selectedState) return `${STATE_NAMES[selectedState] || selectedState} (${selectedState})`;
+    if (selectedRegion) return REGIONS_CONFIG[selectedRegion].name;
+    return 'Território Nacional';
+  }, [selectedState, selectedRegion]);
+
   const filteredServices = useMemo(() => {
-    if (!selectedState) return services.slice(0, 50);
-    return services.filter(s => s.state_uf === selectedState);
-  }, [services, selectedState]);
+    if (selectedState) return services.filter(s => s.state_uf === selectedState);
+    if (selectedRegion) {
+      const regionStates = REGIONS_CONFIG[selectedRegion].states;
+      return services.filter(s => regionStates.includes(s.state_uf));
+    }
+    return services.slice(0, 50);
+  }, [services, selectedState, selectedRegion]);
 
   return (
     <Card className="relative w-full aspect-[16/9] bg-[#0A0C10] border-white/5 shadow-[0_0_80px_rgba(0,0,0,0.8)] overflow-hidden rounded-[3rem] group border">
@@ -103,7 +120,7 @@ export default function BrazilInteractiveMap({ services = [] }) {
               </h3>
               <div className="flex items-center gap-2">
                  <div className="w-2 h-2 rounded-full bg-indigo-500 shadow-[0_0_10px_#6366f1]" />
-                 <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.5em]">{selectedState ? `${STATE_NAMES[selectedState] || selectedState} (${selectedState})` : 'Território Nacional'}</p>
+                 <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.5em]">{subtitle}</p>
               </div>
            </div>
         </div>
@@ -111,7 +128,7 @@ export default function BrazilInteractiveMap({ services = [] }) {
 
       <div className="absolute top-10 right-10 z-40 flex gap-4">
         <AnimatePresence>
-          {selectedState && (
+          {hasSelection && (
             <motion.div
               initial={{ opacity: 0, scale: 0.5, x: 20 }}
               animate={{ opacity: 1, scale: 1, x: 0 }}
@@ -119,7 +136,7 @@ export default function BrazilInteractiveMap({ services = [] }) {
             >
               <Button 
                 variant="ghost" 
-                onClick={() => setSelectedState(null)}
+                onClick={handleReset}
                 className="bg-white/5 hover:bg-white/10 text-white rounded-3xl border border-white/10 px-8 h-14 backdrop-blur-3xl font-black uppercase tracking-[0.2em] text-[11px] shadow-2xl transition-all hover:scale-105 active:scale-95"
               >
                 <X className="h-5 w-5 mr-3" /> Reset Vision
@@ -147,10 +164,22 @@ export default function BrazilInteractiveMap({ services = [] }) {
                   const regionEntry = Object.entries(REGIONS_CONFIG).find(([_, config]) => 
                     config.states.includes(uf)
                   );
+                  const regionKey = regionEntry ? regionEntry[0] : null;
                   const regionColor = regionEntry ? regionEntry[1].color : "#1e293b";
                   
-                  const isThisState = selectedState === uf;
-                  const isDimmed = selectedState && !isThisState;
+                  // Calcular se o estado está ativo/dimmed
+                  let isHighlighted = false;
+                  let isDimmed = false;
+
+                  if (selectedState) {
+                    // Modo estado: só o estado clicado fica destacado
+                    isHighlighted = selectedState === uf;
+                    isDimmed = !isHighlighted;
+                  } else if (selectedRegion) {
+                    // Modo região: todos os estados da região ficam destacados
+                    isHighlighted = regionKey === selectedRegion;
+                    isDimmed = !isHighlighted;
+                  }
 
                   return (
                     <Geography
@@ -161,12 +190,12 @@ export default function BrazilInteractiveMap({ services = [] }) {
                       onClick={() => handleStateClick(uf)}
                       style={{
                         default: {
-                          fill: isDimmed ? "rgba(255,255,255,0.03)" : (isThisState ? regionColor : regionColor),
-                          fillOpacity: isDimmed ? 1 : (isThisState ? 0.45 : 0.15),
-                          stroke: isDimmed ? "rgba(255,255,255,0.05)" : (isThisState ? regionColor : "rgba(255,255,255,0.25)"),
-                          strokeWidth: isThisState ? 1.5 : 0.6,
+                          fill: isDimmed ? "rgba(255,255,255,0.03)" : regionColor,
+                          fillOpacity: isDimmed ? 1 : (isHighlighted ? 0.45 : 0.15),
+                          stroke: isDimmed ? "rgba(255,255,255,0.05)" : (isHighlighted ? regionColor : "rgba(255,255,255,0.25)"),
+                          strokeWidth: isHighlighted ? 1.5 : 0.6,
                           outline: "none",
-                          filter: isThisState ? `drop-shadow(0 0 10px ${regionColor})` : "none",
+                          filter: isHighlighted ? `drop-shadow(0 0 10px ${regionColor})` : "none",
                         },
                         hover: {
                           fill: regionColor,
@@ -254,7 +283,7 @@ export default function BrazilInteractiveMap({ services = [] }) {
                   key={key} 
                   onClick={() => handleRegionClick(key)}
                   className={`flex items-center gap-2 px-4 py-2 rounded-2xl transition-all duration-500 border border-transparent ${
-                    selectedRegionKey === key 
+                    selectedRegion === key 
                     ? 'bg-white/10 border-white/10 shadow-[0_0_20px_rgba(255,255,255,0.1)]' 
                     : 'hover:bg-white/5 opacity-50 hover:opacity-100'
                   }`}
