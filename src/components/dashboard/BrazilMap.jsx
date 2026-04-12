@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { 
   ComposableMap, 
   Geographies, 
@@ -59,6 +59,43 @@ export default function BrazilInteractiveMap({ services = [] }) {
   const [selectedState, setSelectedState] = useState(null);
   const [selectedRegion, setSelectedRegion] = useState(null);
   const [hoveredState, setHoveredState] = useState(null);
+  const [autoRotateIdx, setAutoRotateIdx] = useState(0);
+  const isManualHover = useRef(false);
+
+  const filteredServices = useMemo(() => {
+    if (selectedState) return services.filter(s => s.state_uf === selectedState);
+    if (selectedRegion) {
+      const regionStates = REGIONS_CONFIG[selectedRegion].states;
+      return services.filter(s => regionStates.includes(s.state_uf));
+    }
+    return services.slice(0, 50);
+  }, [services, selectedState, selectedRegion]);
+
+  // Auto-rotate: cicla pelos marcadores a cada 10 segundos
+  useEffect(() => {
+    if (filteredServices.length === 0) return;
+    const interval = setInterval(() => {
+      if (!isManualHover.current) {
+        setAutoRotateIdx(prev => (prev + 1) % filteredServices.length);
+      }
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [filteredServices.length]);
+
+  // Reset auto-rotate index quando filtro muda
+  useEffect(() => {
+    setAutoRotateIdx(0);
+  }, [selectedState, selectedRegion]);
+
+  const handleMarkerEnter = useCallback((idx) => {
+    isManualHover.current = true;
+    setHoveredState(`marker-${idx}`);
+  }, []);
+
+  const handleMarkerLeave = useCallback(() => {
+    isManualHover.current = false;
+    setHoveredState(null);
+  }, []);
 
   const currentZoom = useMemo(() => {
     if (selectedState) return STATE_ZOOM_CONFIG[selectedState] || { center: [-55, -15], zoom: 1 };
@@ -71,7 +108,7 @@ export default function BrazilInteractiveMap({ services = [] }) {
       setSelectedState(null);
     } else {
       setSelectedState(uf);
-      setSelectedRegion(null); // limpa seleção de região ao clicar no estado
+      setSelectedRegion(null);
     }
   };
 
@@ -80,7 +117,7 @@ export default function BrazilInteractiveMap({ services = [] }) {
       setSelectedRegion(null);
     } else {
       setSelectedRegion(key);
-      setSelectedState(null); // limpa seleção de estado ao clicar na região
+      setSelectedState(null);
     }
   };
 
@@ -97,15 +134,6 @@ export default function BrazilInteractiveMap({ services = [] }) {
     if (selectedRegion) return REGIONS_CONFIG[selectedRegion].name;
     return 'Território Nacional';
   }, [selectedState, selectedRegion]);
-
-  const filteredServices = useMemo(() => {
-    if (selectedState) return services.filter(s => s.state_uf === selectedState);
-    if (selectedRegion) {
-      const regionStates = REGIONS_CONFIG[selectedRegion].states;
-      return services.filter(s => regionStates.includes(s.state_uf));
-    }
-    return services.slice(0, 50);
-  }, [services, selectedState, selectedRegion]);
 
   return (
     <Card className="relative w-full aspect-[16/9] bg-[#0A0C10] border-white/5 shadow-[0_0_80px_rgba(0,0,0,0.8)] overflow-hidden rounded-[3rem] group border">
@@ -230,8 +258,8 @@ export default function BrazilInteractiveMap({ services = [] }) {
                   >
                     <g 
                       className="cursor-pointer group/pin"
-                      onMouseEnter={() => setHoveredState(`marker-${idx}`)}
-                      onMouseLeave={() => setHoveredState(null)}
+                      onMouseEnter={() => handleMarkerEnter(idx)}
+                      onMouseLeave={handleMarkerLeave}
                     >
                         <circle r={4 / currentZoom.zoom} fill="rgba(239, 68, 68, 0.4)">
                             <animate attributeName="r" from={2 / currentZoom.zoom} to={8 / currentZoom.zoom} dur="1.5s" repeatCount="indefinite" />
@@ -252,29 +280,57 @@ export default function BrazilInteractiveMap({ services = [] }) {
         </ComposableMap>
       </div>
 
-      {/* Tooltip fixo no container - sempre visível */}
-      {hoveredState?.startsWith('marker-') && (() => {
-        const idx = parseInt(hoveredState.split('-')[1]);
-        const service = filteredServices[idx];
-        if (!service) return null;
+      {/* Tooltip fixo no container - manual hover ou auto-rotate */}
+      {(() => {
+        // Prioridade: hover manual > auto-rotate
+        let activeService = null;
+        let activeIdx = -1;
+        let isAuto = false;
+
+        if (hoveredState?.startsWith('marker-')) {
+          activeIdx = parseInt(hoveredState.split('-')[1]);
+          activeService = filteredServices[activeIdx];
+        } else if (filteredServices.length > 0) {
+          activeIdx = autoRotateIdx % filteredServices.length;
+          activeService = filteredServices[activeIdx];
+          isAuto = true;
+        }
+
+        if (!activeService) return null;
         return (
-          <div className="absolute top-10 left-1/2 -translate-x-1/2 z-50 pointer-events-none animate-in fade-in duration-150">
+          <div key={`tooltip-${activeIdx}-${isAuto}`} className="absolute top-10 left-1/2 -translate-x-1/2 z-50 pointer-events-none" style={{ animation: 'tooltipFade 0.4s ease-out' }}>
             <div className="bg-black/95 backdrop-blur-xl px-5 py-3 rounded-2xl border border-white/20 border-l-4 border-l-red-500 shadow-2xl shadow-black/50">
-              <p className="text-sm font-black text-white uppercase tracking-tight leading-tight">
-                {(service.technician_name || 'TÉCNICO').toUpperCase()}
-              </p>
-              <p className="text-xs font-bold text-slate-400 uppercase mt-0.5">
-                <span className="text-indigo-400">{service.city_name}</span> / {service.state_uf}
-              </p>
-              {service.client_name && (
-                <p className="text-[10px] font-medium text-slate-500 mt-1 truncate max-w-[250px]">
-                  Cliente: {service.client_name}
-                </p>
-              )}
+              <div className="flex items-center gap-3">
+                <div>
+                  <p className="text-sm font-black text-white uppercase tracking-tight leading-tight">
+                    {(activeService.technician_name || 'TÉCNICO').toUpperCase()}
+                  </p>
+                  <p className="text-xs font-bold text-slate-400 uppercase mt-0.5">
+                    <span className="text-indigo-400">{activeService.city_name}</span> / {activeService.state_uf}
+                  </p>
+                  {activeService.client_name && (
+                    <p className="text-[10px] font-medium text-slate-500 mt-1 truncate max-w-[250px]">
+                      Cliente: {activeService.client_name}
+                    </p>
+                  )}
+                </div>
+                {isAuto && filteredServices.length > 1 && (
+                  <div className="flex items-center gap-1 ml-2 pl-3 border-l border-white/10">
+                    <span className="text-[9px] font-bold text-slate-600 tabular-nums">{activeIdx + 1}/{filteredServices.length}</span>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         );
       })()}
+
+      <style>{`
+        @keyframes tooltipFade {
+          0% { opacity: 0; transform: translateX(-50%) translateY(-8px); }
+          100% { opacity: 1; transform: translateX(-50%) translateY(0); }
+        }
+      `}</style>
 
       <div className="absolute bottom-6 left-10 z-30">
         <div className="flex flex-wrap bg-black/60 backdrop-blur-3xl p-1.5 rounded-[2rem] border border-white/10 gap-1.5 shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
