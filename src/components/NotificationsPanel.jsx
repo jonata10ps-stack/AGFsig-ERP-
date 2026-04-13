@@ -70,11 +70,11 @@ export function NotificationToast({ notification, onDismiss }) {
   );
 }
 
-export default function NotificationsPanel({ open, onClose }) {
+export default function NotificationsPanel({ open, onClose, activeCompanyId }) {
   const { user } = useAuth();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
-  const companyId = user?.company_id || user?.current_company_id || null;
+  const companyId = activeCompanyId || user?.company_id || user?.current_company_id || null;
   const [toast, setToast] = useState(null);
   const toastTimerRef = useRef(null);
   

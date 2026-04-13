@@ -405,7 +405,11 @@ export default function Layout({ children, currentPageName }) {
                 >
                   <Bell className="h-5 w-5 text-slate-600" />
                 </Button>
-                <NotificationsPanel open={notificationPanelOpen} onClose={() => setNotificationPanelOpen(false)} />
+                <NotificationsPanel 
+                  open={notificationPanelOpen} 
+                  onClose={() => setNotificationPanelOpen(false)} 
+                  activeCompanyId={companyId} 
+                />
 
                 {user && (
                   <DropdownMenu>
