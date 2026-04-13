@@ -392,12 +392,12 @@ export default function ProspectionVisitForm() {
                 value={formData.prospective_client_name || ''}
                 onChange={(e) => setFormData({ 
                   ...formData, 
-                  prospective_client_name: e.target.value,
+                  prospective_client_name: e.target.value.toUpperCase(),
                   client_id: null,
                   client_name: ''
                 })}
-                placeholder="Nome do cliente potencial"
-                className="mt-1"
+                placeholder="NOME DO CLIENTE POTENCIAL"
+                className="mt-1 uppercase"
               />
             </div>
 
@@ -406,8 +406,8 @@ export default function ProspectionVisitForm() {
                 <label className="text-sm font-medium">Cidade</label>
                 <Input
                   value={formData.city || ''}
-                  onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                  className="mt-1"
+                  onChange={(e) => setFormData({ ...formData, city: e.target.value.toUpperCase() })}
+                  className="mt-1 uppercase"
                   required
                 />
               </div>
@@ -415,10 +415,10 @@ export default function ProspectionVisitForm() {
                 <label className="text-sm font-medium">Estado</label>
                 <Input
                   value={formData.state || ''}
-                  onChange={(e) => setFormData({ ...formData, state: e.target.value })}
-                  className="mt-1"
+                  onChange={(e) => setFormData({ ...formData, state: e.target.value.toUpperCase() })}
+                  className="mt-1 uppercase"
                   maxLength={2}
-                  placeholder="Ex: SP"
+                  placeholder="EX: SP"
                   required
                 />
               </div>
