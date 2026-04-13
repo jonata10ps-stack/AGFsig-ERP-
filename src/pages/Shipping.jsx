@@ -273,24 +273,32 @@ export default function Shipping() {
           }
         }
 
-        // 5. Atualizar pedido
-        const finalSignedNfPhoto = shippingData.signed_nf_photo?.length > 0 
-          ? JSON.stringify(shippingData.signed_nf_photo) 
-          : order.signed_nf_photo;
-
-        await base44.entities.SalesOrder.update(order.id, { 
+        // 5. Atualizar pedido (Somente campos alterados para evitar timeout com fotos pesadas)
+        const updateData = {
           status: 'EXPEDIDO',
-          nf_number: ids.length === 1 ? (shippingData.nf_number || order.nf_number) : order.nf_number,
           carrier: shippingData.carrier || order.carrier,
-          weight: ids.length === 1 ? (shippingData.weight || order.weight) : order.weight,
-          volume: ids.length === 1 ? (shippingData.volume || order.volume) : order.volume,
           driver_name: shippingData.driver_name || order.driver_name,
           driver_cpf: shippingData.driver_cpf || order.driver_cpf,
           shipping_notes: shippingData.shipping_notes || order.shipping_notes,
-          signed_nf_photo: finalSignedNfPhoto,
-          load_photos: shippingData.load_photos?.length > 0 ? shippingData.load_photos : order.load_photos,
           shipping_batch_id: shippingData.shipping_batch_id || order.shipping_batch_id
-        });
+        };
+
+        if (ids.length === 1) {
+          updateData.nf_number = shippingData.nf_number || order.nf_number;
+          updateData.weight = shippingData.weight || order.weight;
+          updateData.volume = shippingData.volume || order.volume;
+        }
+
+        // Importante: Só envia as fotos se houver novas fotos no estado local (shippingData)
+        // para evitar trafegar base64 pesado desnecessariamente
+        if (shippingData.signed_nf_photo?.length > 0) {
+           updateData.signed_nf_photo = JSON.stringify(shippingData.signed_nf_photo);
+        }
+        if (shippingData.load_photos?.length > 0) {
+           updateData.load_photos = shippingData.load_photos;
+        }
+
+        await base44.entities.SalesOrder.update(order.id, updateData);
       }
     },
     onSuccess: () => {
@@ -314,18 +322,29 @@ export default function Shipping() {
         : undefined;
 
       for (const order of ordersToUpdate) {
-        await base44.entities.SalesOrder.update(order.id, {
-          nf_number: ids.length === 1 ? (shippingData.nf_number || order.nf_number) : order.nf_number,
+        const updateData = {
           carrier: shippingData.carrier || order.carrier,
-          weight: ids.length === 1 ? (shippingData.weight || order.weight) : order.weight,
-          volume: ids.length === 1 ? (shippingData.volume || order.volume) : order.volume,
           driver_name: shippingData.driver_name || order.driver_name,
           driver_cpf: shippingData.driver_cpf || order.driver_cpf,
           shipping_notes: shippingData.shipping_notes || order.shipping_notes,
-          signed_nf_photo: finalSignedNfPhoto || order.signed_nf_photo,
-          load_photos: shippingData.load_photos?.length > 0 ? shippingData.load_photos : order.load_photos,
           shipping_batch_id: shippingData.shipping_batch_id || order.shipping_batch_id
-        });
+        };
+
+        if (ids.length === 1) {
+          updateData.nf_number = shippingData.nf_number || order.nf_number;
+          updateData.weight = shippingData.weight || order.weight;
+          updateData.volume = shippingData.volume || order.volume;
+        }
+
+        // Só envia fotos se houver novas fotos capturadas nesta sessão
+        if (shippingData.signed_nf_photo?.length > 0) {
+          updateData.signed_nf_photo = JSON.stringify(shippingData.signed_nf_photo);
+        }
+        if (shippingData.load_photos?.length > 0) {
+          updateData.load_photos = shippingData.load_photos;
+        }
+
+        await base44.entities.SalesOrder.update(order.id, updateData);
       }
     },
     onSuccess: () => {
