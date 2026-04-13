@@ -21,10 +21,15 @@ function ItemRow({ item, selectedOrder, companyId, onSeparate, separationMoves, 
   const remaining = item.qty - (item.qty_separated || 0);
   const isComplete = remaining <= 0;
   
-  // Filtrar moves deste item (suporta duplicatas por SKU - case insensitive)
   const itemSku = (item.product_sku || '').trim().toUpperCase();
+  const itemName = (item.product_name || '').trim().toUpperCase();
+  
   const sameSkuIds = (products || [])
-    .filter(p => (p.sku || '').trim().toUpperCase() === itemSku)
+    .filter(p => {
+       const pSku = (p.sku || '').trim().toUpperCase();
+       const pName = (p.name || '').trim().toUpperCase();
+       return (itemSku && pSku === itemSku) || (itemName && pName === itemName);
+    })
     .map(p => p.id);
   
   const itemMoves = (separationMoves || []).filter(m => 
