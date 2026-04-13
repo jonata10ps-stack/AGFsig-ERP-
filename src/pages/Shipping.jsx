@@ -21,6 +21,30 @@ import ShippingLabel from '@/components/shipping/ShippingLabel';
 import SerialNumberInput from '@/components/shipping/SerialNumberInput';
 import ShippingReport from '@/components/shipping/ShippingReport';
 
+// Função utilitária para comprimir imagens antes do upload
+const compressImage = (base64Str, maxWidth = 1200, quality = 0.7) => {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.src = base64Str;
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      let width = img.width;
+      let height = img.height;
+
+      if (width > maxWidth) {
+        height = Math.round((height * maxWidth) / width);
+        width = maxWidth;
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+  });
+};
+
 export default function Shipping() {
   const queryClient = useQueryClient();
   const { companyId } = useCompanyId();
@@ -51,23 +75,23 @@ export default function Shipping() {
     if (!files.length) return;
 
     files.forEach(file => {
-      if (file.size > 20 * 1024 * 1024) {
-        toast.error(`A imagem ${file.name} dev ter no máximo 20MB. Ajuste a resolução.`);
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error(`A imagem ${file.name} é muito pesada (máx 5MB).`);
         return;
       }
 
       const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64String = reader.result;
+      reader.onloadend = async () => {
+        const compressed = await compressImage(reader.result);
         if (field === 'signed_nf_photo') {
           setShippingData(prev => ({ 
             ...prev, 
-            signed_nf_photo: [...(prev.signed_nf_photo || []), base64String] 
+            signed_nf_photo: [...(prev.signed_nf_photo || []), compressed] 
           }));
         } else if (field === 'load_photos') {
           setShippingData(prev => ({ 
             ...prev, 
-            load_photos: [...(prev.load_photos || []), base64String] 
+            load_photos: [...(prev.load_photos || []), compressed] 
           }));
         }
       };
@@ -111,12 +135,17 @@ export default function Shipping() {
     queryFn: async () => {
       if (!selectedOrder || !companyId) return [];
       
-      const [orderItems, separationMoves, locations, serials] = await Promise.all([
+      const [orderItems, separationMoves, serials] = await Promise.all([
         base44.entities.SalesOrderItem.filter({ order_id: selectedOrder.id }),
         base44.entities.InventoryMove.filter({ related_id: selectedOrder.id, type: 'SEPARACAO' }),
-        base44.entities.Location.listAll({ company_id: companyId }), // Usa listAll para garantir cache consistente
         base44.entities.SerialNumber.filter({ order_id: selectedOrder.id })
       ]);
+
+      // Buscar apenas os endereços que de fato aparecem na separação (otimização de banco)
+      const locIds = [...new Set(separationMoves.map(m => m.from_location_id).filter(Boolean))];
+      const locations = locIds.length > 0 
+        ? await base44.entities.Location.filter({ id: locIds })
+        : [];
 
       // Mapear localizações de separação e números de série para exibição na UI
       return orderItems.map(item => {
