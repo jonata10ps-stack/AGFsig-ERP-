@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { useCompanyId } from '@/components/useCompanyId';
 import { useAuth } from '@/lib/AuthContext';
-import { Plus, Calendar as CalendarIcon, MapPin, TrendingUp, Eye, X, Save } from 'lucide-react';
+import { Plus, Calendar as CalendarIcon, MapPin, TrendingUp, Eye, X, Save, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -38,6 +38,7 @@ export default function SalesAppointments() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [dateFilter, setDateFilter] = useState('all');
+  const [sellerFilter, setSellerFilter] = useState('all');
   const [showForm, setShowForm] = useState(false);
   const [editingVisit, setEditingVisit] = useState(null);
   const [selectedProducts, setSelectedProducts] = useState([]);
@@ -329,9 +330,9 @@ export default function SalesAppointments() {
     setSelectedProducts([]);
     setShowForm(false);
     setEditingVisit(null);
-    // Reset filters to show all visits
     setStatusFilter('all');
     setDateFilter('all');
+    setSellerFilter('all');
     setSearch('');
   };
 
@@ -384,8 +385,10 @@ export default function SalesAppointments() {
     } else if (dateFilter === 'past') {
       matchDate = visitDate < today;
     }
+    
+    const matchSeller = sellerFilter === 'all' || visit.seller_id === sellerFilter;
 
-    return matchSearch && matchStatus && matchDate;
+    return matchSearch && matchStatus && matchDate && matchSeller;
   });
 
 
@@ -797,6 +800,23 @@ export default function SalesAppointments() {
                 </SelectContent>
               </Select>
             </div>
+            {(accessContext.isAdmin || accessContext.isManager) && (
+              <div className="min-w-[200px]">
+                <Select value={sellerFilter} onValueChange={setSellerFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Todos os Vendedores" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos os Vendedores</SelectItem>
+                    {allSellers
+                      .filter(s => accessContext.isAdmin || accessContext.managedSellerIds.includes(s.id))
+                      .map(s => (
+                        <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -847,6 +867,10 @@ export default function SalesAppointments() {
                         <div className="flex items-center gap-2">
                           <MapPin className="h-4 w-4" />
                           {visit.city}, {visit.state}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Users className="h-4 w-4" />
+                          <span className="font-medium">{visit.seller_name || 'Vendedor Desconhecido'}</span>
                         </div>
                         {visit.proposal_sent && (
                           <Badge className="bg-green-100 text-green-700">
