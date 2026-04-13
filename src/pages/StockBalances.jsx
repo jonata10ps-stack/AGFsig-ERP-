@@ -73,8 +73,8 @@ export default function StockBalances() {
     queryKey: ['products-by-ids', companyId, productIds.sort().join(',')],
     queryFn: async () => {
       if (!companyId || productIds.length === 0) return [];
-      const results = await Promise.all(productIds.map(id => base44.entities.Product.filter({ id, company_id: companyId }).then(r => r[0])));
-      return results.filter(Boolean);
+      // Buscar todos os produtos (ativos ou não) para os IDs encontrados nos saldos
+      return base44.entities.Product.filter({ id: productIds, company_id: companyId });
     },
     enabled: !!companyId && productIds.length > 0,
   });
