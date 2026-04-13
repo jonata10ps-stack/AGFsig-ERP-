@@ -53,6 +53,7 @@ import { Badge } from '@/components/ui/badge';
 import { Toaster } from 'sonner';
 
 import { navigation } from './navigation';
+import { useCompanyId } from '@/components/useCompanyId';
 
 export default function Layout({ children, currentPageName }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -61,6 +62,17 @@ export default function Layout({ children, currentPageName }) {
   const { user: authUser } = useAuth();
   const user = authUser; // Mantém compatibilidade com o resto do arquivo
   const [notificationPanelOpen, setNotificationPanelOpen] = useState(false);
+  const { companyId } = useCompanyId();
+  const [isManager, setIsManager] = useState(false);
+
+  useEffect(() => {
+    if (user?.id && companyId) {
+      base44.entities.Seller.filter({ company_id: companyId, active: true }).then(sellers => {
+         const found = sellers.some(s => Array.isArray(s.manager_ids) && s.manager_ids.includes(user.id));
+         setIsManager(found);
+      });
+    }
+  }, [user, companyId]);
 
   useEffect(() => {
     const html = document.documentElement;
@@ -279,15 +291,21 @@ export default function Layout({ children, currentPageName }) {
 
             {navigation
               .map(item => {
-                // If user is technician, prune children of Pós-Vendas
-                if (user?.is_technician && item.moduleId === 'PosVendas') {
-                  const techAllowedPages = ['ServiceSchedule', 'ServiceOrders'];
-                  return {
-                    ...item,
-                    children: item.children?.filter(child => techAllowedPages.includes(child.page))
-                  };
+                let newChildren = item.children;
+                if (newChildren) {
+                   newChildren = newChildren.filter(child => {
+                      if (child.adminOnly && String(user?.role).toLowerCase() !== 'admin') return false;
+                      if (child.managerOnly && !isManager && String(user?.role).toLowerCase() !== 'admin') return false;
+                      return true;
+                   });
                 }
-                return item;
+
+                // If user is technician, prune children of Pós-Vendas
+                if (user?.is_technician && item.moduleId === 'PosVendas' && newChildren) {
+                  const techAllowedPages = ['ServiceSchedule', 'ServiceOrders'];
+                  newChildren = newChildren.filter(child => techAllowedPages.includes(child.page));
+                }
+                return { ...item, children: newChildren };
               })
               .filter(item => {
                 // Get user permissions safely

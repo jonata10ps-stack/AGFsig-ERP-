@@ -38,7 +38,7 @@ export const navigation = [
       { name: 'Prospecção', icon: Users, page: 'ProspectionVisits' },
       { name: 'Projetos', icon: Package, page: 'ProspectionProjects' },
       { name: 'Registro de KM', icon: Cog, page: 'DailyVehicleLog' },
-      { name: 'Gestão de Metas', icon: CheckCircle2, page: 'SellerGoalsManagement' },
+      { name: 'Gestão de Metas', icon: CheckCircle2, page: 'SellerGoalsManagement', managerOnly: true },
     ]
   },
   { 
