@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44, supabase } from '@/api/base44Client';
 import { useAuth } from '@/lib/AuthContext';
-import { Search, Save, Loader2, Package, Plus, X, ShieldCheck, Eye, Zap } from 'lucide-react';
+import { Search, Save, Loader2, Package, Plus, X, ShieldCheck, Eye } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
@@ -40,17 +40,17 @@ export default function PriceList() {
 
   useEffect(() => {
     if (user) {
-      const isAdmin = String(user.role).toLowerCase() === 'admin';
-      setCanEdit(isAdmin);
+      // Aceita admin, gestor ou qualquer papel similar para edição
+      const role = String(user.role).toLowerCase();
+      const isAllowed = ['admin', 'gestor', 'manager', 'diretoria'].some(r => role.includes(r));
+      setCanEdit(isAllowed);
     }
   }, [user]);
 
-  // 1. Busca produtos FILTRADOS POR EMPRESA
   const { data: products, isLoading } = useQuery({
     queryKey: ['products-price-list-smart', user?.company_id],
     queryFn: async () => {
       if (!user?.company_id) return [];
-      
       const { data, error } = await supabase
         .from('Product')
         .select('*')
@@ -60,25 +60,18 @@ export default function PriceList() {
         .order('sku');
       
       if (error) throw error;
-      
-      // Filtro de Unicidade: Se houver o mesmo SKU na empresa e no global, pega o da empresa
       const uniqueMap = new Map();
       (data || []).forEach(p => {
         const skuKey = p.sku?.trim().toUpperCase();
         if (!skuKey) return;
         const existing = uniqueMap.get(skuKey);
-        // Prioriza o registro que pertence especificamente à empresa atual
-        if (!existing || (p.company_id === user.company_id)) {
-          uniqueMap.set(skuKey, p);
-        }
+        if (!existing || p.company_id === user.company_id) uniqueMap.set(skuKey, p);
       });
-      
       return Array.from(uniqueMap.values());
     },
     enabled: !!user?.company_id
   });
 
-  // 2. Busca para ADICIONAR (também filtrada por empresa)
   const { data: searchResults } = useQuery({
     queryKey: ['product-catalog-search-fast', productSearch, user?.company_id],
     queryFn: async () => {
@@ -91,15 +84,12 @@ export default function PriceList() {
         .or(`sku.ilike.%${productSearch}%,name.ilike.%${productSearch}%`)
         .limit(10);
       
-      // Unicidade na busca também
       const uniqueMap = new Map();
       (data || []).forEach(p => {
         const skuKey = p.sku?.trim().toUpperCase();
         if (!skuKey) return;
         const existing = uniqueMap.get(skuKey);
-        if (!existing || (p.company_id === user.company_id)) {
-          uniqueMap.set(skuKey, p);
-        }
+        if (!existing || p.company_id === user.company_id) uniqueMap.set(skuKey, p);
       });
       return Array.from(uniqueMap.values());
     },
@@ -112,10 +102,13 @@ export default function PriceList() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['products-price-list-smart'] });
-      toast.success('Preços atualizados!');
+      toast.success('Produto adicionado à lista!');
       setIsAdding(false);
       setProductSearch('');
     },
+    onError: (err) => {
+      toast.error('Erro: ' + (err.message || 'Verifique suas permissões'));
+    }
   });
 
   const handlePriceBlur = (productId, field, value) => {
@@ -128,9 +121,12 @@ export default function PriceList() {
     if (input) input.value = formatBRL(numericValue);
   };
 
-  const saveProductPrice = (product) => {
-    if (!canEdit) return;
-    const changes = editingPrices[product.id];
+  const saveProductPrice = (product, initialData = null) => {
+    if (!canEdit) {
+      toast.error('Apenas gestores podem realizar esta ação.');
+      return;
+    }
+    const changes = initialData || editingPrices[product.id];
     if (!changes) return;
     updatePriceMutation.mutate({
       id: product.id,
@@ -153,7 +149,7 @@ export default function PriceList() {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
         <div>
           <h1 className="text-3xl font-black text-slate-900 flex items-center gap-2">Tabela Comercial</h1>
-          <p className="text-slate-500 font-medium tracking-tight">Filtro automático por empresa ativa aplicado.</p>
+          <p className="text-slate-500 font-medium">Gestão de preços por empresa.</p>
         </div>
         {canEdit && (
           <Button onClick={() => setIsAdding(!isAdding)} className="bg-indigo-600 hover:bg-indigo-700 shadow-xl font-bold rounded-xl text-white h-12 px-6">
@@ -163,7 +159,7 @@ export default function PriceList() {
         )}
       </div>
 
-      {isAdding && canEdit && (
+      {isAdding && (
         <Card className="border-2 border-indigo-100 bg-white overflow-hidden shadow-2xl rounded-2xl animate-in fade-in zoom-in-95">
           <CardContent className="p-8">
             <div className="relative">
@@ -173,12 +169,19 @@ export default function PriceList() {
             {searchResults && searchResults.length > 0 && (
               <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
                 {searchResults.map(p => (
-                  <div key={p.id} className="flex items-center justify-between p-5 bg-white rounded-2xl border border-slate-100 hover:border-indigo-200 hover:bg-indigo-50/30 transition-all group cursor-pointer" onClick={() => saveProductPrice(p, { monoVista: 0.01 })}>
+                  <div key={p.id} className="flex items-center justify-between p-5 bg-white rounded-2xl border border-slate-100 hover:border-indigo-200 transition-all group">
                     <div className="min-w-0 flex-1">
                       <span className="font-black text-[10px] text-indigo-500 font-mono block mb-1">{p.sku}</span>
                       <span className="font-bold text-slate-900 group-hover:text-indigo-900 text-sm truncate block uppercase">{p.name}</span>
                     </div>
-                    <Button size="sm" className="bg-indigo-600 ml-4 h-10 px-4 text-white font-bold rounded-lg shrink-0">Selecionar</Button>
+                    <Button 
+                      size="sm" 
+                      className="bg-indigo-600 hover:bg-indigo-700 ml-4 h-10 px-4 text-white font-bold rounded-lg shrink-0 disabled:opacity-50"
+                      onClick={() => saveProductPrice(p, { monoVista: 0.01 })}
+                      disabled={updatePriceMutation.isLoading}
+                    >
+                      {updatePriceMutation.isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Selecionar'}
+                    </Button>
                   </div>
                 ))}
               </div>
@@ -225,7 +228,7 @@ export default function PriceList() {
                     <td className="px-4 py-6 bg-indigo-50/5 border-r border-slate-100"><div className="relative w-36 mx-auto"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-indigo-300">R$</span><Input id={`input-${product.id}-monoPrazo`} readOnly={!canEdit} className={`pl-10 h-10 font-black text-right pr-3 ${!canEdit ? 'bg-transparent border-transparent shadow-none' : 'bg-white border-slate-200 rounded-xl'}`} defaultValue={formatBRL(product.unit_price)} onBlur={(e) => handlePriceBlur(product.id, 'monoPrazo', e.target.value)} /></div></td>
                     <td className="px-4 py-6 bg-amber-50/5"><div className="relative w-36 mx-auto"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-amber-300">R$</span><Input id={`input-${product.id}-triVista`} readOnly={!canEdit} className={`pl-10 h-10 font-black text-right pr-3 ${!canEdit ? 'bg-transparent border-transparent shadow-none' : 'bg-white border-slate-200 rounded-xl'}`} defaultValue={formatBRL(product.quantity)} onBlur={(e) => handlePriceBlur(product.id, 'triVista', e.target.value)} /></div></td>
                     <td className="px-4 py-6 bg-amber-50/5 border-r border-slate-100"><div className="relative w-36 mx-auto"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-amber-300">R$</span><Input id={`input-${product.id}-triPrazo`} readOnly={!canEdit} className={`pl-10 h-10 font-black text-right pr-3 ${!canEdit ? 'bg-transparent border-transparent shadow-none' : 'bg-white border-slate-200 rounded-xl'}`} defaultValue={formatBRL(product.min_stock)} onBlur={(e) => handlePriceBlur(product.id, 'triPrazo', e.target.value)} /></div></td>
-                    {canEdit && (<td className="px-8 py-6 text-right"><Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 shadow-md text-white font-black uppercase text-[10px] tracking-widest rounded-xl transition-all opacity-0 group-hover:opacity-100" onClick={() => saveProductPrice(product)} disabled={!editingPrices[product.id]}>{updatePriceMutation.isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4 mr-2" />}Salvar</Button></td>)}
+                    {canEdit && (<td className="px-8 py-6 text-right"><Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 shadow-md text-white font-black uppercase text-[10px] tracking-widest rounded-xl transition-all opacity-0 group-hover:opacity-100" onClick={() => saveProductPrice(product)} disabled={!editingPrices[product.id] || updatePriceMutation.isLoading}>{updatePriceMutation.isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4 mr-2" />}Salvar</Button></td>)}
                   </tr>
                 ))}
               </tbody>
