@@ -295,20 +295,29 @@ export default function ProspectionDashboard() {
       return acc;
     }, {});
 
-    // Por mês
-    const byMonth = allDeals.reduce((acc, d) => {
-      const date = new Date(d.created_date);
-      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-      if (!acc[monthKey]) {
-        acc[monthKey] = { count: 0, value: 0, converted: 0 };
-      }
-      acc[monthKey].count += 1;
-      acc[monthKey].value += (d.effective_value || 0);
-      if (d.status === 'CONVERTIDO') {
-        acc[monthKey].converted += 1;
-      }
-      return acc;
-    }, {});
+    // Por mês (Evolução - Ignora o filtro de mês para mostrar a tendência)
+    const byMonth = [...filteredData.quotes, ...filteredData.salesOrders]
+      .filter(item => {
+        if (!item.created_date) return false;
+        const date = new Date(item.created_date);
+        const year = String(date.getFullYear());
+        const matchYear = selectedYear === 'all' || year === selectedYear;
+        const matchSeller = selectedSeller === 'all' || item.seller_id === selectedSeller;
+        return matchYear && matchSeller;
+      })
+      .reduce((acc, d) => {
+        const date = new Date(d.created_date);
+        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        if (!acc[monthKey]) {
+          acc[monthKey] = { count: 0, value: 0, converted: 0 };
+        }
+        acc[monthKey].count += 1;
+        acc[monthKey].value += (d.total_amount || 0);
+        if (d.status === 'CONVERTIDO' || d.id.startsWith('so_')) { // Consider matching conversion logic
+          acc[monthKey].converted += 1;
+        }
+        return acc;
+      }, {});
 
     // Por status
     const byStatus = allDeals.reduce((acc, d) => {
@@ -365,8 +374,15 @@ export default function ProspectionDashboard() {
       return acc;
     }, {});
 
-    const proposalsByMonth = filteredVisits
+    const proposalsByMonth = filteredData.visits
       .filter(v => v.proposal_sent && v.visit_date)
+      .filter(v => {
+        const date = new Date(`${v.visit_date}T12:00:00`);
+        const year = String(date.getFullYear());
+        const matchYear = selectedYear === 'all' || year === selectedYear;
+        const matchSeller = selectedSeller === 'all' || v.seller_id === selectedSeller;
+        return matchYear && matchSeller;
+      })
       .reduce((acc, v) => {
         const date = new Date(`${v.visit_date}T12:00:00`);
         const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
