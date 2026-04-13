@@ -873,6 +873,7 @@ export default function Shipping() {
                            <input type="file" className="hidden" accept="image/*" multiple onChange={(e) => handleImageCapture(e, 'load_photos')} />
                         </label>
                       )}
+                  </div>
                 </div>
 
                 <div className="flex gap-2">
