@@ -104,6 +104,12 @@ export default function ProspectionDashboard() {
     refetchInterval: 60000,
   });
 
+  const { data: performances = [] } = useQuery({
+    queryKey: ['consolidated-performances-dash', companyId, selectedYear],
+    queryFn: () => companyId ? base44.entities.SellerMonthlyPerformance.filter({ company_id: companyId, year: selectedYear }) : Promise.resolve([]),
+    enabled: !!companyId,
+  });
+
   // Helper to filter data by user access
   const filterByAccess = (item) => {
     if (accessContext.isAdmin) return true;
@@ -337,10 +343,20 @@ export default function ProspectionDashboard() {
       return acc;
     }, {});
 
+    // Official consolidated revenue for sync
+    const consolidatedRevenue = performances
+      .filter(p => {
+        const matchMonth = selectedMonth === 'all' || p.month === selectedMonth;
+        const matchSeller = selectedSeller === 'all' || p.seller_id === selectedSeller;
+        return matchMonth && matchSeller;
+      })
+      .reduce((sum, p) => sum + (Number(p.actual_revenue) || 0), 0);
+
     return {
       total: processedQuotes.length,
       directOrdersCount: directOrders.length,
       totalValue,
+      consolidatedRevenue,
       converted: convertedQuotesCount,
       conversionRate,
       bySeller,
@@ -594,14 +610,14 @@ export default function ProspectionDashboard() {
             </div>
           </CardContent>
         </Card>
-        <Card>
+         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500">Valor Total</p>
-                <p className="text-2xl font-bold text-emerald-600">{formatCurrency(quotesStats.totalValue)}</p>
+                <p className="text-sm text-slate-500">Valor em Prospecção</p>
+                <p className="text-2xl font-bold text-indigo-600">{formatCurrency(quotesStats.totalValue)}</p>
               </div>
-              <TrendingUp className="h-10 w-10 text-emerald-600" />
+              <TrendingUp className="h-10 w-10 text-indigo-600" />
             </div>
           </CardContent>
         </Card>
@@ -609,12 +625,12 @@ export default function ProspectionDashboard() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-slate-500">Taxa de Conversão</p>
-                <p className="text-2xl font-bold text-amber-600">
-                  {quotesStats.conversionRate.toFixed(1)}%
+                <p className="text-sm text-slate-500">Faturamento Real (Sincronizado)</p>
+                <p className="text-2xl font-bold text-emerald-600">
+                  {formatCurrency(quotesStats.consolidatedRevenue)}
                 </p>
               </div>
-              <Target className="h-10 w-10 text-amber-600" />
+              <Target className="h-10 w-10 text-emerald-600" />
             </div>
           </CardContent>
         </Card>
