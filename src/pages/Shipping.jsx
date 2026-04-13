@@ -214,7 +214,7 @@ export default function Shipping() {
         }
         // 1. Buscar itens do pedido (filtrando serviços)
         const allItems = await base44.entities.SalesOrderItem.filter({ order_id: order.id });
-        const productsList = products || (await base44.entities.Product.filter({ company_id: companyId }));
+        const productsList = await base44.entities.Product.filter({ company_id: companyId });
         
         const orderItems = allItems.filter(i => {
            const p = productsList.find(prod => prod.id === i.product_id);
@@ -245,8 +245,9 @@ export default function Shipping() {
             let remainingToShip = itemQty - (totalSaida - totalEstorno);
             if (remainingToShip <= 0.0001) continue;
 
+            const itemSku = (item.product_sku || '').trim().toUpperCase();
             const sameSkuProdIds = productsList
-              .filter(p => p.sku === item.product_sku)
+              .filter(p => (p.sku || '').trim().toUpperCase() === itemSku)
               .map(p => p.id);
             
             const itemSeparations = separationMoves.filter(m => sameSkuProdIds.includes(m.product_id));

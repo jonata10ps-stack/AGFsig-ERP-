@@ -21,9 +21,10 @@ function ItemRow({ item, selectedOrder, companyId, onSeparate, separationMoves, 
   const remaining = item.qty - (item.qty_separated || 0);
   const isComplete = remaining <= 0;
   
-  // Filtrar moves deste item (suporta duplicatas por SKU)
+  // Filtrar moves deste item (suporta duplicatas por SKU - case insensitive)
+  const itemSku = (item.product_sku || '').trim().toUpperCase();
   const sameSkuIds = (products || [])
-    .filter(p => p.sku === item.product_sku)
+    .filter(p => (p.sku || '').trim().toUpperCase() === itemSku)
     .map(p => p.id);
   
   const itemMoves = (separationMoves || []).filter(m => 
@@ -324,11 +325,13 @@ export default function Separation() {
        // 2. Apagar a move original de SEPARACAO para limpar a UI
        await base44.entities.InventoryMove.delete(move.id);
 
-       // 2. Atualizar item do pedido (suporta duplicatas por SKU)
+       // 2. Atualizar item do pedido (suporta duplicatas por SKU - case insensitive)
        const moveProduct = products.find(p => p.id === move.product_id);
+       const moveSku = (moveProduct?.sku || '').trim().toUpperCase();
+       
        const item = items.find(i => 
          i.product_id === move.product_id || 
-         (moveProduct && i.product_sku === moveProduct.sku)
+         (moveSku && (i.product_sku || '').trim().toUpperCase() === moveSku)
        );
        
        if (item) {
@@ -386,7 +389,7 @@ export default function Separation() {
      // 2. Fallback: Se não achou saldo pelo ID, tenta pelo SKU (Deduplicação "On-the-fly")
      if (available.length === 0 && skuToSearch) {
         console.log(`Buscando saldo por SKU fallback: ${skuToSearch}`);
-        const sameSkuProds = await base44.entities.Product.filter({ sku: skuToSearch, active: true });
+        const sameSkuProds = await base44.entities.Product.filter({ sku: skuToSearch });
         const allProdIds = sameSkuProds.map(p => p.id);
         
         if (allProdIds.length > 1) {
