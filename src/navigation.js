@@ -19,7 +19,6 @@ import {
   CheckCircle2,
   AlertCircle,
   Calendar,
-  DollarSign,
   RotateCcw,
   Book,
   Cpu
