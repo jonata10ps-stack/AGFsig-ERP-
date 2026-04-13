@@ -4,7 +4,7 @@ import { base44 } from '@/api/base44Client';
 import { Search, DollarSign, Save, Loader2, Package } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { toast } from 'sonner';
 
 export default function PriceList() {
