@@ -22,20 +22,19 @@ function ItemRow({ item, selectedOrder, companyId, onSeparate, separationMoves, 
   const isComplete = remaining <= 0;
   
   const itemSku = (item.product_sku || '').trim().toUpperCase();
-  const itemName = (item.product_name || '').trim().toUpperCase();
   
-  const sameSkuIds = (products || [])
-    .filter(p => {
-       const pSku = (p.sku || '').trim().toUpperCase();
-       const pName = (p.name || '').trim().toUpperCase();
-       return (itemSku && pSku === itemSku) || (itemName && pName === itemName);
-    })
-    .map(p => p.id);
-  
-  const itemMoves = (separationMoves || []).filter(m => 
-    (m.product_id === item.product_id || sameSkuIds.includes(m.product_id)) && 
-    m.type === 'SEPARACAO'
-  );
+  // Filtrar moves deste item cruzando com a lista de produtos carregada
+  const itemMoves = (separationMoves || []).filter(m => {
+    if (m.type !== 'SEPARACAO') return false;
+    
+    // Se bater o ID direto, ok
+    if (m.product_id === item.product_id) return true;
+    
+    // Fallback: Se bater o SKU do produto vinculado ao move
+    const moveProduct = (products || []).find(p => p.id === m.product_id);
+    const moveSku = (moveProduct?.sku || '').trim().toUpperCase();
+    return moveSku && moveSku === itemSku;
+  });
 
   return (
     <div className={`p-4 rounded-lg border mb-3 ${isComplete ? 'bg-emerald-50 border-emerald-200 shadow-sm' : 'bg-white border-slate-200'}`}>
