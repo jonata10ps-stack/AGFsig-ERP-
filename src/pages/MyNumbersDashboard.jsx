@@ -74,6 +74,8 @@ export default function MyNumbersDashboard() {
     let currentMonthGoal = annualGoal / 12;
     let currentMonthRevenue = 0;
     let currentMonthCost = 0;
+    
+    let cumulativeRevenue = 0;
 
     const chartData = MONTHS.map((monthName, idx) => {
       const monthStr = String(idx + 1).padStart(2, '0');
@@ -85,6 +87,7 @@ export default function MyNumbersDashboard() {
 
       annualRevenue += rev;
       annualCost += cost;
+      cumulativeRevenue += rev;
 
       if (monthStr === currentMonthNum) {
         currentMonthRevenue = rev;
@@ -94,7 +97,8 @@ export default function MyNumbersDashboard() {
       return {
         name: monthName,
         Faturamento: rev,
-        Meta: goal,
+        FaturamentoAcumulado: cumulativeRevenue,
+        MetaAnual: annualGoal,
         Custo: cost
       };
     });
@@ -245,8 +249,8 @@ export default function MyNumbersDashboard() {
                     <YAxis tickFormatter={(val) => `R$ ${val/1000}k`} />
                     <Tooltip formatter={(value) => formatCurrency(value)} />
                     <Legend />
-                    <Line type="monotone" dataKey="Faturamento" stroke="#2563EB" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 8 }} />
-                    <Line type="monotone" dataKey="Meta" stroke="#10B981" strokeWidth={3} strokeDasharray="5 5" />
+                    <Line name="YTD Acumulado" type="monotone" dataKey="FaturamentoAcumulado" stroke="#2563EB" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 8 }} />
+                    <Line name="Meta Anual" type="monotone" dataKey="MetaAnual" stroke="#10B981" strokeWidth={3} strokeDasharray="5 5" />
                   </LineChart>
                 </ResponsiveContainer>
               </CardContent>
