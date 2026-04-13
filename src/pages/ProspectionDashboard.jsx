@@ -275,11 +275,15 @@ export default function ProspectionDashboard() {
       isDirect: true
     }));
 
-    const allDeals = [...processedQuotes, ...directOrders];
+    const totalValue = processedQuotes.reduce((sum, d) => sum + (d.effective_value || 0), 0) + 
+                       directOrders.reduce((sum, d) => sum + (d.effective_value || 0), 0);
+    
+    // Converted refers specifically to Quotes that became orders
+    const convertedQuotesCount = processedQuotes.filter(d => d.status === 'CONVERTIDO').length;
+    const conversionRate = processedQuotes.length > 0 ? (convertedQuotesCount / processedQuotes.length) * 100 : 0;
 
-    const totalValue = allDeals.reduce((sum, d) => sum + (d.effective_value || 0), 0);
-    const converted = allDeals.filter(d => d.status === 'CONVERTIDO').length;
-    const conversionRate = allDeals.length > 0 ? (converted / allDeals.length) * 100 : 0;
+    // Total deals for charts and overall totals
+    const allDeals = [...processedQuotes, ...directOrders];
 
     // Por vendedor
     const bySeller = allDeals.reduce((acc, d) => {
@@ -326,14 +330,15 @@ export default function ProspectionDashboard() {
     }, {});
 
     return {
-      total: allDeals.length,
+      total: processedQuotes.length,
+      directOrdersCount: directOrders.length,
       totalValue,
-      converted,
+      converted: convertedQuotesCount,
       conversionRate,
       bySeller,
       byMonth,
       byStatus,
-      avgValue: allDeals.length > 0 ? totalValue / allDeals.length : 0
+      avgValue: processedQuotes.length > 0 ? totalValue / (processedQuotes.length + directOrders.length) : (directOrders.length > 0 ? totalValue / directOrders.length : 0)
     };
   }, [filteredData.quotes, filteredData.salesOrders, selectedMonth, selectedYear, selectedSeller]);
 
@@ -570,7 +575,12 @@ export default function ProspectionDashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-slate-500">Orçamentos Criados</p>
-                <p className="text-2xl font-bold text-slate-900">{quotesStats.total}</p>
+                <div className="flex items-baseline gap-2">
+                   <p className="text-2xl font-bold text-slate-900">{quotesStats.total}</p>
+                   {quotesStats.directOrdersCount > 0 && (
+                     <span className="text-xs text-slate-500 font-medium">(+ {quotesStats.directOrdersCount} pedidos diretos)</span>
+                   )}
+                </div>
               </div>
               <FileText className="h-10 w-10 text-indigo-600" />
             </div>
