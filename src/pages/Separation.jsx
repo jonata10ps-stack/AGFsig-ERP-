@@ -136,7 +136,7 @@ export default function Separation() {
 
   const { data: products } = useQuery({
     queryKey: ['products'],
-    queryFn: () => base44.entities.Product.filter({ active: true }),
+    queryFn: () => base44.entities.Product.listAll({ company_id: companyId }), // listAll para garantir que pegamos registros além do limite de 1000
   });
 
   const { data: allItems } = useQuery({
