@@ -1,6 +1,8 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
+import { useAuth } from '@/lib/AuthContext';
+import { useCompanyId } from '@/components/useCompanyId';
 import { createPageUrl } from '@/utils';
 import { Link, useNavigate } from 'react-router-dom';
 import { useReactToPrint } from 'react-to-print';
@@ -216,6 +218,8 @@ function ConvertToOrderDialog({ open, onClose, quote, onConvert, loading }) {
 export default function QuoteDetail() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const { companyId } = useCompanyId();
+  const { user } = useAuth();
   const urlParams = new URLSearchParams(window.location.search);
   const quoteId = urlParams.get('id');
 
@@ -234,6 +238,32 @@ export default function QuoteDetail() {
     select: (data) => data?.[0],
     enabled: !!quoteId,
   });
+
+  const { data: allSellers = [] } = useQuery({
+    queryKey: ['sellers', companyId],
+    queryFn: () => companyId ? base44.entities.Seller.filter({ company_id: companyId, active: true }) : Promise.resolve([]),
+    enabled: !!companyId,
+  });
+
+  const hasAccess = useMemo(() => {
+    if (!quote || !user || !allSellers) return true; // Let it show if loading or empty
+
+    const isAdmin = user.role?.toLowerCase() === 'admin' || user.email?.toLowerCase() === 'jonata.santos@agfequipamentos.com.br';
+    if (isAdmin) return true;
+
+    // Check if user is the seller of the quote
+    const sellerRecord = allSellers.find(s => s.email?.toLowerCase() === user.email?.toLowerCase());
+    if (sellerRecord && quote.seller_id === sellerRecord.id) return true;
+
+    // Check if user is a manager of the seller
+    const managers = Array.isArray(quote.manager_ids) ? quote.manager_ids : [];
+    if (managers.includes(user.id)) return true;
+
+    // Cases where it's explicitly shared or created by
+    if (quote.created_by?.toLowerCase() === user.email?.toLowerCase()) return true;
+
+    return false;
+  }, [quote, user, allSellers]);
 
   const { data: quoteItems, isLoading: loadingItems } = useQuery({
     queryKey: ['quote-items', quoteId],
@@ -259,11 +289,6 @@ export default function QuoteDetail() {
   const { data: clients } = useQuery({
     queryKey: ['clients'],
     queryFn: () => base44.entities.Client.filter({ active: true }),
-  });
-
-  const { data: sellers } = useQuery({
-    queryKey: ['sellers'],
-    queryFn: () => base44.entities.Seller.filter({ active: true }),
   });
 
   const { data: paymentConditions } = useQuery({
@@ -444,11 +469,20 @@ export default function QuoteDetail() {
 
   const saveQuoteMutation = useMutation({
     mutationFn: async (data) => {
-      return base44.entities.Quote.update(quoteId, data);
+      const updated = await base44.entities.Quote.update(quoteId, data);
+      
+      // Sincronizar com o pedido gerado se o vendedor for alterado e este já tiver sido convertido
+      if (data.seller_id !== undefined && quote?.converted_order_id) {
+        await base44.entities.SalesOrder.update(quote.converted_order_id, {
+          seller_id: data.seller_id,
+          seller_name: data.seller_name
+        });
+      }
+      return updated;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['quote', quoteId] });
-      toast.success('Orçamento salvo');
+      toast.success('Alteração salva e sincronizada');
     },
   });
 
@@ -721,10 +755,10 @@ export default function QuoteDetail() {
     );
   }
 
-  if (!quote) {
+  if (!quote || !hasAccess) {
     return (
       <div className="text-center py-12">
-        <p className="text-slate-500">Orçamento não encontrado</p>
+        <p className="text-slate-500">{!quote ? 'Orçamento não encontrado' : 'Acesso negado'}</p>
         <Link to={createPageUrl('Quotes')}>
           <Button variant="outline" className="mt-4">
             <ArrowLeft className="h-4 w-4 mr-2" />
@@ -813,29 +847,25 @@ export default function QuoteDetail() {
                 </div>
                 <div>
                   <p className="text-sm text-slate-500 mb-1">Vendedor</p>
-                  {canEdit ? (
-                    <Select 
-                      value={quote.seller_id || ''} 
-                      onValueChange={(val) => {
-                        const seller = sellers?.find(s => s.id === val);
-                        saveQuoteMutation.mutate({ 
-                          seller_id: val, 
-                          seller_name: seller?.name || '' 
-                        });
-                      }}
-                    >
-                      <SelectTrigger className="h-8">
-                        <SelectValue placeholder="Selecione..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {sellers?.map(s => (
-                          <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <p className="font-medium">{quote.seller_name || '-'}</p>
-                  )}
+                  <Select 
+                    value={quote.seller_id || ''} 
+                    onValueChange={(val) => {
+                      const seller = allSellers?.find(s => s.id === val);
+                      saveQuoteMutation.mutate({ 
+                        seller_id: val, 
+                        seller_name: seller?.name || '' 
+                      });
+                    }}
+                  >
+                    <SelectTrigger className="h-8">
+                      <SelectValue placeholder="Selecione..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {allSellers?.map(s => (
+                        <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div>
                   <p className="text-sm text-slate-500 mb-1">Condição de Pagamento</p>

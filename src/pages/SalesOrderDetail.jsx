@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
+import { useCompanyId } from '@/components/useCompanyId';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { useReactToPrint } from 'react-to-print';
@@ -162,6 +163,7 @@ function ItemForm({ item, products, onSave, onCancel, loading }) {
 
 export default function SalesOrderDetail() {
   const queryClient = useQueryClient();
+  const { companyId } = useCompanyId();
   const urlParams = new URLSearchParams(window.location.search);
   const orderId = urlParams.get('id');
 
@@ -201,6 +203,12 @@ export default function SalesOrderDetail() {
     queryFn: () => base44.entities.ProductionOrder.list(),
   });
 
+  const { data: sellers } = useQuery({
+    queryKey: ['sellers', companyId],
+    queryFn: () => companyId ? base44.entities.Seller.filter({ company_id: companyId, active: true }) : Promise.resolve([]),
+    enabled: !!companyId,
+  });
+
   const addItemMutation = useMutation({
     mutationFn: async (data) => {
       // Calcular estoque disponível para o aviso (opcional)
@@ -224,6 +232,29 @@ export default function SalesOrderDetail() {
       queryClient.invalidateQueries({ queryKey: ['sales-order', orderId] });
       setItemDialogOpen(false);
       toast.success('Item adicionado');
+    },
+  });
+
+  const saveOrderMutation = useMutation({
+    mutationFn: async (data) => {
+      const updated = await base44.entities.SalesOrder.update(orderId, data);
+      
+      // Sincronizar com o respectivo orçamento se o vendedor for alterado
+      if (data.seller_id !== undefined) {
+        const quotes = await base44.entities.Quote.list();
+        const linkedQuote = quotes?.find(q => q.converted_order_id === orderId);
+        if (linkedQuote) {
+          await base44.entities.Quote.update(linkedQuote.id, {
+            seller_id: data.seller_id,
+            seller_name: data.seller_name
+          });
+        }
+      }
+      return updated;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sales-order', orderId] });
+      toast.success('Alteração salva e sincronizada com sucesso');
     },
   });
 
@@ -737,8 +768,26 @@ export default function SalesOrderDetail() {
                 </>
               )}
               <div>
-                <p className="text-sm text-slate-500">Vendedor</p>
-                <p className="font-medium">{order.seller_name || '-'}</p>
+                <p className="text-sm text-slate-500 mb-1">Vendedor</p>
+                <Select 
+                  value={order.seller_id || ''} 
+                  onValueChange={(val) => {
+                    const seller = sellers?.find(s => s.id === val);
+                    saveOrderMutation.mutate({ 
+                      seller_id: val, 
+                      seller_name: seller?.name || '' 
+                    });
+                  }}
+                >
+                  <SelectTrigger className="h-8">
+                    <SelectValue placeholder="Selecione..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {sellers?.map(s => (
+                      <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div>
                 <p className="text-sm text-slate-500">Observações</p>

@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { useCompanyId } from '@/components/useCompanyId';
+import { useAuth } from '@/lib/AuthContext';
 import { TrendingUp, Calendar, Users, FileText, Target, Car } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -33,38 +34,124 @@ const resultColors = {
 
 export default function ProspectionDashboard() {
   const { companyId } = useCompanyId();
+  const { user } = useAuth();
   const currentDate = new Date();
   const [selectedMonth, setSelectedMonth] = useState(String(currentDate.getMonth() + 1).padStart(2, '0'));
   const [selectedYear, setSelectedYear] = useState(String(currentDate.getFullYear()));
   const [selectedSeller, setSelectedSeller] = useState('all');
 
+  // Fetch all sellers to determine management/team
+  const { data: allSellers = [] } = useQuery({
+    queryKey: ['sellers', companyId],
+    queryFn: () => companyId ? base44.entities.Seller.filter({ company_id: companyId, active: true }) : Promise.resolve([]),
+    enabled: !!companyId,
+  });
+
+  // Calculate access context
+  const accessContext = useMemo(() => {
+    if (!user || !allSellers) return { isAdmin: false, isManager: false, isSeller: false, managedSellerIds: [], currentSellerId: null };
+
+    const isAdmin = user.role?.toLowerCase() === 'admin' || user.email?.toLowerCase() === 'jonata.santos@agfequipamentos.com.br';
+    
+    // Check if user is a seller (by email)
+    const sellerRecord = allSellers.find(s => s.email?.toLowerCase() === user.email?.toLowerCase());
+    const isSeller = !!sellerRecord;
+    const currentSellerId = sellerRecord?.id || null;
+
+    // Check if user is a manager (any seller has them in manager_ids)
+    const managedSellers = allSellers.filter(s => {
+        const managers = Array.isArray(s.manager_ids) ? s.manager_ids : [];
+        return managers.includes(user.id);
+    });
+    const isManager = managedSellers.length > 0;
+    const managedSellerIds = managedSellers.map(s => s.id);
+
+    return { isAdmin, isManager, isSeller, managedSellerIds, currentSellerId };
+  }, [user, allSellers]);
+
+  // If user is a seller but not manager/admin, fix the selected seller
+  useMemo(() => {
+    if (selectedSeller === 'all' && !accessContext.isAdmin && !accessContext.isManager && accessContext.isSeller) {
+        setSelectedSeller(accessContext.currentSellerId);
+    }
+  }, [accessContext, selectedSeller]);
+
   const { data: visits, isLoading } = useQuery({
     queryKey: ['prospection-visits-dashboard', companyId],
     queryFn: () => companyId ? base44.entities.ProspectionVisit.filter({ company_id: companyId }, '-visit_date') : Promise.resolve([]),
     enabled: !!companyId,
-    refetchInterval: 60000, // Atualizar a cada 60 segundos
+    refetchInterval: 60000,
   });
 
-  // Fetch daily logs
   const { data: dailyLogs } = useQuery({
     queryKey: ['daily-vehicle-logs-report', companyId],
     queryFn: () => companyId ? base44.entities.DailyVehicleLog.filter({ company_id: companyId }, '-log_date') : Promise.resolve([]),
     enabled: !!companyId,
-    refetchInterval: 60000, // Atualizar a cada 60 segundos
+    refetchInterval: 60000,
   });
 
   const { data: quotes } = useQuery({
     queryKey: ['quotes-dashboard', companyId],
     queryFn: () => companyId ? base44.entities.Quote.filter({ company_id: companyId }, '-created_date') : Promise.resolve([]),
     enabled: !!companyId,
-    refetchInterval: 60000, // Atualizar a cada 60 segundos
+    refetchInterval: 60000,
   });
+
+  const { data: salesOrders } = useQuery({
+    queryKey: ['sales-orders-dashboard', companyId],
+    queryFn: () => companyId ? base44.entities.SalesOrder.filter({ company_id: companyId }, '-created_date') : Promise.resolve([]),
+    enabled: !!companyId,
+    refetchInterval: 60000,
+  });
+
+  // Helper to filter data by user access
+  const filterByAccess = (item) => {
+    if (accessContext.isAdmin) return true;
+    
+    const itemSellerId = item.seller_id;
+    
+    // Se é gerente, vê os seus gerenciados
+    if (accessContext.isManager && accessContext.managedSellerIds.includes(itemSellerId)) return true;
+    
+    // Se é o próprio vendedor
+    if (accessContext.isSeller && itemSellerId === accessContext.currentSellerId) return true;
+
+    // Caso especial: criado pelo próprio usuário (email)
+    if (item.created_by?.toLowerCase() === user?.email?.toLowerCase()) return true;
+
+    return false;
+  };
+
+  const filteredData = useMemo(() => {
+    if (!visits || !dailyLogs || !quotes || !salesOrders) return { visits: [], dailyLogs: [], quotes: [], salesOrders: [] };
+    
+    return {
+      visits: visits.filter(filterByAccess),
+      dailyLogs: dailyLogs.filter(filterByAccess),
+      quotes: quotes.filter(filterByAccess),
+      salesOrders: salesOrders.filter(filterByAccess)
+    };
+  }, [visits, dailyLogs, quotes, salesOrders, accessContext, user]);
+
+  const authorizedSellers = useMemo(() => {
+    if (accessContext.isAdmin) return allSellers;
+    if (accessContext.isManager) {
+        // Manager sees their managed sellers + themselves if they are a seller
+        const uniqueIds = new Set([...accessContext.managedSellerIds]);
+        if (accessContext.currentSellerId) uniqueIds.add(accessContext.currentSellerId);
+        return allSellers.filter(s => uniqueIds.has(s.id));
+    }
+    if (accessContext.isSeller) {
+        return allSellers.filter(s => s.id === accessContext.currentSellerId);
+    }
+    return [];
+  }, [allSellers, accessContext]);
 
   // KM Report
   const kmReport = useMemo(() => {
-    if (!visits || !dailyLogs) return null;
+    if (!filteredData.visits || !filteredData.dailyLogs) return null;
 
-    const filteredVisits = visits.filter(v => {
+    const filteredVisits = filteredData.visits.filter(v => {
       if (!v.visit_date) return false;
       const date = new Date(`${v.visit_date}T12:00:00`);
       const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -77,7 +164,7 @@ export default function ProspectionDashboard() {
       return matchMonth && matchYear && matchSeller;
     });
 
-    const filteredLogs = dailyLogs.filter(log => {
+    const filteredLogs = filteredData.dailyLogs.filter(log => {
       if (!log.log_date) return false;
       const date = new Date(`${log.log_date}T12:00:00`);
       const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -120,7 +207,6 @@ export default function ProspectionDashboard() {
         bySeller[seller].companyVehicleVisits += 1;
       }
     });
-
     return {
       bySeller: Object.entries(bySeller)
         .map(([name, data]) => ({ 
@@ -136,12 +222,12 @@ export default function ProspectionDashboard() {
       totalVisits: filteredVisits.length,
       totalDays: filteredLogs.length
     };
-  }, [visits, dailyLogs, selectedMonth, selectedYear, selectedSeller]);
+  }, [filteredData.visits, filteredData.dailyLogs, selectedMonth, selectedYear, selectedSeller]);
 
   const quotesStats = useMemo(() => {
-    if (!quotes) return null;
+    if (!filteredData.quotes || !filteredData.salesOrders) return null;
 
-    const filteredQuotes = quotes.filter(q => {
+    const filteredQuotes = filteredData.quotes.filter(q => {
       if (!q.created_date) return false;
       const date = new Date(q.created_date); // created_date is ISO with T
       const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -154,82 +240,132 @@ export default function ProspectionDashboard() {
       return matchMonth && matchYear && matchSeller;
     });
 
-    const totalValue = filteredQuotes.reduce((sum, q) => sum + (q.total_amount || 0), 0);
-    const converted = filteredQuotes.filter(q => q.status === 'CONVERTIDO').length;
-    const conversionRate = filteredQuotes.length > 0 ? (converted / filteredQuotes.length) * 100 : 0;
+    const processedQuotes = filteredQuotes.map(q => {
+      let finalValue = q.total_amount || 0;
+      if (q.status === 'CONVERTIDO' && q.converted_order_id) {
+         const order = filteredData.salesOrders.find(o => o.id === q.converted_order_id);
+         if (order) finalValue = order.total_amount || 0;
+      }
+      return { ...q, effective_value: finalValue, isDirect: false };
+    });
+
+    const allConvertedOrderIds = new Set(
+      (filteredData.quotes || [])
+        .filter(q => q.converted_order_id)
+        .map(q => q.converted_order_id)
+    );
+    
+    // Obter também os pedidos diretos (que não nasceram de orçamento)
+    const directOrders = (filteredData.salesOrders || []).filter(o => {
+      if (allConvertedOrderIds.has(o.id)) return false;
+      if (!o.created_date) return false;
+      const date = new Date(o.created_date);
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const year = String(date.getFullYear());
+      
+      const matchMonth = selectedMonth === 'all' || month === selectedMonth;
+      const matchYear = selectedYear === 'all' || year === selectedYear;
+      const matchSeller = selectedSeller === 'all' || o.seller_id === selectedSeller;
+      
+      return matchMonth && matchYear && matchSeller;
+    }).map(o => ({
+      ...o,
+      status: 'CONVERTIDO', // Pedido direto é considerado uma conversão imediata
+      effective_value: o.total_amount || 0,
+      isDirect: true
+    }));
+
+    const allDeals = [...processedQuotes, ...directOrders];
+
+    const totalValue = allDeals.reduce((sum, d) => sum + (d.effective_value || 0), 0);
+    const converted = allDeals.filter(d => d.status === 'CONVERTIDO').length;
+    const conversionRate = allDeals.length > 0 ? (converted / allDeals.length) * 100 : 0;
 
     // Por vendedor
-    const bySeller = filteredQuotes.reduce((acc, q) => {
-      const name = q.seller_name || 'Sem vendedor';
+    const bySeller = allDeals.reduce((acc, d) => {
+      const name = d.seller_name || 'Sem vendedor';
       if (!acc[name]) {
         acc[name] = { count: 0, value: 0, converted: 0 };
       }
       acc[name].count += 1;
-      acc[name].value += q.total_amount || 0;
-      if (q.status === 'CONVERTIDO') {
+      acc[name].value += (d.effective_value || 0);
+      if (d.status === 'CONVERTIDO') {
         acc[name].converted += 1;
       }
       return acc;
     }, {});
 
     // Por mês
-    const byMonth = filteredQuotes.reduce((acc, q) => {
-      const date = new Date(q.created_date);
+    const byMonth = allDeals.reduce((acc, d) => {
+      const date = new Date(d.created_date);
       const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
       if (!acc[monthKey]) {
         acc[monthKey] = { count: 0, value: 0, converted: 0 };
       }
       acc[monthKey].count += 1;
-      acc[monthKey].value += q.total_amount || 0;
-      if (q.status === 'CONVERTIDO') {
+      acc[monthKey].value += (d.effective_value || 0);
+      if (d.status === 'CONVERTIDO') {
         acc[monthKey].converted += 1;
       }
       return acc;
     }, {});
 
     // Por status
-    const byStatus = filteredQuotes.reduce((acc, q) => {
-      acc[q.status] = (acc[q.status] || 0) + 1;
+    const byStatus = allDeals.reduce((acc, d) => {
+      acc[d.status] = (acc[d.status] || 0) + 1;
       return acc;
     }, {});
 
     return {
-      total: filteredQuotes.length,
+      total: allDeals.length,
       totalValue,
       converted,
       conversionRate,
       bySeller,
       byMonth,
       byStatus,
-      avgValue: filteredQuotes.length > 0 ? totalValue / filteredQuotes.length : 0
+      avgValue: allDeals.length > 0 ? totalValue / allDeals.length : 0
     };
-  }, [quotes, selectedMonth, selectedYear, selectedSeller]);
+  }, [filteredData.quotes, filteredData.salesOrders, selectedMonth, selectedYear, selectedSeller]);
 
   const stats = useMemo(() => {
-    if (!visits) return null;
+    if (!filteredData.visits) return null;
+
+    const filteredVisits = filteredData.visits.filter(v => {
+      if (!v.visit_date) return false;
+      const date = new Date(`${v.visit_date}T12:00:00`);
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const year = String(date.getFullYear());
+      
+      const matchMonth = selectedMonth === 'all' || month === selectedMonth;
+      const matchYear = selectedYear === 'all' || year === selectedYear;
+      const matchSeller = selectedSeller === 'all' || v.seller_id === selectedSeller;
+      
+      return matchMonth && matchYear && matchSeller;
+    });
 
     // Visitas por status
-    const byStatus = visits.reduce((acc, v) => {
+    const byStatus = filteredVisits.reduce((acc, v) => {
       acc[v.status] = (acc[v.status] || 0) + 1;
       return acc;
     }, {});
 
     // Visitas por vendedor
-    const bySeller = visits.reduce((acc, v) => {
+    const bySeller = filteredVisits.reduce((acc, v) => {
       const name = v.seller_name || 'Sem vendedor';
       acc[name] = (acc[name] || 0) + 1;
       return acc;
     }, {});
 
     // Resultados
-    const byResult = visits.reduce((acc, v) => {
+    const byResult = filteredVisits.reduce((acc, v) => {
       if (v.result) {
         acc[v.result] = (acc[v.result] || 0) + 1;
       }
       return acc;
     }, {});
 
-    const proposalsByMonth = visits
+    const proposalsByMonth = filteredVisits
       .filter(v => v.proposal_sent && v.visit_date)
       .reduce((acc, v) => {
         const date = new Date(`${v.visit_date}T12:00:00`);
@@ -240,7 +376,7 @@ export default function ProspectionDashboard() {
 
     // Produtos mais procurados
     const productInterest = {};
-    visits.forEach(v => {
+    filteredVisits.forEach(v => {
       if (v.interested_products_names) {
         const products = v.interested_products_names.split(',').map(p => p.trim());
         products.forEach(product => {
@@ -257,13 +393,13 @@ export default function ProspectionDashboard() {
       byResult,
       proposalsByMonth,
       productInterest,
-      total: visits.length,
-      withProposals: visits.filter(v => v.proposal_sent).length,
-      avgKm: visits.length > 0 
-        ? visits.reduce((sum, v) => sum + (Number(v.vehicle_km_end || 0) - Number(v.vehicle_km_start || 0)), 0) / visits.length 
+      total: filteredVisits.length,
+      withProposals: filteredVisits.filter(v => v.proposal_sent).length,
+      avgKm: filteredVisits.length > 0 
+        ? filteredVisits.reduce((sum, v) => sum + (Number(v.vehicle_km_end || 0) - Number(v.vehicle_km_start || 0)), 0) / filteredVisits.length 
         : 0,
     };
-  }, [visits]);
+  }, [filteredData.visits, selectedMonth, selectedYear, selectedSeller]);
 
   if (isLoading) {
     return (
@@ -279,14 +415,13 @@ export default function ProspectionDashboard() {
 
   if (!stats || !kmReport || !quotesStats) return null;
 
-  // Get unique sellers for filter
-  const sellers = [...new Set(visits?.map(v => ({ id: v.seller_id, name: v.seller_name })))];
-  
   // Get years from visits
-  const years = [...new Set(visits?.map(v => {
+  const years = [...new Set(filteredData.visits?.map(v => {
     if (!v.visit_date) return null;
     return new Date(`${v.visit_date}T12:00:00`).getFullYear();
   }).filter(Boolean))].sort((a, b) => b - a);
+
+  const sellersList = authorizedSellers;
 
   const statusData = Object.entries(stats.byStatus).map(([name, value]) => ({ name, value }));
   const sellerData = Object.entries(stats.bySeller)
@@ -385,8 +520,10 @@ export default function ProspectionDashboard() {
                   <SelectValue placeholder="Vendedor" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Todos Vendedores</SelectItem>
-                  {sellers.map(seller => (
+                  {(accessContext.isAdmin || accessContext.isManager) && (
+                    <SelectItem value="all">Todos Vendedores</SelectItem>
+                  )}
+                  {sellersList.map(seller => (
                     <SelectItem key={seller.id} value={seller.id}>
                       {seller.name}
                     </SelectItem>
