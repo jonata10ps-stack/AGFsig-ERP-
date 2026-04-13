@@ -670,39 +670,72 @@ export default function Shipping() {
 
         {/* Items & Labels */}
         <div className="lg:col-span-2 space-y-4">
-          {(selectedIds.length > 0) && (editingOrder || (selectedOrder?.status !== 'EXPEDIDO')) && (
+          {(selectedIds.length > 0) && (
             <Card className={selectedIds.length > 1 ? "border-amber-200 bg-amber-50/10" : ""}>
               <CardHeader>
                 <CardTitle className="flex justify-between items-center">
                    <span>{selectedIds.length > 1 ? `Expedição Coletiva (${selectedIds.length} pedidos)` : 'Dados de Expedição'}</span>
                    {selectedIds.length > 1 && <Badge className="bg-amber-100 text-amber-800">Frete Compartilhado</Badge>}
+                   
+                   {/* Botões de Ação para Coletivo Já Expedido */}
+                   {selectedIds.length > 1 && pendingSelected.length === 0 && (
+                     <div className="flex gap-2">
+                        <Button
+                          onClick={() => setShowReport(true)}
+                          variant="outline"
+                          size="sm"
+                          className="bg-white border-indigo-200 text-indigo-700 h-8"
+                        >
+                          <FileText className="h-4 w-4 mr-1" />
+                          Relatório Coletivo
+                        </Button>
+                        <Button
+                          onClick={() => {
+                            if(window.confirm(`Deseja cancelar a expedição de ${selectedIds.length} pedidos?`)) {
+                              selectedIds.forEach(id => {
+                                const order = orders.find(o => o.id === id);
+                                if (order) cancelShippingMutation.mutate(order);
+                              });
+                            }
+                          }}
+                          variant="outline"
+                          size="sm"
+                          className="bg-white border-red-200 text-red-600 h-8"
+                        >
+                          <RotateCcw className="h-4 w-4 mr-1" />
+                          Cancelar Tudo
+                        </Button>
+                     </div>
+                   )}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  {selectedIds.length === 1 && (
-                    <div>
-                      <label className="text-sm font-medium text-slate-700">NF</label>
-                      <Input
-                        placeholder="Número da nota fiscal"
-                        value={shippingData.nf_number}
-                        onChange={(e) => setShippingData({...shippingData, nf_number: e.target.value})}
-                        className="mt-1"
-                        disabled={selectedOrder?.status === 'EXPEDIDO' && !editingOrder}
-                      />
-                    </div>
-                  )}
-                  {selectedIds.length > 1 && (
-                    <div className="col-span-1">
-                      <label className="text-sm font-medium text-slate-700">Lote / Vínculo de Carga</label>
-                      <Input
-                        placeholder="Ex: CARGA-SUL-2204"
-                        value={shippingData.shipping_batch_id}
-                        onChange={(e) => setShippingData({...shippingData, shipping_batch_id: e.target.value.toUpperCase()})}
-                        className="mt-1 bg-amber-50 border-amber-200"
-                      />
-                    </div>
-                  )}
+                {(editingOrder || pendingSelected.length > 0) ? (
+                  <>
+                    <div className="grid grid-cols-2 gap-4">
+                      {selectedIds.length === 1 && (
+                        <div>
+                          <label className="text-sm font-medium text-slate-700">NF</label>
+                          <Input
+                            placeholder="Número da nota fiscal"
+                            value={shippingData.nf_number}
+                            onChange={(e) => setShippingData({...shippingData, nf_number: e.target.value})}
+                            className="mt-1"
+                            disabled={selectedOrder?.status === 'EXPEDIDO' && !editingOrder}
+                          />
+                        </div>
+                      )}
+                      {(selectedIds.length > 1 || editingOrder) && (
+                        <div className="col-span-1">
+                          <label className="text-sm font-medium text-slate-700">Lote / Vínculo de Carga</label>
+                          <Input
+                            placeholder="Ex: CARGA-SUL-2204"
+                            value={shippingData.shipping_batch_id}
+                            onChange={(e) => setShippingData({...shippingData, shipping_batch_id: e.target.value.toUpperCase()})}
+                            className="mt-1 bg-amber-50 border-amber-200"
+                          />
+                        </div>
+                      )}
                   <div className={selectedIds.length > 1 ? "col-span-1" : ""}>
                     <label className="text-sm font-medium text-slate-700">Transportadora</label>
                     <Input
@@ -840,11 +873,10 @@ export default function Shipping() {
                            <input type="file" className="hidden" accept="image/*" multiple onChange={(e) => handleImageCapture(e, 'load_photos')} />
                         </label>
                       )}
-                  </div>
                 </div>
 
                 <div className="flex gap-2">
-                    {!(selectedOrder?.status === 'EXPEDIDO' && !editingOrder) && (
+                    {(editingOrder || pendingSelected.length > 0) && !(selectedOrder?.status === 'EXPEDIDO' && !editingOrder) && (
                       <Button
                         onClick={() => updateShippingInfoMutation.mutate(selectedIds)}
                         disabled={updateShippingInfoMutation.isPending}
@@ -864,6 +896,34 @@ export default function Shipping() {
                         </Button>
                     )}
                 </div>
+                  </>
+                ) : (
+                  <div className="bg-emerald-50 border border-emerald-100 rounded-lg p-6 text-center space-y-4">
+                     <div className="bg-white w-12 h-12 rounded-full flex items-center justify-center mx-auto shadow-sm">
+                        <CheckCircle className="h-6 w-6 text-emerald-500" />
+                     </div>
+                     <div>
+                        <h3 className="text-emerald-900 font-bold">Pedidos já Expedidos</h3>
+                        <p className="text-emerald-700 text-sm">Estes pedidos já foram processados e os itens saíram do estoque.</p>
+                     </div>
+                     <div className="flex justify-center gap-3">
+                        <Button
+                          onClick={() => setShowReport(true)}
+                          className="bg-indigo-600 hover:bg-indigo-700"
+                        >
+                          <FileText className="h-4 w-4 mr-2" />
+                          Ver Relatórios
+                        </Button>
+                        <Button
+                          onClick={() => setEditingOrder(true)}
+                          variant="outline"
+                          className="bg-white"
+                        >
+                          Editar Dados
+                        </Button>
+                     </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}
