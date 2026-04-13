@@ -55,8 +55,14 @@ export default function Kardex() {
     queryFn: async () => {
       if (!activeFilters.productId || !companyId) return { data: [], count: 0 };
       
+      // 1. Buscar todos os IDs de produtos que possuem o mesmo SKU para unificar o Kardex
+      const baseProduct = await base44.entities.Product.get(activeFilters.productId);
+      const allProductIds = baseProduct ? 
+        (await base44.entities.Product.filter({ sku: baseProduct.sku })).map(p => p.id) : 
+        [activeFilters.productId];
+
       const filter = { 
-        product_id: activeFilters.productId, 
+        product_id: allProductIds, 
         company_id: companyId 
       };
 
@@ -82,7 +88,11 @@ export default function Kardex() {
     queryKey: ['inventory-moves-all', activeFilters.productId, activeFilters.startDate, activeFilters.endDate, companyId],
     queryFn: async () => {
       if (!activeFilters.productId || !companyId) return [];
-      const filter = { product_id: activeFilters.productId, company_id: companyId };
+      const baseProduct = await base44.entities.Product.get(activeFilters.productId);
+      const allProductIds = baseProduct ? 
+        (await base44.entities.Product.filter({ sku: baseProduct.sku })).map(p => p.id) : 
+        [activeFilters.productId];
+      const filter = { product_id: allProductIds, company_id: companyId };
       if (activeFilters.startDate) filter.created_at = { ...filter.created_at, gte: `${activeFilters.startDate}T00:00:00.000Z` };
       if (activeFilters.endDate) filter.created_at = { ...filter.created_at, lte: `${activeFilters.endDate}T23:59:59.999Z` };
       return await base44.entities.InventoryMove.listAll(filter, '-created_at');
@@ -95,7 +105,14 @@ export default function Kardex() {
 
   const { data: currentBalances } = useQuery({
     queryKey: ['stock-balances', activeFilters.productId, companyId],
-    queryFn: () => activeFilters.productId ? base44.entities.StockBalance.filter({ product_id: activeFilters.productId, company_id: companyId }) : [],
+    queryFn: async () => {
+      if (!activeFilters.productId || !companyId) return [];
+      const baseProduct = await base44.entities.Product.get(activeFilters.productId);
+      const allProductIds = baseProduct ? 
+        (await base44.entities.Product.filter({ sku: baseProduct.sku })).map(p => p.id) : 
+        [activeFilters.productId];
+      return base44.entities.StockBalance.filter({ product_id: allProductIds, company_id: companyId });
+    },
     enabled: !!activeFilters.productId && !!companyId,
   });
 

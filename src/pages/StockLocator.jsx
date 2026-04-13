@@ -39,7 +39,7 @@ export default function StockLocator() {
       if (!companyId || searchTerm.length < 2) return { data: [], count: 0 };
       
       return base44.entities.Product.queryPaginated(
-        { company_id: companyId, active: true },
+        { company_id: companyId },
         'sku',
         10,
         0,
@@ -72,9 +72,14 @@ export default function StockLocator() {
       
       console.log(`🔍 Buscando saldos - empresa: ${companyId}, produto: ${selectedProduct.sku}`);
       
+      const baseProduct = await base44.entities.Product.get(selectedProduct.id);
+      const allProductIds = baseProduct ? 
+        (await base44.entities.Product.filter({ sku: baseProduct.sku })).map(p => p.id) : 
+        [selectedProduct.id];
+
       const allBalances = await base44.entities.StockBalance.filter({ 
         company_id: companyId,
-        product_id: selectedProduct.id 
+        product_id: allProductIds 
       });
       
       console.log(`📊 Encontrados ${allBalances.length} saldos:`, allBalances.map(b => ({
