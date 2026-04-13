@@ -73,8 +73,8 @@ export default function StockBalances() {
     queryKey: ['products-by-ids', companyId, productIds.sort().join(',')],
     queryFn: async () => {
       if (!companyId || productIds.length === 0) return [];
-      // Buscar todos os produtos (ativos ou não) para os IDs encontrados nos saldos
-      return base44.entities.Product.filter({ id: productIds, company_id: companyId });
+      // Buscar produtos globalmente por ID para garantir que NADA fique sem nome na tela
+      return base44.entities.Product.filter({ id: productIds });
     },
     enabled: !!companyId && productIds.length > 0,
   });
