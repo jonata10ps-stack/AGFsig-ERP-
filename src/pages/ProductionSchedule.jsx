@@ -17,8 +17,11 @@ import {
 import { toast } from 'sonner';
 import { useCompanyId } from '@/components/useCompanyId';
 import moment from 'moment';
+import 'moment/locale/pt-br';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
+
+moment.locale('pt-br');
 
 const OP_STATUS_CONFIG = {
   ABERTA: { label: 'Aberta', color: 'bg-blue-100 text-blue-700', dot: 'bg-blue-500' },

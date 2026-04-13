@@ -164,6 +164,10 @@ export default function ServiceSchedule() {
 
               {/* Dias do mês */}
               <div className="grid grid-cols-7 gap-1">
+                {/* Espaçamento para alinhar o primeiro dia da semana */}
+                {Array.from({ length: monthStart.getDay() }).map((_, i) => (
+                  <div key={`empty-${i}`} className="h-10" />
+                ))}
                 {days.map(day => {
                   const ordersCount = getOrdersForDay(day);
                   const isSelected = isSameDay(day, selectedDate);
