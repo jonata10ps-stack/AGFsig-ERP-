@@ -276,7 +276,10 @@ export default function Shipping() {
                  company_id: companyId, 
                  product_id: sameProductIds 
                });
-               const validBalance = balances.find(b => (parseFloat(b.qty_available) || 0) > 0) || balances[0];
+               // Priorizar o saldo que já está marcado como "Separado" (na Doca/Expedição)
+               const validBalance = balances.find(b => (parseFloat(b.qty_separated) || 0) > 0) || 
+                                    balances.find(b => (parseFloat(b.qty_available) || 0) > 0) || 
+                                    balances[0];
                
                if (validBalance) {
                   await executeInventoryTransaction({
