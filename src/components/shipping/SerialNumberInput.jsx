@@ -69,6 +69,14 @@ export default function SerialNumberInput({ item, order, onClose, onSuccess }) {
 
     setSaving(true);
     try {
+      // 1. Verificar duplicidades na própria lista atual
+      const uniqueSerialsInList = new Set(serialNumbers.map(s => s.serial.trim()));
+      if (uniqueSerialsInList.size !== serialNumbers.length) {
+        setSaving(false);
+        toast.error('Você informou números de série repetidos nesta lista. Remova as duplicatas.');
+        return;
+      }
+
       // Processar cada número de série capturado
       for (const serialItem of serialNumbers) {
         if (serialItem.isSavedInDB) continue;
