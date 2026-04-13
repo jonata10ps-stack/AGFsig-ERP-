@@ -33,6 +33,7 @@ export const navigation = [
     moduleId: 'Agenda',
     children: [
       { name: 'Agenda de Visitas', icon: Calendar, page: 'SalesAppointments' },
+      { name: 'Tabela de Preços', icon: DollarSign, page: 'PriceList' },
       { name: 'Dashboard Prospecção', icon: BarChart3, page: 'ProspectionDashboard' },
       { name: 'Meus Números', icon: BarChart3, page: 'MyNumbersDashboard' },
       { name: 'Prospecção', icon: Users, page: 'ProspectionVisits' },

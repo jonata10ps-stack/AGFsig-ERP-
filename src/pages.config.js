@@ -96,6 +96,8 @@ import ProductionRoutes from './pages/ProductionRoutes';
 import ProductionSchedule from './pages/ProductionSchedule';
 import ProductionSimulation from './pages/ProductionSimulation';
 import ProductionSyncFix from './pages/ProductionSyncFix';
+import PriceList from './pages/PriceList';
+import ProductDetail from './pages/ProductDetail';
 import Products from './pages/Products';
 import ProspectionDashboard from './pages/ProspectionDashboard';
 import ProspectionProjects from './pages/ProspectionProjects';
@@ -194,6 +196,7 @@ export const PAGES = {
     "PaymentConditions": PaymentConditions,
     "PendingItemsReport": PendingItemsReport,
     "PickingOptimized": PickingOptimized,
+    "PriceList": PriceList,
     "ProductionDashboard": ProductionDashboard,
     "ProductionOrderDetail": ProductionOrderDetail,
     "ProductionOrders": ProductionOrders,
