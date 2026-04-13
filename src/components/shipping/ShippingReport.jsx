@@ -9,6 +9,20 @@ import { ptBR } from 'date-fns/locale';
 export default function ShippingReport({ order, items, onClose }) {
   if (!order) return null;
 
+  const parsePhotos = (photoData) => {
+    if (!photoData) return [];
+    if (typeof photoData === 'string') {
+      if (photoData.startsWith('[')) {
+        try { return JSON.parse(photoData); } catch { return [photoData]; }
+      }
+      return [photoData];
+    }
+    if (Array.isArray(photoData)) return photoData;
+    return [];
+  };
+
+  const parsedNfPhotos = parsePhotos(order.signed_nf_photo);
+
   const handlePrint = () => {
     const printWindow = window.open('', '_blank');
     
@@ -17,8 +31,8 @@ export default function ShippingReport({ order, items, onClose }) {
       `<img src="${url}" style="width: 100%; max-height: 400px; object-fit: contain; margin-bottom: 20px; border: 1px solid #ddd; border-radius: 8px;">`
     ).join('') || '<p>Nenhuma foto da carga anexada.</p>';
 
-    const nfHtml = order.signed_nf_photo 
-      ? `<img src="${order.signed_nf_photo}" style="width: 100%; border: 1px solid #000; margin-top: 10px;">`
+    const nfHtml = parsedNfPhotos.length > 0
+      ? parsedNfPhotos.map(url => `<img src="${url}" style="width: 100%; border: 1px solid #000; margin-top: 10px;">`).join('')
       : '<p>Canhoto/NF Assinada não anexado.</p>';
 
     // Preparar tabela de itens para o print
@@ -241,8 +255,12 @@ export default function ShippingReport({ order, items, onClose }) {
                 </h4>
               </div>
               <div className="bg-white p-2 rounded-xl border shadow-sm min-h-[250px] flex items-center justify-center overflow-hidden">
-                {order.signed_nf_photo ? (
-                  <img src={order.signed_nf_photo} alt="Canhoto" className="max-w-full rounded-md object-contain hover:scale-110 transition-transform" />
+                {parsedNfPhotos.length > 0 ? (
+                  <div className={`grid gap-2 w-full ${parsedNfPhotos.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                    {parsedNfPhotos.map((url, idx) => (
+                      <img key={idx} src={url} alt={`Canhoto ${idx+1}`} className="w-full rounded-md object-contain hover:scale-110 transition-transform" />
+                    ))}
+                  </div>
                 ) : (
                   <div className="text-center text-slate-300">
                     <FileText className="h-12 w-12 mx-auto mb-2 opacity-20" />

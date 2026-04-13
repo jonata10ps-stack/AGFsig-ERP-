@@ -41,33 +41,46 @@ export default function Shipping() {
     driver_name: '',
     driver_cpf: '',
     shipping_notes: '',
-    signed_nf_photo: '',
+    signed_nf_photo: [], // modificado para array para aceitar multiplos
     load_photos: [],
-    shipping_batch_id: '' // Novo campo para vincular envios conjuntos
+    shipping_batch_id: '' 
   });
 
   const handleImageCapture = (e, field) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
 
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error('A imagem deve ter no máximo 5MB. Ajuste a resolução da câmera.');
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const base64String = reader.result;
-      if (field === 'signed_nf_photo') {
-        setShippingData(prev => ({ ...prev, signed_nf_photo: base64String }));
-      } else if (field === 'load_photos') {
-        setShippingData(prev => ({ 
-          ...prev, 
-          load_photos: [...(prev.load_photos || []), base64String] 
-        }));
+    files.forEach(file => {
+      if (file.size > 20 * 1024 * 1024) {
+        toast.error(`A imagem ${file.name} dev ter no máximo 20MB. Ajuste a resolução.`);
+        return;
       }
-    };
-    reader.readAsDataURL(file);
+
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64String = reader.result;
+        if (field === 'signed_nf_photo') {
+          setShippingData(prev => ({ 
+            ...prev, 
+            signed_nf_photo: [...(prev.signed_nf_photo || []), base64String] 
+          }));
+        } else if (field === 'load_photos') {
+          setShippingData(prev => ({ 
+            ...prev, 
+            load_photos: [...(prev.load_photos || []), base64String] 
+          }));
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const removeSignedNfPhoto = (index) => {
+    setShippingData(prev => {
+      const newPhotos = [...(prev.signed_nf_photo || [])];
+      newPhotos.splice(index, 1);
+      return { ...prev, signed_nf_photo: newPhotos };
+    });
   };
 
   const removeLoadPhoto = (index) => {
@@ -148,6 +161,18 @@ export default function Shipping() {
     });
   }, [rawItems, products]);
 
+  const parsePhotos = (photoData) => {
+    if (!photoData) return [];
+    if (typeof photoData === 'string') {
+      if (photoData.startsWith('[')) {
+        try { return JSON.parse(photoData); } catch { return [photoData]; }
+      }
+      return [photoData];
+    }
+    if (Array.isArray(photoData)) return photoData;
+    return [];
+  };
+
   const shipOrderMutation = useMutation({
     mutationFn: async (orderOrIds) => {
       const ids = Array.isArray(orderOrIds) ? orderOrIds : [orderOrIds.id];
@@ -216,6 +241,10 @@ export default function Shipping() {
         }
 
         // 5. Atualizar pedido
+        const finalSignedNfPhoto = shippingData.signed_nf_photo?.length > 0 
+          ? JSON.stringify(shippingData.signed_nf_photo) 
+          : order.signed_nf_photo;
+
         await base44.entities.SalesOrder.update(order.id, { 
           status: 'EXPEDIDO',
           nf_number: ids.length === 1 ? (shippingData.nf_number || order.nf_number) : order.nf_number,
@@ -225,7 +254,7 @@ export default function Shipping() {
           driver_name: shippingData.driver_name || order.driver_name,
           driver_cpf: shippingData.driver_cpf || order.driver_cpf,
           shipping_notes: shippingData.shipping_notes || order.shipping_notes,
-          signed_nf_photo: shippingData.signed_nf_photo || order.signed_nf_photo,
+          signed_nf_photo: finalSignedNfPhoto,
           load_photos: shippingData.load_photos?.length > 0 ? shippingData.load_photos : order.load_photos,
           shipping_batch_id: shippingData.shipping_batch_id || order.shipping_batch_id
         });
@@ -243,18 +272,28 @@ export default function Shipping() {
   });
 
   const updateShippingInfoMutation = useMutation({
-    mutationFn: async (order) => {
-      await base44.entities.SalesOrder.update(order.id, {
-        nf_number: shippingData.nf_number || order.nf_number,
-        carrier: shippingData.carrier || order.carrier,
-        weight: shippingData.weight || order.weight,
-        volume: shippingData.volume || order.volume,
-        driver_name: shippingData.driver_name || order.driver_name,
-        driver_cpf: shippingData.driver_cpf || order.driver_cpf,
-        shipping_notes: shippingData.shipping_notes || order.shipping_notes,
-        signed_nf_photo: shippingData.signed_nf_photo || order.signed_nf_photo,
-        load_photos: shippingData.load_photos?.length > 0 ? shippingData.load_photos : order.load_photos
-      });
+    mutationFn: async (orderOrIds) => {
+      const ids = Array.isArray(orderOrIds) ? orderOrIds : [orderOrIds.id];
+      const ordersToUpdate = orders.filter(o => ids.includes(o.id));
+
+      const finalSignedNfPhoto = shippingData.signed_nf_photo?.length > 0 
+        ? JSON.stringify(shippingData.signed_nf_photo) 
+        : undefined;
+
+      for (const order of ordersToUpdate) {
+        await base44.entities.SalesOrder.update(order.id, {
+          nf_number: ids.length === 1 ? (shippingData.nf_number || order.nf_number) : order.nf_number,
+          carrier: shippingData.carrier || order.carrier,
+          weight: ids.length === 1 ? (shippingData.weight || order.weight) : order.weight,
+          volume: ids.length === 1 ? (shippingData.volume || order.volume) : order.volume,
+          driver_name: shippingData.driver_name || order.driver_name,
+          driver_cpf: shippingData.driver_cpf || order.driver_cpf,
+          shipping_notes: shippingData.shipping_notes || order.shipping_notes,
+          signed_nf_photo: finalSignedNfPhoto || order.signed_nf_photo,
+          load_photos: shippingData.load_photos?.length > 0 ? shippingData.load_photos : order.load_photos,
+          shipping_batch_id: shippingData.shipping_batch_id || order.shipping_batch_id
+        });
+      }
     },
     onSuccess: () => {
        queryClient.invalidateQueries({ queryKey: ['orders-for-shipping', companyId] });
@@ -270,8 +309,9 @@ export default function Shipping() {
            driver_name: shippingData.driver_name || prev.driver_name,
            driver_cpf: shippingData.driver_cpf || prev.driver_cpf,
            shipping_notes: shippingData.shipping_notes || prev.shipping_notes,
-           signed_nf_photo: shippingData.signed_nf_photo || prev.signed_nf_photo,
-           load_photos: shippingData.load_photos?.length > 0 ? shippingData.load_photos : prev.load_photos
+           signed_nf_photo: shippingData.signed_nf_photo?.length > 0 ? JSON.stringify(shippingData.signed_nf_photo) : prev.signed_nf_photo,
+           load_photos: shippingData.load_photos?.length > 0 ? shippingData.load_photos : prev.load_photos,
+           shipping_batch_id: shippingData.shipping_batch_id || prev.shipping_batch_id
          };
        });
        toast.success('Dados de expedição atualizados');
@@ -361,7 +401,7 @@ export default function Shipping() {
       driver_name: order.driver_name || '',
       driver_cpf: order.driver_cpf || '',
       shipping_notes: order.shipping_notes || '',
-      signed_nf_photo: order.signed_nf_photo || '',
+      signed_nf_photo: parsePhotos(order.signed_nf_photo),
       load_photos: Array.isArray(order.load_photos) ? order.load_photos : [],
       shipping_batch_id: order.shipping_batch_id || ''
     });
@@ -638,23 +678,34 @@ export default function Shipping() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
                   {/* Foto NF Assinada */}
                   <div className="border border-slate-200 rounded-lg p-4 bg-slate-50">
-                     <p className="text-sm font-bold text-slate-800 mb-2">Canhoto / NF Assinada</p>
-                     {shippingData.signed_nf_photo ? (
-                       <div className="relative aspect-video bg-black/5 rounded-md overflow-hidden mb-3 group">
-                         <img src={shippingData.signed_nf_photo} className="w-full h-full object-cover" alt="NF Assinada" />
-                         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                            <Button size="icon" variant="destructive" onClick={() => setShippingData({...shippingData, signed_nf_photo: ''})}>
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                         </div>
+                     <div className="flex justify-between items-center mb-2">
+                       <p className="text-sm font-bold text-slate-800">Canhoto / NF Assinada</p>
+                       <span className="text-xs font-medium text-slate-500 bg-slate-200 px-2 py-0.5 rounded-full">
+                         {shippingData.signed_nf_photo?.length || 0} fotos
+                       </span>
+                     </div>
+                     
+                     {shippingData.signed_nf_photo?.length > 0 && (
+                       <div className="grid grid-cols-2 gap-2 mb-3">
+                         {shippingData.signed_nf_photo.map((photo, i) => (
+                           <div key={i} className="relative aspect-video bg-black/5 rounded-md overflow-hidden group">
+                             <img src={photo} className="w-full h-full object-cover" alt={`NF Assinada ${i+1}`} />
+                             <button
+                               onClick={() => removeSignedNfPhoto(i)} 
+                               className="absolute top-1 right-1 bg-red-600 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                             >
+                                <X className="h-3 w-3" />
+                             </button>
+                           </div>
+                         ))}
                        </div>
-                     ) : (
-                       <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-slate-300 border-dashed rounded-lg cursor-pointer bg-white hover:bg-slate-50 transition-colors">
-                          <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                              <Camera className="w-8 h-8 text-slate-400 mb-2" />
-                              <p className="text-sm text-slate-500 font-medium">Tirar foto</p>
-                          </div>
-                          <input type="file" className="hidden" accept="image/*" capture="environment" onChange={(e) => handleImageCapture(e, 'signed_nf_photo')} />
+                     )}
+
+                     {!(selectedOrder?.status === 'EXPEDIDO' && !editingOrder) && (
+                       <label className="flex items-center justify-center w-full h-10 border border-slate-300 rounded-lg cursor-pointer bg-white hover:bg-slate-50 transition-colors text-slate-600 font-medium text-sm gap-2 mt-4">
+                          <Upload className="w-4 h-4" />
+                          Adicionar Foto
+                          <input type="file" className="hidden" accept="image/*" multiple onChange={(e) => handleImageCapture(e, 'signed_nf_photo')} />
                        </label>
                      )}
                   </div>
@@ -688,7 +739,7 @@ export default function Shipping() {
                         <label className="flex items-center justify-center w-full h-10 border border-slate-300 rounded-lg cursor-pointer bg-white hover:bg-slate-50 transition-colors text-slate-600 font-medium text-sm gap-2 mt-4">
                            <Upload className="w-4 h-4" />
                            Adicionar Foto
-                           <input type="file" className="hidden" accept="image/*" capture="environment" onChange={(e) => handleImageCapture(e, 'load_photos')} />
+                           <input type="file" className="hidden" accept="image/*" multiple onChange={(e) => handleImageCapture(e, 'load_photos')} />
                         </label>
                       )}
                   </div>
@@ -697,8 +748,8 @@ export default function Shipping() {
                 <div className="flex gap-2">
                     {!(selectedOrder?.status === 'EXPEDIDO' && !editingOrder) && (
                       <Button
-                        onClick={() => updateShippingInfoMutation.mutate(selectedOrder)}
-                        disabled={updateShippingInfoMutation.isPending || selectedIds.length > 1}
+                        onClick={() => updateShippingInfoMutation.mutate(selectedIds)}
+                        disabled={updateShippingInfoMutation.isPending}
                         className="bg-indigo-600 hover:bg-indigo-700"
                       >
                         {selectedOrder?.status === 'EXPEDIDO' ? 'Salvar Edição' : 'Atualizar Dados'}
