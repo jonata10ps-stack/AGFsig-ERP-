@@ -17,12 +17,19 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { executeInventoryTransaction } from '@/utils/inventoryTransactionUtils';
 import { PackageOpen, MapPin, Truck } from 'lucide-react';
 
-function ItemRow({ item, selectedOrder, companyId, onSeparate, separationMoves, onUndo }) {
+function ItemRow({ item, selectedOrder, companyId, onSeparate, separationMoves, onUndo, products }) {
   const remaining = item.qty - (item.qty_separated || 0);
   const isComplete = remaining <= 0;
   
-  // Filtrar moves deste item
-  const itemMoves = (separationMoves || []).filter(m => m.product_id === item.product_id && m.type === 'SEPARACAO');
+  // Filtrar moves deste item (suporta duplicatas por SKU)
+  const sameSkuIds = (products || [])
+    .filter(p => p.sku === item.product_sku)
+    .map(p => p.id);
+  
+  const itemMoves = (separationMoves || []).filter(m => 
+    (m.product_id === item.product_id || sameSkuIds.includes(m.product_id)) && 
+    m.type === 'SEPARACAO'
+  );
 
   return (
     <div className={`p-4 rounded-lg border mb-3 ${isComplete ? 'bg-emerald-50 border-emerald-200 shadow-sm' : 'bg-white border-slate-200'}`}>
@@ -317,8 +324,13 @@ export default function Separation() {
        // 2. Apagar a move original de SEPARACAO para limpar a UI
        await base44.entities.InventoryMove.delete(move.id);
 
-       // 2. Atualizar item do pedido
-       const item = items.find(i => i.product_id === move.product_id);
+       // 2. Atualizar item do pedido (suporta duplicatas por SKU)
+       const moveProduct = products.find(p => p.id === move.product_id);
+       const item = items.find(i => 
+         i.product_id === move.product_id || 
+         (moveProduct && i.product_sku === moveProduct.sku)
+       );
+       
        if (item) {
           const newTotal = (item.qty_separated || 0) - (move.qty || 0);
           await base44.entities.SalesOrderItem.update(item.id, { qty_separated: Math.max(0, newTotal) });
@@ -675,6 +687,7 @@ export default function Separation() {
                     onSeparate={(qty, component) => handleSeparateRequest(item, qty, component)}
                     separationMoves={separationMoves}
                     onUndo={(move) => undoSeparationMutation.mutate(move)}
+                    products={products}
                   />
                 ))}
               </div>

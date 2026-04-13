@@ -216,7 +216,11 @@ export default function Shipping() {
             let remainingToShip = itemQty - (totalSaida - totalEstorno);
             if (remainingToShip <= 0.0001) continue;
 
-            const itemSeparations = separationMoves.filter(m => m.product_id === item.product_id);
+            const sameSkuProdIds = productsList
+              .filter(p => p.sku === item.product_sku)
+              .map(p => p.id);
+            
+            const itemSeparations = separationMoves.filter(m => sameSkuProdIds.includes(m.product_id));
             for (const sep of itemSeparations) {
                if (remainingToShip <= 0) break;
                const qtyToDeduct = Math.min(parseFloat(sep.qty), remainingToShip);
