@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import moment from 'moment';
 import {
   Dialog,
@@ -53,7 +54,9 @@ export default function UserManagement() {
   const [selectedCompanies, setSelectedCompanies] = useState([]);
   const [selectedIsTechnician, setSelectedIsTechnician] = useState(false);
   const [inviteDialog, setInviteDialog] = useState(false);
-  const [inviteForm, setInviteForm] = useState({ email: '', full_name: '', modules: [], is_seller: false, is_technician: false, company_ids: [] });
+  const [inviteForm, setInviteForm] = useState({ email: '', full_name: '', modules: [], is_seller: false, is_technician: false, company_ids: [], seller_id: '' });
+  const [selectedIsSeller, setSelectedIsSeller] = useState(false);
+  const [selectedSellerId, setSelectedSellerId] = useState('');
   const [resetPasswordDialog, setResetPasswordDialog] = useState(null);
   const [newPassword, setNewPassword] = useState('');
 
@@ -75,8 +78,13 @@ export default function UserManagement() {
     queryFn: () => base44.entities.Company.filter({ active: true }),
   });
 
+  const { data: sellers = [] } = useQuery({
+    queryKey: ['all-sellers'],
+    queryFn: () => base44.entities.Seller.filter({ active: true }),
+  });
+
   const updateUserMutation = useMutation({
-    mutationFn: async ({ userId, status, modules, company_ids, is_technician }) => {
+    mutationFn: async ({ userId, status, modules, company_ids, is_technician, is_seller, seller_id }) => {
       const updateData = {
         account_status: status,
         approved_at: status === 'APROVADO' ? new Date().toISOString() : null,
@@ -90,6 +98,12 @@ export default function UserManagement() {
       }
       if (is_technician !== undefined) {
         updateData.is_technician = is_technician;
+      }
+      if (is_seller !== undefined) {
+        updateData.is_seller = is_seller;
+      }
+      if (seller_id !== undefined) {
+        updateData.seller_id = seller_id;
       }
       
       const updatedUser = await base44.entities.User.update(userId, updateData);
@@ -185,6 +199,8 @@ export default function UserManagement() {
     setSelectedModules(parseArr(user.allowed_modules));
     setSelectedCompanies(parseArr(user.company_ids));
     setSelectedIsTechnician(user.is_technician === true);
+    setSelectedIsSeller(user.is_seller === true);
+    setSelectedSellerId(user.seller_id || '');
   };
 
   const savePermissions = () => {
@@ -196,6 +212,8 @@ export default function UserManagement() {
       modules: selectedModules,
       company_ids: selectedCompanies,
       is_technician: selectedIsTechnician,
+      is_seller: selectedIsSeller,
+      seller_id: selectedSellerId,
     });
   };
 
@@ -307,9 +325,13 @@ export default function UserManagement() {
 
   const inviteMutation = useMutation({
     mutationFn: async () => {
-      // 1. O envio automático de e-mail foi removido por segurança (exigia Service Role Key).
-      // Agora o Admin pré-autoriza o e-mail no banco e o usuário se cadastra no site.
       console.log('Iniciando pré-autorização para:', inviteForm.email);
+
+      // 1. Verifica se já existe um usuário com esse email para evitar duplicidade
+      const existingUsers = await base44.entities.User.filter({ email: inviteForm.email });
+      if (existingUsers && existingUsers.length > 0) {
+        throw new Error('Um usuário com este e-mail já está cadastrado no sistema.');
+      }
 
       // 2. Cria o registro na tabela User com as permissões definidas
       await base44.entities.User.create({
@@ -319,19 +341,23 @@ export default function UserManagement() {
         company_ids: JSON.stringify(inviteForm.company_ids),
         is_seller: inviteForm.is_seller,
         is_technician: inviteForm.is_technician,
+        seller_id: inviteForm.seller_id,
         account_status: 'PENDENTE',
         role: 'user',
         active: true,
       });
 
-      // 3. Se for vendedor, cria o registro de vendedor também
-      if (inviteForm.is_seller) {
-        await base44.entities.Seller.create({
-          code: inviteForm.email.split('@')[0].toUpperCase(),
-          name: inviteForm.full_name,
-          email: inviteForm.email,
-          active: true,
-        });
+      // 3. Se for vendedor e não tiver um seller_id vinculado, cria o registro de vendedor apenas se não existir outro com mesmo email
+      if (inviteForm.is_seller && !inviteForm.seller_id) {
+        const existing = await base44.entities.Seller.filter({ email: inviteForm.email });
+        if (existing.length === 0) {
+          await base44.entities.Seller.create({
+            code: inviteForm.email.split('@')[0].toUpperCase(),
+            name: inviteForm.full_name,
+            email: inviteForm.email,
+            active: true,
+          });
+        }
       }
       
       // 4. Se for técnico, cria o registro de técnico também
@@ -353,7 +379,7 @@ export default function UserManagement() {
       queryClient.invalidateQueries({ queryKey: ['users-management'] });
       toast.success(`✉️ Usuário ${inviteForm.email} pré-autorizado! Peça para ele acessar o sistema e "Criar Conta" para ativar o acesso.`);
       setInviteDialog(false);
-      setInviteForm({ email: '', full_name: '', modules: [], is_seller: false, is_technician: false, company_ids: [] });
+      setInviteForm({ email: '', full_name: '', modules: [], is_seller: false, is_technician: false, company_ids: [], seller_id: '' });
     },
     onError: (error) => {
       toast.error('Erro ao enviar convite: ' + error.message);
@@ -407,6 +433,25 @@ export default function UserManagement() {
       return <Badge className="bg-red-100 text-red-700"><XCircle className="h-3 w-3 mr-1" />Rejeitado</Badge>;
     }
   };
+
+  const uniqueSellersList = [];
+  const seenEmails = new Set();
+  const seenNames = new Set();
+
+  (sellers || []).forEach(s => {
+    const email = (s.email || '').toLowerCase().trim();
+    const name = (s.name || '').toLowerCase().trim();
+    
+    // Só ignora se for um email válido que já vimos, ou nome válido que já vimos
+    if (email && seenEmails.has(email)) return;
+    if (name && seenNames.has(name)) return;
+    
+    if (email) seenEmails.add(email);
+    if (name) seenNames.add(name);
+    
+    uniqueSellersList.push(s);
+  });
+  const uniqueSellers = uniqueSellersList;
 
   const getRoleBadge = (role) => {
     if (role === 'admin') {
@@ -677,15 +722,42 @@ export default function UserManagement() {
               </div>
             </div>
 
-            <div className="flex items-center space-x-3 p-3 rounded-lg border border-slate-200 hover:bg-slate-50">
-              <Checkbox
-                id="invite-is_seller"
-                checked={inviteForm.is_seller}
-                onCheckedChange={(checked) => setInviteForm({...inviteForm, is_seller: checked})}
-              />
-              <label htmlFor="invite-is_seller" className="text-sm font-medium text-slate-900 cursor-pointer flex-1">
-                É Vendedor?
-              </label>
+            <div className="space-y-4">
+              <div className="flex items-center space-x-3 p-3 rounded-lg border border-slate-200 hover:bg-slate-50">
+                <Checkbox
+                  id="invite-is_seller"
+                  checked={inviteForm.is_seller}
+                  onCheckedChange={(checked) => setInviteForm({...inviteForm, is_seller: checked})}
+                />
+                <label htmlFor="invite-is_seller" className="text-sm font-medium text-slate-900 cursor-pointer flex-1">
+                  É Vendedor?
+                </label>
+              </div>
+
+              {inviteForm.is_seller && (
+                <div className="pl-8 space-y-2">
+                  <label className="text-sm font-medium text-slate-700">Vincular a Cadastro Existente (Opcional)</label>
+                  <Select
+                    value={inviteForm.seller_id || "new"}
+                    onValueChange={(value) => setInviteForm({...inviteForm, seller_id: value === "new" ? "" : value})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione um vendedor ou 'Criar Novo'" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="new">-- Criar Novo Cadastro de Vendedor --</SelectItem>
+                      {uniqueSellers.map((seller) => (
+                        <SelectItem key={seller.id} value={seller.id}>
+                          {seller.name} {seller.email ? `(${seller.email})` : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[10px] text-slate-500 italic">
+                    Se não selecionar um vendedor, um novo cadastro será criado automaticamente com os dados do convite.
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="flex items-center space-x-3 p-3 rounded-lg border border-slate-200 hover:bg-slate-50">
@@ -794,6 +866,40 @@ export default function UserManagement() {
                   </div>
                 ))}
               </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="flex items-center space-x-3 p-3 rounded-lg border border-slate-200 hover:bg-slate-50">
+                <Checkbox
+                  id="perm-is_seller"
+                  checked={selectedIsSeller}
+                  onCheckedChange={(checked) => setSelectedIsSeller(checked)}
+                />
+                <label htmlFor="perm-is_seller" className="text-sm font-medium text-slate-900 cursor-pointer flex-1">
+                  É Vendedor?
+                </label>
+              </div>
+
+              {selectedIsSeller && (
+                <div className="pl-8 space-y-2">
+                  <label className="text-sm font-medium text-slate-700">Vendedor Vinculado</label>
+                  <Select
+                    value={selectedSellerId || ""}
+                    onValueChange={(value) => setSelectedSellerId(value)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione o vendedor correspondente" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {uniqueSellers.map((seller) => (
+                        <SelectItem key={seller.id} value={seller.id}>
+                          {seller.name} {seller.email ? `(${seller.email})` : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
 
             <div className="flex items-center space-x-3 p-3 rounded-lg border border-slate-200 hover:bg-slate-50">

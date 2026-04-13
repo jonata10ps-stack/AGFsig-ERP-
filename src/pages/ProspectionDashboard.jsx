@@ -415,11 +415,23 @@ export default function ProspectionDashboard() {
 
   if (!stats || !kmReport || !quotesStats) return null;
 
-  // Get years from visits
-  const years = [...new Set(filteredData.visits?.map(v => {
-    if (!v.visit_date) return null;
-    return new Date(`${v.visit_date}T12:00:00`).getFullYear();
-  }).filter(Boolean))].sort((a, b) => b - a);
+  // Get years from all data items and ensure current year is an option
+  const currentYear = new Date().getFullYear();
+  const allYearsSet = new Set([currentYear]);
+  
+  filteredData.visits?.forEach(v => {
+    if (v.visit_date) allYearsSet.add(new Date(`${v.visit_date}T12:00:00`).getFullYear());
+  });
+  
+  filteredData.quotes?.forEach(q => {
+    if (q.created_date) allYearsSet.add(new Date(q.created_date).getFullYear());
+  });
+
+  filteredData.salesOrders?.forEach(o => {
+    if (o.created_date) allYearsSet.add(new Date(o.created_date).getFullYear());
+  });
+
+  const years = [...allYearsSet].sort((a, b) => b - a);
 
   const sellersList = authorizedSellers;
 

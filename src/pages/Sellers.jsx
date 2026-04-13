@@ -50,7 +50,6 @@ export default function Sellers() {
       resetForm();
     },
   });
-
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => base44.entities.Seller.update(id, data),
     onSuccess: () => {
@@ -58,6 +57,17 @@ export default function Sellers() {
       toast.success('Vendedor atualizado');
       resetForm();
     },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) => base44.entities.Seller.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sellers', companyId] });
+      toast.success('Vendedor excluído com sucesso');
+    },
+    onError: (error) => {
+      toast.error('Erro ao excluir vendedor: ' + error.message);
+    }
   });
 
   const handleSubmit = (e) => {
@@ -235,9 +245,21 @@ export default function Sellers() {
                       {seller.active ? 'Ativo' : 'Inativo'}
                     </Badge>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="flex gap-1 justify-end">
                     <Button variant="ghost" size="icon" onClick={() => handleEdit(seller)}>
-                      <Edit2 className="h-4 w-4" />
+                      <Edit2 className="h-4 w-4 text-slate-600" />
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      onClick={() => {
+                        if (window.confirm(`Deseja realmente excluir o vendedor ${seller.name}?`)) {
+                          deleteMutation.mutate(seller.id);
+                        }
+                      }}
+                      className="text-red-500 hover:text-red-700"
+                    >
+                      <Trash2 className="h-4 w-4" />
                     </Button>
                   </TableCell>
                 </TableRow>
@@ -300,7 +322,11 @@ export default function Sellers() {
             <div className="space-y-2">
               <Label>Gestores</Label>
               <div className="border rounded-lg p-3 max-h-48 overflow-y-auto space-y-2">
-                {users.map((user) => (
+                {Array.from(new Map(
+                  users
+                    .filter(u => u.active !== false && u.account_status === 'APROVADO')
+                    .map(u => [u.email ? u.email.toLowerCase() : (u.full_name || '').toLowerCase(), u])
+                ).values()).map((user) => (
                   <div key={user.id} className="flex items-center gap-2">
                     <input
                       type="checkbox"
