@@ -300,7 +300,17 @@ export default function ProspectionDashboard() {
     }, {});
 
     // Por mês (Evolução - Ignora o filtro de mês para mostrar a tendência)
-    const byMonth = [...filteredData.quotes, ...filteredData.salesOrders]
+    const monthsKeys = [];
+    for (let i = 1; i <= 12; i++) {
+      monthsKeys.push(`${selectedYear}-${String(i).padStart(2, '0')}`);
+    }
+
+    const byMonth = {};
+    monthsKeys.forEach(key => {
+      byMonth[key] = { count: 0, value: 0, converted: 0 };
+    });
+
+    [...filteredData.quotes, ...filteredData.salesOrders]
       .filter(item => {
         if (!item.created_date) return false;
         const date = new Date(item.created_date);
@@ -309,19 +319,17 @@ export default function ProspectionDashboard() {
         const matchSeller = selectedSeller === 'all' || item.seller_id === selectedSeller;
         return matchYear && matchSeller;
       })
-      .reduce((acc, d) => {
+      .forEach(d => {
         const date = new Date(d.created_date);
         const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-        if (!acc[monthKey]) {
-          acc[monthKey] = { count: 0, value: 0, converted: 0 };
+        if (byMonth[monthKey]) {
+          byMonth[monthKey].count += 1;
+          byMonth[monthKey].value += (d.total_amount || 0);
+          if (d.status === 'CONVERTIDO' || d.id.startsWith('so_')) {
+            byMonth[monthKey].converted += 1;
+          }
         }
-        acc[monthKey].count += 1;
-        acc[monthKey].value += (d.total_amount || 0);
-        if (d.status === 'CONVERTIDO' || d.id.startsWith('so_')) { // Consider matching conversion logic
-          acc[monthKey].converted += 1;
-        }
-        return acc;
-      }, {});
+      });
 
     // Por status
     const byStatus = allDeals.reduce((acc, d) => {
