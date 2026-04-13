@@ -517,9 +517,9 @@ export default function ProspectionDashboard() {
     .map(([month, data]) => ({ 
       month, 
       count: data.count,
-      value: data.value / 1000, // em milhares
+      value: Number((data.value / 1000).toFixed(2)), // em milhares
       converted: data.converted,
-      conversionRate: data.count > 0 ? (data.converted / data.count) * 100 : 0
+      conversionRate: data.count > 0 ? Number(((data.converted / data.count) * 100).toFixed(2)) : 0
     }))
     .sort((a, b) => a.month.localeCompare(b.month))
     .slice(-12);
@@ -670,7 +670,7 @@ export default function ProspectionDashboard() {
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Pie>
-                <Tooltip />
+                <Tooltip formatter={(value) => typeof value === 'number' ? value.toFixed(2) : value} />
               </PieChart>
             </ResponsiveContainer>
           </CardContent>
@@ -687,10 +687,10 @@ export default function ProspectionDashboard() {
                 <XAxis dataKey="month" />
                 <YAxis yAxisId="left" />
                 <YAxis yAxisId="right" orientation="right" />
-                <Tooltip />
+                <Tooltip formatter={(val) => typeof val === 'number' ? val.toFixed(2) : val} />
                 <Legend />
                 <Line yAxisId="left" type="monotone" dataKey="value" name="Valor (R$ mil)" stroke="#10B981" strokeWidth={2} />
-                <Line yAxisId="right" type="monotone" dataKey="conversionRate" name="Conv. (%)" stroke="#F59E0B" strokeWidth={2} />
+                <Line yAxisId="right" type="monotone" dataKey="conversionRate" name="Conv. (%)" stroke="#F59E0B" strokeWidth={2} dot={{ r: 4 }} />
               </LineChart>
             </ResponsiveContainer>
           </CardContent>
@@ -728,7 +728,7 @@ export default function ProspectionDashboard() {
                     <TableCell className="text-right">{seller.count}</TableCell>
                     <TableCell className="text-right font-medium text-emerald-600">{formatCurrency(seller.value)}</TableCell>
                     <TableCell className="text-right">{seller.converted}</TableCell>
-                    <TableCell className="text-right font-medium">{seller.conversionRate.toFixed(1)}%</TableCell>
+                    <TableCell className="text-right font-medium">{Number(seller.conversionRate).toFixed(2)}%</TableCell>
                     <TableCell className="text-right">{formatCurrency(seller.value / seller.count)}</TableCell>
                   </TableRow>
                 ))
