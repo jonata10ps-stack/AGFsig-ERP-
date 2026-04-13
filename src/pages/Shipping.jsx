@@ -240,24 +240,39 @@ export default function Shipping() {
             const itemQty = parseFloat(item.qty) || 0;
             if (!item.product_id || itemQty <= 0) continue;
 
-            const totalSaida = existingSaidas.filter(s => s.product_id === item.product_id).reduce((acc, curr) => acc + (parseFloat(curr.qty) || 0), 0);
-            const totalEstorno = existingEstornos.filter(s => s.product_id === item.product_id).reduce((acc, curr) => acc + (parseFloat(curr.qty) || 0), 0);
+            // Match resiliente: ID, SKU ou Nome (ignora maiúsculas e espaços)
+            const itemSku = (item.product_sku || '').trim().toUpperCase();
+            const itemName = (item.product_name || '').trim().toUpperCase();
+            
+            const sameProductIds = productsList
+              .filter(p => {
+                const pSku = (p.sku || '').trim().toUpperCase();
+                const pName = (p.name || '').trim().toUpperCase();
+                return p.id === item.product_id || 
+                       (itemSku && pSku === itemSku) || 
+                       (itemName && pName === itemName);
+              })
+              .map(p => p.id);
+
+            const totalSaida = existingSaidas
+              .filter(s => sameProductIds.includes(s.product_id))
+              .reduce((acc, curr) => acc + (parseFloat(curr.qty) || 0), 0);
+            
+            const totalEstorno = existingEstornos
+              .filter(s => sameProductIds.includes(s.product_id))
+              .reduce((acc, curr) => acc + (parseFloat(curr.qty) || 0), 0);
+            
             let remainingToShip = itemQty - (totalSaida - totalEstorno);
             if (remainingToShip <= 0.0001) continue;
 
-            const itemSku = (item.product_sku || '').trim().toUpperCase();
-            const sameSkuProdIds = productsList
-              .filter(p => (p.sku || '').trim().toUpperCase() === itemSku)
-              .map(p => p.id);
-            
-            const itemSeparations = separationMoves.filter(m => sameSkuProdIds.includes(m.product_id));
+            const itemSeparations = separationMoves.filter(m => sameProductIds.includes(m.product_id));
             for (const sep of itemSeparations) {
                if (remainingToShip <= 0) break;
                const qtyToDeduct = Math.min(parseFloat(sep.qty), remainingToShip);
                if (qtyToDeduct > 0) {
                   await executeInventoryTransaction({
                     type: 'SAIDA',
-                    product_id: item.product_id,
+                    product_id: sep.product_id, // Usa o ID onde a separação Realmente está
                     qty: qtyToDeduct,
                     from_warehouse_id: sep.to_warehouse_id,
                     from_location_id: sep.to_location_id,
@@ -268,7 +283,7 @@ export default function Shipping() {
                }
             }
             if (remainingToShip > 0) {
-               throw new Error(`O item ${item.product_name || item.product_sku} (Pedido ${order.order_number}) não possui separação suficiente.`);
+               throw new Error(`O item ${item.product_name || item.product_sku} (Pedido ${order.order_number}) não possui separação suficiente (Faltam ${remainingToShip.toFixed(2)} un.).`);
             }
             await base44.entities.SalesOrderItem.update(item.id, { qty_separated: itemQty });
           }
