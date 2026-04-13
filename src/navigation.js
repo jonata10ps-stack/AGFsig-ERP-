@@ -28,7 +28,7 @@ export const navigation = [
   { name: 'Dashboard Fábrica', icon: Factory, page: 'FactoryDashboard', moduleId: 'DashboardFabrica' },
   { name: 'Gerador de Etiquetas', icon: Package, page: 'LabelGenerator', moduleId: 'Etiquetas' },
   { 
-    name: 'Minha Agenda', 
+    name: 'Comercial', 
     icon: Calendar,
     moduleId: 'Agenda',
     children: [
