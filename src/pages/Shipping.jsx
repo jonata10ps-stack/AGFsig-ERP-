@@ -266,24 +266,51 @@ export default function Shipping() {
             if (remainingToShip <= 0.0001) continue;
 
             const itemSeparations = separationMoves.filter(m => sameProductIds.includes(m.product_id));
-            for (const sep of itemSeparations) {
-               if (remainingToShip <= 0) break;
-               const qtyToDeduct = Math.min(parseFloat(sep.qty), remainingToShip);
-               if (qtyToDeduct > 0) {
+            
+            // SE NÃO ENCONTROU MOVES, MAS O CONTADOR DIZ QUE ESTÁ SEPARADO (Modo Força Bruta)
+            if (itemSeparations.length === 0 && (parseFloat(item.qty_separated) || 0) >= itemQty) {
+               console.log(`[Bypass] Forçando expedição do item ${itemSku} sem moves de separação.`);
+               
+               // Buscar qualquer saldo disponível para esse SKU para dar a baixa
+               const balances = await base44.entities.StockBalance.filter({ 
+                 company_id: companyId, 
+                 product_id: sameProductIds 
+               });
+               const validBalance = balances.find(b => (parseFloat(b.qty_available) || 0) > 0) || balances[0];
+               
+               if (validBalance) {
                   await executeInventoryTransaction({
                     type: 'SAIDA',
-                    product_id: sep.product_id, // Usa o ID onde a separação Realmente está
-                    qty: qtyToDeduct,
-                    from_warehouse_id: sep.to_warehouse_id,
-                    from_location_id: sep.to_location_id,
+                    product_id: validBalance.product_id,
+                    qty: remainingToShip,
+                    from_warehouse_id: validBalance.warehouse_id,
+                    from_location_id: validBalance.location_id,
                     related_id: order.id,
-                    reason: `Expedição ${ids.length > 1 ? 'coletiva ' : ''}(Picking) do pedido ${order.order_number || order.id}`,
+                    reason: `Expedição FORÇADA do pedido ${order.order_number || order.id} (Bypass de separação)`,
                   }, order.company_id);
-                 remainingToShip -= qtyToDeduct;
+                  remainingToShip = 0;
+               }
+            } else {
+               for (const sep of itemSeparations) {
+                  if (remainingToShip <= 0) break;
+                  const qtyToDeduct = Math.min(parseFloat(sep.qty), remainingToShip);
+                  if (qtyToDeduct > 0) {
+                     await executeInventoryTransaction({
+                       type: 'SAIDA',
+                       product_id: sep.product_id, // Usa o ID onde a separação Realmente está
+                       qty: qtyToDeduct,
+                       from_warehouse_id: sep.to_warehouse_id,
+                       from_location_id: sep.to_location_id,
+                       related_id: order.id,
+                       reason: `Expedição ${ids.length > 1 ? 'coletiva ' : ''}(Picking) do pedido ${order.order_number || order.id}`,
+                     }, order.company_id);
+                    remainingToShip -= qtyToDeduct;
+                  }
                }
             }
+
             if (remainingToShip > 0) {
-               throw new Error(`O item ${item.product_name || item.product_sku} (Pedido ${order.order_number}) não possui separação suficiente (Faltam ${remainingToShip.toFixed(2)} un.).`);
+               throw new Error(`O item ${item.product_name || item.product_sku} (Pedido ${order.order_number}) não possui separação suficiente e não há saldo para baixa direta (Faltam ${remainingToShip.toFixed(2)} un.).`);
             }
             await base44.entities.SalesOrderItem.update(item.id, { qty_separated: itemQty });
           }
