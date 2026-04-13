@@ -19,6 +19,7 @@ import {
   CheckCircle2,
   AlertCircle,
   Calendar,
+  DollarSign,
   RotateCcw,
   Book,
   Cpu
@@ -28,13 +29,13 @@ export const navigation = [
   { name: 'Dashboard', icon: LayoutDashboard, page: 'Dashboard' },
   { name: 'Dashboard Fábrica', icon: Factory, page: 'FactoryDashboard', moduleId: 'DashboardFabrica' },
   { name: 'Gerador de Etiquetas', icon: Package, page: 'LabelGenerator', moduleId: 'Etiquetas' },
-  { name: 'TABELA [TESTE]', icon: FileText, page: 'PriceList' },
   { 
     name: 'Comercial', 
     icon: Calendar,
     moduleId: 'Agenda',
     children: [
       { name: 'Agenda de Visitas', icon: Calendar, page: 'SalesAppointments' },
+      { name: 'Tabela de Preços', icon: DollarSign, page: 'PriceList' },
       { name: 'Dashboard Prospecção', icon: BarChart3, page: 'ProspectionDashboard' },
       { name: 'Meus Números', icon: BarChart3, page: 'MyNumbersDashboard' },
       { name: 'Prospecção', icon: Users, page: 'ProspectionVisits' },

@@ -932,7 +932,7 @@ export default function Shipping() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>
-                Expedição [v2] {selectedOrder 
+                {selectedOrder 
                   ? `Etiquetas - ${selectedOrder.order_number || `#${selectedOrder.id.slice(0, 8)}`}`
                   : 'Selecione um pedido'
                 }
