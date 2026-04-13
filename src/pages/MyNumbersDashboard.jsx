@@ -66,12 +66,12 @@ export default function MyNumbersDashboard() {
     const currentMonthNum = String(new Date().getMonth() + 1).padStart(2, '0');
     
     // Anual 
-    let annualGoal = 0;
+    let annualGoal = performances.length > 0 ? Number(performances[0].annual_goal || 0) : 0;
     let annualRevenue = 0;
     let annualCost = 0;
 
     // Mes Atual
-    let currentMonthGoal = 0;
+    let currentMonthGoal = annualGoal / 12;
     let currentMonthRevenue = 0;
     let currentMonthCost = 0;
 
@@ -79,16 +79,14 @@ export default function MyNumbersDashboard() {
       const monthStr = String(idx + 1).padStart(2, '0');
       const data = performances.find(p => p.month === monthStr) || {};
       
-      const rev = data.actual_revenue || 0;
-      const goal = data.monthly_goal || 0;
-      const cost = data.monthly_cost || 0;
+      const rev = Number(data.actual_revenue) || 0;
+      const cost = Number(data.monthly_cost) || 0;
+      const goal = annualGoal / 12;
 
-      annualGoal += goal;
       annualRevenue += rev;
       annualCost += cost;
 
       if (monthStr === currentMonthNum) {
-        currentMonthGoal = goal;
         currentMonthRevenue = rev;
         currentMonthCost = cost;
       }

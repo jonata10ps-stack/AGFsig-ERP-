@@ -33,6 +33,7 @@ export default function SellerGoalsManagement() {
   const [selectedSeller, setSelectedSeller] = useState('');
   
   const [formData, setFormData] = useState({});
+  const [annualGoal, setAnnualGoal] = useState('');
 
   const { data: sellers = [] } = useQuery({
     queryKey: ['authorized-sellers-goals', companyId],
@@ -68,6 +69,11 @@ export default function SellerGoalsManagement() {
         };
       });
       setFormData(formatted);
+      if (performances.length > 0 && performances[0].annual_goal) {
+        setAnnualGoal(performances[0].annual_goal);
+      } else {
+        setAnnualGoal('');
+      }
     }
   }, [performances, selectedSeller, selectedYear]);
 
@@ -81,7 +87,7 @@ export default function SellerGoalsManagement() {
             seller_id: selectedSeller,
             year: selectedYear,
             month: monthValue,
-            monthly_goal: Number(data.monthly_goal) || 0,
+            annual_goal: Number(annualGoal) || 0,
             actual_revenue: Number(data.actual_revenue) || 0,
             monthly_cost: Number(data.monthly_cost) || 0
           });
@@ -91,7 +97,7 @@ export default function SellerGoalsManagement() {
             seller_id: selectedSeller,
             year: selectedYear,
             month: monthValue,
-            monthly_goal: Number(data.monthly_goal) || 0,
+            annual_goal: Number(annualGoal) || 0,
             actual_revenue: Number(data.actual_revenue) || 0,
             monthly_cost: Number(data.monthly_cost) || 0
           });
@@ -161,6 +167,22 @@ export default function SellerGoalsManagement() {
             </Select>
           </div>
 
+          {selectedSeller && !isLoading && (
+            <div className="mb-8 p-6 bg-slate-50 border border-slate-100 rounded-xl space-y-2">
+              <label className="text-sm font-semibold text-slate-700">Meta de Faturamento Anual (Calculada igualmente para todos os meses)</label>
+              <div className="flex items-center gap-4">
+                <Input 
+                  type="number" 
+                  value={annualGoal} 
+                  onChange={(e) => setAnnualGoal(e.target.value)}
+                  placeholder="Ex: 1000000"
+                  className="w-48 text-lg font-bold text-indigo-700"
+                />
+                <span className="text-xs text-slate-500 font-medium">Meta mensal projetada: {annualGoal ? `R$ ${(Number(annualGoal)/12).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : 'R$ 0,00'}</span>
+              </div>
+            </div>
+          )}
+
           {!selectedSeller ? (
             <div className="text-center py-10 text-slate-500">
               Selecione um vendedor para alimentar os dados.
@@ -172,7 +194,6 @@ export default function SellerGoalsManagement() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Mês</TableHead>
-                  <TableHead>Meta Faturamento (R$)</TableHead>
                   <TableHead>Faturamento Realizado (R$)</TableHead>
                   <TableHead>Custo Mensal (R$)</TableHead>
                 </TableRow>
@@ -181,15 +202,6 @@ export default function SellerGoalsManagement() {
                 {MONTHS.map((m) => (
                   <TableRow key={m.value}>
                     <TableCell className="font-medium">{m.label}</TableCell>
-                    <TableCell>
-                      <Input 
-                        type="number" 
-                        value={formData[m.value]?.monthly_goal || ''} 
-                        onChange={(e) => handleInputChange(m.value, 'monthly_goal', e.target.value)}
-                        placeholder="Ex: 50000"
-                        className="w-32"
-                      />
-                    </TableCell>
                     <TableCell>
                       <Input 
                         type="number" 
