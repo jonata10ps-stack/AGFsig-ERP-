@@ -8,6 +8,7 @@ import {
   Settings,
   Users,
   FileText,
+  DollarSign,
   MapPin,
   ClipboardList,
   Truck,
