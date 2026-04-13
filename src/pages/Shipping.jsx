@@ -214,7 +214,7 @@ export default function Shipping() {
         }
         // 1. Buscar itens do pedido (filtrando serviços)
         const allItems = await base44.entities.SalesOrderItem.filter({ order_id: order.id });
-        const productsList = await base44.entities.Product.filter({ company_id: companyId });
+        const productsList = await base44.entities.Product.listAll({ company_id: companyId });
         
         const orderItems = allItems.filter(i => {
            const p = productsList.find(prod => prod.id === i.product_id);
