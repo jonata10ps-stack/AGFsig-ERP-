@@ -5,7 +5,7 @@ import { validateProductionOrderCancellation, validateProductionOrderClose } fro
 import { useCompanyId } from '@/components/useCompanyId';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
-import { Plus, Search, Eye, MoreHorizontal, Factory, Play, Pause, CheckCircle, XCircle, Link as LinkIcon, QrCode, AlertCircle, Loader2 } from 'lucide-react';
+import { Plus, Search, Eye, MoreHorizontal, Factory, Play, Pause, CheckCircle, XCircle, Link as LinkIcon, QrCode, AlertCircle, Loader2, Users } from 'lucide-react';
 import QRCode from 'qrcode.react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -715,6 +715,7 @@ export default function ProductionOrders() {
               <TableHeader>
                 <TableRow>
                   <TableHead>OP</TableHead>
+                  <TableHead>Cliente</TableHead>
                   <TableHead>Produto</TableHead>
                   <TableHead>Progresso</TableHead>
                   <TableHead>Prioridade</TableHead>
@@ -741,6 +742,14 @@ export default function ProductionOrders() {
                               {orders?.find(o => o.id === op.parent_op_id)?.numero_op_externo && `Vinculada a: ${orders.find(o => o.id === op.parent_op_id).numero_op_externo}`}
                             </p>
                           )}
+                        </div>
+                      </TableCell>
+                       <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Users className="h-4 w-4 text-slate-400" />
+                          <span className="font-medium text-slate-700">
+                            {op.client_name || <span className="text-slate-400 italic">Previsão Interna</span>}
+                          </span>
                         </div>
                       </TableCell>
                       <TableCell>
