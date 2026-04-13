@@ -103,10 +103,10 @@ export default function MyNumbersDashboard() {
     let ltmRevenue = 0;
     const currentM = new Date().getMonth() + 1;
     performances.forEach(p => {
-       if (parseInt(p.month) <= currentM) ltmRevenue += (p.actual_revenue || 0);
+       if (parseInt(p.month) <= currentM) ltmRevenue += (Number(p.actual_revenue) || 0);
     });
     pastPerformances.forEach(p => {
-       if (parseInt(p.month) > currentM) ltmRevenue += (p.actual_revenue || 0);
+       if (parseInt(p.month) > currentM) ltmRevenue += (Number(p.actual_revenue) || 0);
     });
 
     const percentAchieved = annualGoal > 0 ? (annualRevenue / annualGoal) * 100 : 0;
