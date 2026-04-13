@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
+import { useAuth } from '@/lib/AuthContext';
+import { useCompanyId } from '@/components/useCompanyId';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { ArrowLeft, Edit, Calendar, MapPin, Clock, Car, FileText, TrendingUp } from 'lucide-react';
@@ -26,8 +28,16 @@ const resultColors = {
 };
 
 export default function ProspectionVisitDetail() {
+  const { companyId } = useCompanyId();
+  const { user } = useAuth();
   const urlParams = new URLSearchParams(window.location.search);
   const visitId = urlParams.get('id');
+
+  const { data: allSellers = [] } = useQuery({
+    queryKey: ['sellers', companyId],
+    queryFn: () => companyId ? base44.entities.Seller.filter({ company_id: companyId, active: true }) : Promise.resolve([]),
+    enabled: !!companyId,
+  });
 
   const { data: visit, isLoading } = useQuery({
     queryKey: ['prospection-visit', visitId],
@@ -38,6 +48,26 @@ export default function ProspectionVisitDetail() {
     enabled: !!visitId,
   });
 
+  const hasAccess = useMemo(() => {
+    if (!visit || !user || !allSellers) return true; // Let it show if loading or empty
+
+    const isAdmin = user.role?.toLowerCase() === 'admin' || user.email?.toLowerCase() === 'jonata.santos@agfequipamentos.com.br';
+    if (isAdmin) return true;
+
+    // Check if user is the seller of the visit
+    const sellerRecord = allSellers.find(s => s.email?.toLowerCase() === user.email?.toLowerCase());
+    if (sellerRecord && visit.seller_id === sellerRecord.id) return true;
+
+    // Check if user is a manager of the seller
+    const managers = Array.isArray(visit.manager_ids) ? visit.manager_ids : [];
+    if (managers.includes(user.id)) return true;
+
+    // Check if created by user
+    if (visit.created_by?.toLowerCase() === user.email?.toLowerCase()) return true;
+
+    return false;
+  }, [visit, user, allSellers]);
+
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -47,10 +77,10 @@ export default function ProspectionVisitDetail() {
     );
   }
 
-  if (!visit) {
+  if (!visit || !hasAccess) {
     return (
       <div className="text-center py-12">
-        <p className="text-slate-500">Visita não encontrada</p>
+        <p className="text-slate-500">{!visit ? 'Visita não encontrada' : 'Acesso negado'}</p>
         <Link to={createPageUrl('ProspectionVisits')}>
           <Button variant="outline" className="mt-4">
             <ArrowLeft className="h-4 w-4 mr-2" />

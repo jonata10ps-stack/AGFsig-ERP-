@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { useCompanyId } from '@/components/useCompanyId';
+import { useAuth } from '@/lib/AuthContext';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import ProspectionProjectsDashboard from '@/components/ProspectionProjectsDashboard';
@@ -42,7 +43,9 @@ const VOLTAGE_CONFIG = {
 
 export default function ProspectionProjects() {
   const { companyId } = useCompanyId();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
+
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -67,6 +70,35 @@ export default function ProspectionProjects() {
   });
   const [clientInputMode, setClientInputMode] = useState('select');
 
+  // Fetch all sellers first to determine management/team
+  const { data: allSellers = [] } = useQuery({
+    queryKey: ['sellers', companyId],
+    queryFn: () => companyId ? base44.entities.Seller.filter({ company_id: companyId, active: true }) : Promise.resolve([]),
+    enabled: !!companyId,
+  });
+
+  // Calculate access context
+  const accessContext = useMemo(() => {
+    if (!user || !allSellers) return { isAdmin: false, isManager: false, isSeller: false, managedSellerIds: [], currentSellerId: null };
+
+    const isAdmin = user.role?.toLowerCase() === 'admin' || user.email?.toLowerCase() === 'jonata.santos@agfequipamentos.com.br';
+    
+    // Check if user is a seller (by email)
+    const sellerRecord = allSellers.find(s => s.email?.toLowerCase() === user.email?.toLowerCase());
+    const isSeller = !!sellerRecord;
+    const currentSellerId = sellerRecord?.id || null;
+
+    // Check if user is a manager (any seller has them in manager_ids)
+    const managedSellers = allSellers.filter(s => {
+        const managers = Array.isArray(s.manager_ids) ? s.manager_ids : [];
+        return managers.includes(user.id);
+    });
+    const isManager = managedSellers.length > 0;
+    const managedSellerIds = managedSellers.map(s => s.id);
+
+    return { isAdmin, isManager, isSeller, managedSellerIds, currentSellerId };
+  }, [user, allSellers]);
+
   const { data: projects = [], isLoading: projectsLoading } = useQuery({
     queryKey: ['prospection-projects', companyId],
     queryFn: async () => {
@@ -74,23 +106,23 @@ export default function ProspectionProjects() {
       return base44.entities.ProspectionProjectItem.filter({ company_id: companyId });
     },
     enabled: !!companyId,
-    refetchInterval: 60000, // Atualizar a cada 60 segundos
+    refetchInterval: 60000,
   });
 
+  const authorizedSellers = useMemo(() => {
+    if (accessContext.isAdmin) return allSellers;
+    if (accessContext.isManager) {
+        const uniqueIds = new Set([...accessContext.managedSellerIds]);
+        if (accessContext.currentSellerId) uniqueIds.add(accessContext.currentSellerId);
+        return allSellers.filter(s => uniqueIds.has(s.id));
+    }
+    if (accessContext.isSeller) {
+        return allSellers.filter(s => s.id === accessContext.currentSellerId);
+    }
+    return [];
+  }, [allSellers, accessContext]);
 
-  const { data: user } = useQuery({
-    queryKey: ['current-user'],
-    queryFn: () => base44.auth.me(),
-  });
-
-  const { data: sellers = [] } = useQuery({
-    queryKey: ['sellers', companyId],
-    queryFn: async () => {
-      if (!companyId) return [];
-      return base44.entities.Seller.filter({ company_id: companyId, active: true });
-    },
-    enabled: !!companyId,
-  });
+  const sellers = authorizedSellers;
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -303,12 +335,23 @@ export default function ProspectionProjects() {
 
   const filtered = useMemo(() => {
     return projects.filter(project => {
+      // Access Control
+      let hasAccess = accessContext.isAdmin;
+      if (!hasAccess) {
+        const projectSellerId = project.seller_id;
+        if (accessContext.isManager && accessContext.managedSellerIds.includes(projectSellerId)) hasAccess = true;
+        else if (accessContext.isSeller && projectSellerId === accessContext.currentSellerId) hasAccess = true;
+        else if (project.created_by?.toLowerCase() === user?.email?.toLowerCase()) hasAccess = true;
+      }
+      
+      if (!hasAccess) return false;
+
       const matchesSearch = project.project_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         project.client_name.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesStatus = !statusFilter || project.status === statusFilter;
       return matchesSearch && matchesStatus;
     });
-  }, [projects, searchTerm, statusFilter]);
+  }, [projects, searchTerm, statusFilter, accessContext, user]);
 
   if (projectsLoading) {
     return (

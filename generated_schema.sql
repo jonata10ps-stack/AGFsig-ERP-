@@ -1,5 +1,5 @@
 -- ====================================================
--- Script Gerado Automaticamente em 2026-04-11T20:52:17.716Z
+-- Script Gerado Automaticamente em 2026-04-13T01:53:42.886Z
 -- Execute no SQL Editor do Supabase
 -- ====================================================
 
@@ -58,6 +58,8 @@ ALTER TABLE public."AuditLog"
   ADD COLUMN IF NOT EXISTS "related_type" text,
   ADD COLUMN IF NOT EXISTS "remaining" text,
   ADD COLUMN IF NOT EXISTS "role" text,
+  ADD COLUMN IF NOT EXISTS "seller_id" text,
+  ADD COLUMN IF NOT EXISTS "seller_name" text,
   ADD COLUMN IF NOT EXISTS "status" text,
   ADD COLUMN IF NOT EXISTS "to" text,
   ADD COLUMN IF NOT EXISTS "to_location_id" text,
@@ -361,6 +363,7 @@ ALTER TABLE public."Company"
   ADD COLUMN IF NOT EXISTS "name" text,
   ADD COLUMN IF NOT EXISTS "phone" text,
   ADD COLUMN IF NOT EXISTS "role" text,
+  ADD COLUMN IF NOT EXISTS "seller_id" text,
   ADD COLUMN IF NOT EXISTS "state" text;
 
 -- Tabela: ConfigurationHistory
@@ -1976,6 +1979,8 @@ ALTER TABLE public."Reservation"
   ADD COLUMN IF NOT EXISTS "reason" text,
   ADD COLUMN IF NOT EXISTS "related_id" text,
   ADD COLUMN IF NOT EXISTS "related_type" text,
+  ADD COLUMN IF NOT EXISTS "seller_id" text,
+  ADD COLUMN IF NOT EXISTS "seller_name" text,
   ADD COLUMN IF NOT EXISTS "shipping_batch_id" text,
   ADD COLUMN IF NOT EXISTS "shipping_notes" text,
   ADD COLUMN IF NOT EXISTS "signed_nf_photo" text,
@@ -2260,6 +2265,7 @@ ALTER TABLE public."SalesOrderItem"
 ALTER TABLE public."Seller"
   ADD COLUMN IF NOT EXISTS "account_status" text,
   ADD COLUMN IF NOT EXISTS "action" text,
+  ADD COLUMN IF NOT EXISTS "actual_revenue" text,
   ADD COLUMN IF NOT EXISTS "allowed_modules" text,
   ADD COLUMN IF NOT EXISTS "attachments" text,
   ADD COLUMN IF NOT EXISTS "baixa_motivo" text,
@@ -2269,6 +2275,7 @@ ALTER TABLE public."Seller"
   ADD COLUMN IF NOT EXISTS "client_document" text,
   ADD COLUMN IF NOT EXISTS "client_id" text,
   ADD COLUMN IF NOT EXISTS "client_name" text,
+  ADD COLUMN IF NOT EXISTS "cod_finame" text,
   ADD COLUMN IF NOT EXISTS "code" text,
   ADD COLUMN IF NOT EXISTS "commission_rate" text,
   ADD COLUMN IF NOT EXISTS "company_ids" text,
@@ -2301,6 +2308,10 @@ ALTER TABLE public."Seller"
   ADD COLUMN IF NOT EXISTS "log_date" text,
   ADD COLUMN IF NOT EXISTS "manager_ids" text,
   ADD COLUMN IF NOT EXISTS "message" text,
+  ADD COLUMN IF NOT EXISTS "month" text,
+  ADD COLUMN IF NOT EXISTS "monthValue" text,
+  ADD COLUMN IF NOT EXISTS "monthly_cost" text,
+  ADD COLUMN IF NOT EXISTS "monthly_goal" text,
   ADD COLUMN IF NOT EXISTS "name" text,
   ADD COLUMN IF NOT EXISTS "next_action" text,
   ADD COLUMN IF NOT EXISTS "next_visit_date" text,
@@ -2322,6 +2333,8 @@ ALTER TABLE public."Seller"
   ADD COLUMN IF NOT EXISTS "proposal_sent" text,
   ADD COLUMN IF NOT EXISTS "prospective_client_name" text,
   ADD COLUMN IF NOT EXISTS "qty" text,
+  ADD COLUMN IF NOT EXISTS "qty_available" text,
+  ADD COLUMN IF NOT EXISTS "qty_fulfilled" text,
   ADD COLUMN IF NOT EXISTS "qty_requested" text,
   ADD COLUMN IF NOT EXISTS "qty_reserved" text,
   ADD COLUMN IF NOT EXISTS "qty_residue" text,
@@ -2353,7 +2366,18 @@ ALTER TABLE public."Seller"
   ADD COLUMN IF NOT EXISTS "visit_number" text,
   ADD COLUMN IF NOT EXISTS "visit_report" text,
   ADD COLUMN IF NOT EXISTS "visit_type" text,
-  ADD COLUMN IF NOT EXISTS "voltage_type" text;
+  ADD COLUMN IF NOT EXISTS "voltage_type" text,
+  ADD COLUMN IF NOT EXISTS "year" text;
+
+-- Tabela: SellerMonthlyPerformance
+ALTER TABLE public."SellerMonthlyPerformance"
+  ADD COLUMN IF NOT EXISTS "actual_revenue" text,
+  ADD COLUMN IF NOT EXISTS "month" text,
+  ADD COLUMN IF NOT EXISTS "monthValue" text,
+  ADD COLUMN IF NOT EXISTS "monthly_cost" text,
+  ADD COLUMN IF NOT EXISTS "monthly_goal" text,
+  ADD COLUMN IF NOT EXISTS "seller_id" text,
+  ADD COLUMN IF NOT EXISTS "year" text;
 
 -- Tabela: SerialNumber
 ALTER TABLE public."SerialNumber"
@@ -2560,6 +2584,8 @@ ALTER TABLE public."StockBalance"
   ADD COLUMN IF NOT EXISTS "remaining" text,
   ADD COLUMN IF NOT EXISTS "resource_id" text,
   ADD COLUMN IF NOT EXISTS "scheduled_date" text,
+  ADD COLUMN IF NOT EXISTS "seller_id" text,
+  ADD COLUMN IF NOT EXISTS "seller_name" text,
   ADD COLUMN IF NOT EXISTS "sequence" text,
   ADD COLUMN IF NOT EXISTS "startDate" text,
   ADD COLUMN IF NOT EXISTS "status" text,
@@ -2630,6 +2656,7 @@ ALTER TABLE public."Technician"
   ADD COLUMN IF NOT EXISTS "reason" text,
   ADD COLUMN IF NOT EXISTS "role" text,
   ADD COLUMN IF NOT EXISTS "scheduled_date" text,
+  ADD COLUMN IF NOT EXISTS "seller_id" text,
   ADD COLUMN IF NOT EXISTS "service_order_id" text,
   ADD COLUMN IF NOT EXISTS "service_photos" text,
   ADD COLUMN IF NOT EXISTS "solution" text,

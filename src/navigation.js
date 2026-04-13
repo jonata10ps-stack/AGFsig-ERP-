@@ -34,9 +34,11 @@ export const navigation = [
     children: [
       { name: 'Agenda de Visitas', icon: Calendar, page: 'SalesAppointments' },
       { name: 'Dashboard Prospecção', icon: BarChart3, page: 'ProspectionDashboard' },
+      { name: 'Meus Números', icon: BarChart3, page: 'MyNumbersDashboard' },
       { name: 'Prospecção', icon: Users, page: 'ProspectionVisits' },
       { name: 'Projetos', icon: Package, page: 'ProspectionProjects' },
       { name: 'Registro de KM', icon: Cog, page: 'DailyVehicleLog' },
+      { name: 'Gestão de Metas', icon: CheckCircle2, page: 'SellerGoalsManagement' },
     ]
   },
   { 

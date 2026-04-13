@@ -82,6 +82,7 @@ import Locations from './pages/Locations';
 import Manual from './pages/Manual';
 import MaterialRequestDetail from './pages/MaterialRequestDetail';
 import MaterialRequests from './pages/MaterialRequests';
+import MyNumbersDashboard from './pages/MyNumbersDashboard';
 import NonConformityReports from './pages/NonConformityReports';
 import OPConsumptionControl from './pages/OPConsumptionControl';
 import PaymentConditions from './pages/PaymentConditions';
@@ -123,6 +124,7 @@ import SalesAppointments from './pages/SalesAppointments';
 import SalesOrderDetail from './pages/SalesOrderDetail';
 import SalesOrders from './pages/SalesOrders';
 import SalesOrdersMissing from './pages/SalesOrdersMissing';
+import SellerGoalsManagement from './pages/SellerGoalsManagement';
 import Sellers from './pages/Sellers';
 import Separation from './pages/Separation';
 import SerialNumberControl from './pages/SerialNumberControl';
@@ -186,6 +188,7 @@ export const PAGES = {
     "Manual": Manual,
     "MaterialRequestDetail": MaterialRequestDetail,
     "MaterialRequests": MaterialRequests,
+    "MyNumbersDashboard": MyNumbersDashboard,
     "NonConformityReports": NonConformityReports,
     "OPConsumptionControl": OPConsumptionControl,
     "PaymentConditions": PaymentConditions,
@@ -227,6 +230,7 @@ export const PAGES = {
     "SalesOrderDetail": SalesOrderDetail,
     "SalesOrders": SalesOrders,
     "SalesOrdersMissing": SalesOrdersMissing,
+    "SellerGoalsManagement": SellerGoalsManagement,
     "Sellers": Sellers,
     "Separation": Separation,
     "SerialNumberControl": SerialNumberControl,

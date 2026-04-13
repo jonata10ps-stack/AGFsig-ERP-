@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { useCompanyId } from '@/components/useCompanyId';
+import { useAuth } from '@/lib/AuthContext';
 import { Plus, Calendar as CalendarIcon, MapPin, TrendingUp, Eye, X, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -33,14 +34,55 @@ const resultColors = {
 export default function SalesAppointments() {
   const queryClient = useQueryClient();
   const { companyId } = useCompanyId();
-  const [user, setUser] = useState(null);
-  const [currentSeller, setCurrentSeller] = useState(null);
+  const { user } = useAuth();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [dateFilter, setDateFilter] = useState('all');
   const [showForm, setShowForm] = useState(false);
   const [editingVisit, setEditingVisit] = useState(null);
   const [selectedProducts, setSelectedProducts] = useState([]);
+
+  // Fetch all sellers first to determine management/team
+  const { data: allSellers = [] } = useQuery({
+    queryKey: ['sellers', companyId],
+    queryFn: () => companyId ? base44.entities.Seller.filter({ company_id: companyId, active: true }) : Promise.resolve([]),
+    enabled: !!companyId,
+  });
+
+  // Calculate access context
+  const accessContext = useMemo(() => {
+    if (!user || !allSellers) return { isAdmin: false, isManager: false, isSeller: false, managedSellerIds: [], currentSellerId: null, currentSeller: null };
+
+    const isAdmin = user.role?.toLowerCase() === 'admin' || user.email?.toLowerCase() === 'jonata.santos@agfequipamentos.com.br';
+    
+    // Check if user is a seller (by email)
+    const sellerRecord = allSellers.find(s => s.email?.toLowerCase() === user.email?.toLowerCase());
+    const isSeller = !!sellerRecord;
+    const currentSellerId = sellerRecord?.id || null;
+    const currentSeller = sellerRecord || null;
+
+    // Check if user is a manager (any seller has them in manager_ids)
+    const managedSellers = allSellers.filter(s => {
+        const managers = Array.isArray(s.manager_ids) ? s.manager_ids : [];
+        return managers.includes(user.id);
+    });
+    const isManager = managedSellers.length > 0;
+    const managedSellerIds = managedSellers.map(s => s.id);
+
+    return { isAdmin, isManager, isSeller, managedSellerIds, currentSellerId, currentSeller };
+  }, [user, allSellers]);
+
+  const currentSeller = accessContext.currentSeller;
+
+  const { data: visits = [], isLoading } = useQuery({
+    queryKey: ['prospection-visits', companyId],
+    queryFn: async () => {
+      if (!companyId) return [];
+      return base44.entities.ProspectionVisit.filter({ company_id: companyId }, '-visit_date');
+    },
+    enabled: !!companyId,
+    refetchOnMount: 'always',
+  });
 
   const [formData, setFormData] = useState({
     visit_date: new Date().toISOString().split('T')[0],
@@ -62,79 +104,6 @@ export default function SalesAppointments() {
     notes: '',
   });
 
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        const userData = await base44.auth.me();
-        setUser(userData);
-
-        if (companyId) {
-          const sellers = await base44.entities.Seller.filter({
-            company_id: companyId,
-            email: userData.email
-          });
-          if (sellers?.[0]) {
-            setCurrentSeller(sellers[0]);
-          }
-        }
-      } catch (e) {
-        console.error('Error loading user:', e);
-      }
-    };
-    loadUser();
-  }, [companyId]);
-
-  const { data: visits = [], isLoading } = useQuery({
-    queryKey: ['prospection-visits', companyId, currentSeller?.id, user?.id],
-    queryFn: async () => {
-      if (!companyId || !user) {
-        console.log('❌ Falta companyId ou user');
-        return [];
-      }
-
-      // Admin vê todas as visitas
-      if (user.role === 'admin') {
-        console.log('✓ Admin - buscando todas as visitas');
-        const result = await base44.entities.ProspectionVisit.filter({
-          company_id: companyId
-        }, '-visit_date');
-        console.log(`✓ Encontradas ${result.length} visitas`);
-        return result;
-      }
-
-      // Vendedor vê apenas suas visitas
-      if (currentSeller) {
-        console.log('✓ Buscando visitas do vendedor:', currentSeller.id);
-        const result = await base44.entities.ProspectionVisit.filter({
-          company_id: companyId,
-          seller_id: currentSeller.id
-        }, '-visit_date');
-        console.log(`✓ Encontradas ${result.length} visitas`);
-        return result;
-      }
-
-      // Gerente vê visitas dos vendedores gerenciados
-      console.log('Verificando se é gerente...');
-      const allSellers = await base44.entities.Seller.filter({ company_id: companyId });
-      const managedSellers = allSellers.filter(s => s.manager_ids?.includes(user.id));
-
-      if (managedSellers.length > 0) {
-        const allVisits = await base44.entities.ProspectionVisit.filter({
-          company_id: companyId
-        }, '-visit_date');
-        const filtered = allVisits.filter(v => managedSellers.some(s => s.id === v.seller_id));
-        toast.info(`📋 Carregadas ${filtered.length} de ${allVisits.length} visitas`);
-        return filtered;
-      }
-
-      console.log('❌ Não é vendedor nem gerente');
-      toast.warning('Você não é vendedor nem gerente');
-      return [];
-    },
-    enabled: !!companyId && !!user,
-    refetchOnMount: 'always',
-  });
-
   const { data: products } = useQuery({
     queryKey: ['products', companyId],
     queryFn: () => companyId ? base44.entities.Product.filter({ company_id: companyId, active: true }) : Promise.resolve([]),
@@ -152,9 +121,8 @@ export default function SalesAppointments() {
         active: true,
       });
     },
-    onSuccess: (newSeller) => {
-      setCurrentSeller(newSeller);
-      queryClient.invalidateQueries({ queryKey: ['prospection-visits'] });
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sellers', companyId] });
       toast.success('Vendedor cadastrado com sucesso!');
     },
   });
@@ -385,6 +353,17 @@ export default function SalesAppointments() {
   };
 
   const filteredVisits = visits.filter(visit => {
+    // Access Control
+    let hasAccess = accessContext.isAdmin;
+    if (!hasAccess) {
+      const visitSellerId = visit.seller_id;
+      if (accessContext.isManager && accessContext.managedSellerIds.includes(visitSellerId)) hasAccess = true;
+      else if (accessContext.isSeller && visitSellerId === accessContext.currentSellerId) hasAccess = true;
+      else if (visit.created_by?.toLowerCase() === user?.email?.toLowerCase()) hasAccess = true;
+    }
+    
+    if (!hasAccess) return false;
+
     const matchSearch = search === '' ||
       visit.client_name?.toLowerCase().includes(search.toLowerCase()) ||
       visit.prospective_client_name?.toLowerCase().includes(search.toLowerCase()) ||
@@ -431,16 +410,25 @@ export default function SalesAppointments() {
     return (
       <div className="p-6">
         <Card className="border-amber-200 bg-amber-50">
-          <CardContent className="pt-6 space-y-4">
-            <p className="text-amber-800">
-              Você não está cadastrado como vendedor.
+          <CardContent className="pt-6 space-y-4 text-center">
+            <TrendingUp className="h-12 w-12 text-amber-500 mx-auto" />
+            <h2 className="text-xl font-semibold text-amber-900">Configuração de Vendedor Necessária</h2>
+            <p className="text-amber-800 max-w-md mx-auto">
+              Para acessar a agenda de prospecção, você precisa estar vinculado a um cadastro de vendedor.
             </p>
             <Button 
-              onClick={() => createSellerMutation.mutate()}
+              onClick={() => {
+                // Pre-check if seller was already created in this session but not yet reflected in query
+                if (allSellers.some(s => s.email?.toLowerCase() === user.email?.toLowerCase())) {
+                   queryClient.invalidateQueries({ queryKey: ['sellers', companyId] });
+                   return;
+                }
+                createSellerMutation.mutate();
+              }}
               disabled={createSellerMutation.isPending}
               className="bg-amber-600 hover:bg-amber-700"
             >
-              {createSellerMutation.isPending ? 'Criando...' : 'Criar Meu Cadastro de Vendedor'}
+              {createSellerMutation.isPending ? 'Criando Cadastro...' : 'Criar Meu Cadastro de Vendedor'}
             </Button>
           </CardContent>
         </Card>

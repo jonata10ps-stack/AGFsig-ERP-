@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { useCompanyId } from '@/components/useCompanyId';
+import { useAuth } from '@/lib/AuthContext';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { Plus, Search, Calendar, MapPin, TrendingUp, Filter, Eye } from 'lucide-react';
@@ -34,6 +35,7 @@ const resultColors = {
 
 export default function ProspectionVisits() {
   const { companyId } = useCompanyId();
+  const { user } = useAuth();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [resultFilter, setResultFilter] = useState('all');
@@ -44,10 +46,34 @@ export default function ProspectionVisits() {
     enabled: !!companyId,
   });
 
-  const { data: user } = useQuery({
-    queryKey: ['current-user'],
-    queryFn: () => base44.auth.me(),
+  // Fetch all sellers first to determine management/team
+  const { data: allSellers = [] } = useQuery({
+    queryKey: ['sellers', companyId],
+    queryFn: () => companyId ? base44.entities.Seller.filter({ company_id: companyId, active: true }) : Promise.resolve([]),
+    enabled: !!companyId,
   });
+
+  // Calculate access context
+  const accessContext = useMemo(() => {
+    if (!user || !allSellers) return { isAdmin: false, isManager: false, isSeller: false, managedSellerIds: [], currentSellerId: null };
+
+    const isAdmin = user.role?.toLowerCase() === 'admin' || user.email?.toLowerCase() === 'jonata.santos@agfequipamentos.com.br';
+    
+    // Check if user is a seller (by email)
+    const sellerRecord = allSellers.find(s => s.email?.toLowerCase() === user.email?.toLowerCase());
+    const isSeller = !!sellerRecord;
+    const currentSellerId = sellerRecord?.id || null;
+
+    // Check if user is a manager (any seller has them in manager_ids)
+    const managedSellers = allSellers.filter(s => {
+        const managers = Array.isArray(s.manager_ids) ? s.manager_ids : [];
+        return managers.includes(user.id);
+    });
+    const isManager = managedSellers.length > 0;
+    const managedSellerIds = managedSellers.map(s => s.id);
+
+    return { isAdmin, isManager, isSeller, managedSellerIds, currentSellerId };
+  }, [user, allSellers]);
 
   const filteredVisits = visits?.filter(visit => {
     const matchSearch = search === '' ||
@@ -59,12 +85,16 @@ export default function ProspectionVisits() {
     const matchStatus = statusFilter === 'all' || visit.status === statusFilter;
     const matchResult = resultFilter === 'all' || visit.result === resultFilter;
 
-    // Se não é admin, mostrar apenas suas visitas
-    const matchUser = user?.role === 'admin' || 
-                      visit.created_by?.toLowerCase() === user?.email?.toLowerCase() ||
-                      visit.seller_id === user?.id;
+    // Access Control
+    let hasAccess = accessContext.isAdmin;
+    if (!hasAccess) {
+      const visitSellerId = visit.seller_id;
+      if (accessContext.isManager && accessContext.managedSellerIds.includes(visitSellerId)) hasAccess = true;
+      else if (accessContext.isSeller && visitSellerId === accessContext.currentSellerId) hasAccess = true;
+      else if (visit.created_by?.toLowerCase() === user?.email?.toLowerCase()) hasAccess = true;
+    }
 
-    return matchSearch && matchStatus && matchResult && matchUser;
+    return matchSearch && matchStatus && matchResult && hasAccess;
   });
 
   // Estatísticas rápidas

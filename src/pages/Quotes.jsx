@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { createPageUrl } from '@/utils';
@@ -26,6 +26,7 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useCompanyId } from '@/components/useCompanyId';
+import { useAuth } from '@/lib/AuthContext';
 import ClientSearchSelect from '@/components/clients/ClientSearchSelect';
 
 const STATUS_CONFIG = {
@@ -154,10 +155,53 @@ function NewQuoteForm({ clients, sellers, paymentConditions, onSave, onCancel, l
 export default function Quotes() {
   const queryClient = useQueryClient();
   const { companyId, loading: companyLoading } = useCompanyId();
+  const { user } = useAuth();
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
+
+  // Fetch all sellers first to determine management/team
+  const { data: allSellers = [] } = useQuery({
+    queryKey: ['sellers', companyId],
+    queryFn: () => companyId ? base44.entities.Seller.filter({ company_id: companyId, active: true }) : Promise.resolve([]),
+    enabled: !!companyId,
+  });
+
+  // Calculate access context
+  const accessContext = useMemo(() => {
+    if (!user || !allSellers) return { isAdmin: false, isManager: false, isSeller: false, managedSellerIds: [], currentSellerId: null };
+
+    const isAdmin = user.role?.toLowerCase() === 'admin' || user.email?.toLowerCase() === 'jonata.santos@agfequipamentos.com.br';
+    
+    // Check if user is a seller (by email)
+    const sellerRecord = allSellers.find(s => s.email?.toLowerCase() === user.email?.toLowerCase());
+    const isSeller = !!sellerRecord;
+    const currentSellerId = sellerRecord?.id || null;
+
+    // Check if user is a manager (any seller has them in manager_ids)
+    const managedSellers = allSellers.filter(s => {
+        const managers = Array.isArray(s.manager_ids) ? s.manager_ids : [];
+        return managers.includes(user.id);
+    });
+    const isManager = managedSellers.length > 0;
+    const managedSellerIds = managedSellers.map(s => s.id);
+
+    return { isAdmin, isManager, isSeller, managedSellerIds, currentSellerId };
+  }, [user, allSellers]);
+
+  const authorizedSellers = useMemo(() => {
+    if (accessContext.isAdmin) return allSellers;
+    if (accessContext.isManager) {
+        const uniqueIds = new Set([...accessContext.managedSellerIds]);
+        if (accessContext.currentSellerId) uniqueIds.add(accessContext.currentSellerId);
+        return allSellers.filter(s => uniqueIds.has(s.id));
+    }
+    if (accessContext.isSeller) {
+        return allSellers.filter(s => s.id === accessContext.currentSellerId);
+    }
+    return [];
+  }, [allSellers, accessContext]);
 
   const [tablePage, setTablePage] = useState(0);
   const TABLE_PAGE_SIZE = 50;
@@ -172,9 +216,14 @@ export default function Quotes() {
         conditions.status = filterStatus;
       }
 
+      // If user is only a seller (not manager or admin), restrict fetch
+      if (!accessContext.isAdmin && !accessContext.isManager && accessContext.isSeller) {
+        conditions.seller_id = accessContext.currentSellerId;
+      }
+
       const searchFields = search ? ['quote_number', 'client_name', 'client_document'] : [];
       
-      return base44.entities.Quote.queryPaginated(
+      const result = await base44.entities.Quote.queryPaginated(
         conditions, 
         '-created_date', 
         TABLE_PAGE_SIZE, 
@@ -182,6 +231,26 @@ export default function Quotes() {
         searchFields,
         search
       );
+
+      // If manager, we might need to filter even more if the query doesn't support multiple sellers
+      if (accessContext.isManager && !accessContext.isAdmin) {
+        // Since we can't easily do multiple IDs in current client without local filter or custom RPC
+        // We fetch more and filter. But for simplicity and UI consistency, 
+        // if manager has many sellers, pagination might be slightly off.
+        // For now, we fetch and if not in team, we nullify (not ideal but works for small teams)
+        // Better: filter the list after fetch
+        return {
+            ...result,
+            data: result.data.filter(q => {
+               if (q.seller_id === accessContext.currentSellerId) return true;
+               if (accessContext.managedSellerIds.includes(q.seller_id)) return true;
+               if (q.created_by?.toLowerCase() === user?.email?.toLowerCase()) return true;
+               return false;
+            })
+        };
+      }
+
+      return result;
     },
     enabled: !!companyId,
   });
@@ -477,7 +546,7 @@ export default function Quotes() {
           </DialogHeader>
           <NewQuoteForm
             clients={clients}
-            sellers={sellers}
+            sellers={authorizedSellers}
             paymentConditions={paymentConditions}
             onSave={(data) => createMutation.mutate(data)}
             onCancel={() => setDialogOpen(false)}
