@@ -62,25 +62,20 @@ export default function AfterSales() {
   }, [serviceRequests, serviceOrders]);
 
   const { data: clients = [] } = useQuery({
-    queryKey: ['as-clients-complete', companyId],
+    queryKey: ['as-clients-subset', companyId, clientIdsToFetch.length],
     queryFn: async () => {
-      if (!companyId) return [];
+      if (!companyId || clientIdsToFetch.length === 0) return [];
       try {
-        // CARREGAMENTO MASSIVO: Forçando o carregamento de todos os registros sem cortes
-        const { data, error } = await supabase
-            .from('Client')
-            .select('*')
-            .eq('company_id', companyId)
-            .limit(50000); // Limite aumentado para garantir que nenhum cliente fique de fora
-            
-        if (error) throw error;
-        return data || [];
+        // Busca apenas o lote necessário de clientes
+        return await base44.entities.Client.filter({ 
+            company_id: companyId,
+            id: clientIdsToFetch
+        });
       } catch (e) {
-        console.error('Erro ao buscar clientes:', e);
         return [];
       }
     },
-    enabled: !!companyId,
+    enabled: !!companyId && clientIdsToFetch.length > 0,
     staleTime: 60000
   });
 
@@ -95,12 +90,9 @@ export default function AfterSales() {
     ];
 
     return combined.map(item => {
-      const client = (Array.isArray(clients) ? clients : []).find(c => 
-          String(c.id) === String(item.client_id) || 
-          (c.name && item.client_name && c.name.trim().toUpperCase() === item.client_name.trim().toUpperCase())
-      );
+      const client = clients.find(c => c.id === item.client_id);
       const uf = (client?.state || '').toUpperCase().trim();
-      const city = client?.city || (typeof item.contact_address === 'string' ? item.contact_address.split(',')[0] : '');
+      const city = client?.city || (typeof item.contact_address === 'string' ? item.contact_address.split(',')[0] : 'Localidade não informada');
       
       return {
         ...item,
@@ -109,7 +101,7 @@ export default function AfterSales() {
         client_name: client?.name || item.client_name || 'Cliente Oculto',
         technician_name: item.technician_name || null
       };
-    }).filter(s => s.state_uf); 
+    }).filter(s => s.state_uf && s.technician_name); 
   }, [serviceRequests, serviceOrders, clients]);
 
   const kpis = useMemo(() => {
@@ -157,31 +149,13 @@ export default function AfterSales() {
       });
 
       return combined.filter(item => {
-        // Vínculo Total: Sem limites, buscando no banco completo
-        const allClients = Array.isArray(clients) ? clients : [];
-        const client = allClients.find(c => 
-            (item.client_id && String(c.id) === String(item.client_id)) || 
-            (c.name && item.client_name && c.name.trim().toUpperCase() === item.client_name.trim().toUpperCase())
-        );
-        
+        const client = (Array.isArray(clients) ? clients : []).find(c => c.id === item.client_id);
         item._location = client ? `${client.city || 'S/C'}/${client.state || 'UF'}` : 'Não informada';
-        
-        // CORREÇÃO DOS FILTROS OPERACIONAIS
         if (typeFilter !== 'all' && item._type !== typeFilter) return false;
-
         const s = String(item?.status || '').toUpperCase();
         if (statusFilter === 'active') return s === 'ABERTA' || s === 'PENDENTE';
         if (statusFilter === 'progress') return ['EM_ANDAMENTO', 'EM_ATENDIMENTO', 'PAUSADA', 'AGUARDANDO_PECA'].includes(s);
         if (statusFilter === 'done') return ['ENCERRADA', 'CONCLUIDA', 'FINALIZADA'].includes(s);
-        
-        return true;
-      });
-
-        const s = String(item?.status || '').toUpperCase();
-        if (statusFilter === 'active') return s === 'ABERTA' || s === 'PENDENTE';
-        if (statusFilter === 'progress') return ['EM_ANDAMENTO', 'EM_ATENDIMENTO', 'PAUSADA', 'AGUARDANDO_PECA'].includes(s);
-        if (statusFilter === 'done') return ['ENCERRADA', 'CONCLUIDA', 'FINALIZADA'].includes(s);
-        
         return true;
       });
   }, [serviceRequests, serviceOrders, typeFilter, statusFilter, clients]);
