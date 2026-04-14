@@ -20,6 +20,7 @@ import {
   AlertCircle,
   Calendar,
   RotateCcw,
+  TrendingUp,
   Book,
   Cpu
 } from 'lucide-react';
@@ -122,6 +123,14 @@ export const navigation = [
       { name: 'Controle de Qualidade', icon: BarChart3, page: 'AfterSalesQuality' },
       { name: 'Relatórios', icon: BarChart3, page: 'ServiceReports' },
       { name: 'Templates de Relatórios IA', icon: BarChart3, page: 'ReportTemplates' },
+    ]
+  },
+  {
+    name: 'Gestão de Custos',
+    icon: TrendingUp,
+    moduleId: 'GestaoCustos',
+    children: [
+      { name: 'Dashboard de Rentabilidade', icon: BarChart3, page: 'CostManagement' },
     ]
   },
   { 

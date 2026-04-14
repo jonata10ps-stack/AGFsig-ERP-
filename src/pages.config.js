@@ -57,6 +57,7 @@ import Clients from './pages/Clients';
 import CompanyManagement from './pages/CompanyManagement';
 import ConfigurationHistory from './pages/ConfigurationHistory';
 import ConfigurationTesting from './pages/ConfigurationTesting';
+import CostManagement from './pages/CostManagement';
 import CostCenters from './pages/CostCenters';
 import CreateInventoryMove from './pages/CreateInventoryMove';
 import DailyVehicleLog from './pages/DailyVehicleLog';
@@ -164,6 +165,7 @@ export const PAGES = {
     "CompanyManagement": CompanyManagement,
     "ConfigurationHistory": ConfigurationHistory,
     "ConfigurationTesting": ConfigurationTesting,
+    "CostManagement": CostManagement,
     "CostCenters": CostCenters,
     "CreateInventoryMove": CreateInventoryMove,
     "DailyVehicleLog": DailyVehicleLog,
