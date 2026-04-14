@@ -90,7 +90,7 @@ export default function AfterSales() {
     ];
 
     return combined.map(item => {
-      const client = clients.find(c => c.id === item.client_id);
+      const client = clients.find(c => String(c.id) === String(item.client_id));
       const uf = (client?.state || '').toUpperCase().trim();
       const city = client?.city || (typeof item.contact_address === 'string' ? item.contact_address.split(',')[0] : 'Localidade não informada');
       
@@ -149,7 +149,7 @@ export default function AfterSales() {
       });
 
       return combined.filter(item => {
-        const client = (Array.isArray(clients) ? clients : []).find(c => c.id === item.client_id);
+        const client = (Array.isArray(clients) ? clients : []).find(c => String(c.id) === String(item.client_id));
         item._location = client ? `${client.city || 'S/C'}/${client.state || 'UF'}` : 'Não informada';
         if (typeFilter !== 'all' && item._type !== typeFilter) return false;
         const s = String(item?.status || '').toUpperCase();
