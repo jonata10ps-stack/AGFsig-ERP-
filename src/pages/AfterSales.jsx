@@ -66,11 +66,10 @@ export default function AfterSales() {
     queryFn: async () => {
       if (!companyId || clientIdsToFetch.length === 0) return [];
       try {
-        // Busca apenas o lote necessário de clientes
+        // Busca um lote maior de clientes para garantir que todos os vínculos funcionem
         return await base44.entities.Client.filter({ 
-            company_id: companyId,
-            id: clientIdsToFetch
-        });
+            company_id: companyId
+        }, null, 3000); 
       } catch (e) {
         return [];
       }
@@ -149,7 +148,10 @@ export default function AfterSales() {
       });
 
       return combined.filter(item => {
-        const client = (Array.isArray(clients) ? clients : []).find(c => c.id === item.client_id);
+        const client = (Array.isArray(clients) ? clients : []).find(c => 
+            String(c.id) === String(item.client_id) || 
+            (c.name && item.client_name && c.name.trim().toUpperCase() === item.client_name.trim().toUpperCase())
+        );
         item._location = client ? `${client.city || 'S/C'}/${client.state || 'UF'}` : 'Não informada';
         if (typeFilter !== 'all' && item._type !== typeFilter) return false;
         const s = String(item?.status || '').toUpperCase();
