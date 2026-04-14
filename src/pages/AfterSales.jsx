@@ -100,7 +100,7 @@ export default function AfterSales() {
         client_name: client?.name || item.client_name || 'Cliente Oculto',
         technician_name: item.technician_name || null
       };
-    }).filter(s => s.state_uf && s.technician_name); 
+    }).filter(s => s.state_uf); 
   }, [serviceRequests, serviceOrders, clients]);
 
   const kpis = useMemo(() => {
