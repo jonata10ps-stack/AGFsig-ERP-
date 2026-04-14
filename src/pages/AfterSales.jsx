@@ -62,19 +62,24 @@ export default function AfterSales() {
   }, [serviceRequests, serviceOrders]);
 
   const { data: clients = [] } = useQuery({
-    queryKey: ['as-clients-subset', companyId, clientIdsToFetch.length],
+    queryKey: ['as-clients-complete', companyId],
     queryFn: async () => {
-      if (!companyId || clientIdsToFetch.length === 0) return [];
+      if (!companyId) return [];
       try {
-        // Busca um lote maior de clientes para garantir que todos os vínculos funcionem
-        return await base44.entities.Client.filter({ 
-            company_id: companyId
-        }, null, 3000); 
+        // CARREGAMENTO COMPLETO: Sem limites para garantir vínculo total das cidades
+        const { data, error } = await supabase
+            .from('Client')
+            .select('*')
+            .eq('company_id', companyId);
+            
+        if (error) throw error;
+        return data || [];
       } catch (e) {
+        console.error('Erro ao buscar clientes:', e);
         return [];
       }
     },
-    enabled: !!companyId && clientIdsToFetch.length > 0,
+    enabled: !!companyId,
     staleTime: 60000
   });
 
@@ -151,16 +156,31 @@ export default function AfterSales() {
       });
 
       return combined.filter(item => {
-        const client = (Array.isArray(clients) ? clients : []).find(c => 
-            String(c.id) === String(item.client_id) || 
+        // Vínculo Total: Sem limites, buscando no banco completo
+        const allClients = Array.isArray(clients) ? clients : [];
+        const client = allClients.find(c => 
+            (item.client_id && String(c.id) === String(item.client_id)) || 
             (c.name && item.client_name && c.name.trim().toUpperCase() === item.client_name.trim().toUpperCase())
         );
+        
         item._location = client ? `${client.city || 'S/C'}/${client.state || 'UF'}` : 'Não informada';
+        
+        // CORREÇÃO DOS FILTROS OPERACIONAIS
         if (typeFilter !== 'all' && item._type !== typeFilter) return false;
+
         const s = String(item?.status || '').toUpperCase();
         if (statusFilter === 'active') return s === 'ABERTA' || s === 'PENDENTE';
         if (statusFilter === 'progress') return ['EM_ANDAMENTO', 'EM_ATENDIMENTO', 'PAUSADA', 'AGUARDANDO_PECA'].includes(s);
         if (statusFilter === 'done') return ['ENCERRADA', 'CONCLUIDA', 'FINALIZADA'].includes(s);
+        
+        return true;
+      });
+
+        const s = String(item?.status || '').toUpperCase();
+        if (statusFilter === 'active') return s === 'ABERTA' || s === 'PENDENTE';
+        if (statusFilter === 'progress') return ['EM_ANDAMENTO', 'EM_ATENDIMENTO', 'PAUSADA', 'AGUARDANDO_PECA'].includes(s);
+        if (statusFilter === 'done') return ['ENCERRADA', 'CONCLUIDA', 'FINALIZADA'].includes(s);
+        
         return true;
       });
   }, [serviceRequests, serviceOrders, typeFilter, statusFilter, clients]);
