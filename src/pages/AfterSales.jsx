@@ -89,9 +89,12 @@ export default function AfterSales() {
     ];
 
     return combined.map(item => {
-      const client = clients.find(c => c.id === item.client_id);
+      const client = (Array.isArray(clients) ? clients : []).find(c => 
+          String(c.id) === String(item.client_id) || 
+          (c.name && item.client_name && c.name.trim().toUpperCase() === item.client_name.trim().toUpperCase())
+      );
       const uf = (client?.state || '').toUpperCase().trim();
-      const city = client?.city || (typeof item.contact_address === 'string' ? item.contact_address.split(',')[0] : 'Localidade não informada');
+      const city = client?.city || (typeof item.contact_address === 'string' ? item.contact_address.split(',')[0] : '');
       
       return {
         ...item,
