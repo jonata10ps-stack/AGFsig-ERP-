@@ -66,11 +66,12 @@ export default function AfterSales() {
     queryFn: async () => {
       if (!companyId) return [];
       try {
-        // CARREGAMENTO COMPLETO: Sem limites para garantir vínculo total das cidades
+        // CARREGAMENTO MASSIVO: Forçando o carregamento de todos os registros sem cortes
         const { data, error } = await supabase
             .from('Client')
             .select('*')
-            .eq('company_id', companyId);
+            .eq('company_id', companyId)
+            .limit(50000); // Limite aumentado para garantir que nenhum cliente fique de fora
             
         if (error) throw error;
         return data || [];
