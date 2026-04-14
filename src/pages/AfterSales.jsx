@@ -66,9 +66,8 @@ export default function AfterSales() {
     queryFn: async () => {
       if (!companyId || clientIdsToFetch.length === 0) return [];
       try {
-        // Busca apenas o lote necessário de clientes
+        // Banco de clientes unificado - sem filtro de empresa
         return await base44.entities.Client.filter({ 
-            company_id: companyId,
             id: clientIdsToFetch
         });
       } catch (e) {
