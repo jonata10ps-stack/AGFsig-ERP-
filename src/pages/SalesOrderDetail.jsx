@@ -331,7 +331,12 @@ export default function SalesOrderDetail() {
       }
       
       const updateData = { status };
-      if (invoice_number) updateData.nfe_number = invoice_number;
+      if (invoice_number) {
+        const currentNotes = order.notes || '';
+        if (!currentNotes.includes(`NFe: `)) {
+          updateData.notes = currentNotes ? `${currentNotes}\nNFe: ${invoice_number}` : `NFe: ${invoice_number}`;
+        }
+      }
       
       return base44.entities.SalesOrder.update(orderId, updateData);
     },
@@ -569,6 +574,9 @@ export default function SalesOrderDetail() {
   }
 
   const canEdit = order.status === 'RASCUNHO';
+  const nfeMatch = order.notes?.match(/NFe:\s*([^\n]+)/);
+  const nfeNumberDisplay = nfeMatch ? nfeMatch[1] : null;
+  const cleanNotes = order.notes ? order.notes.replace(/NFe:\s*[^\n]+(\n|$)/g, '').trim() : '-';
 
   return (
     <div className="space-y-6">
@@ -806,12 +814,12 @@ export default function SalesOrderDetail() {
               </div>
               <div>
                 <p className="text-sm text-slate-500">Observações</p>
-                <p className="font-medium">{order.notes || '-'}</p>
+                <p className="font-medium whitespace-pre-wrap">{cleanNotes || '-'}</p>
               </div>
-              {order.nfe_number && (
+              {nfeNumberDisplay && (
                 <div>
                   <p className="text-sm text-slate-500">Nota Fiscal</p>
-                  <p className="font-medium text-indigo-600 font-bold">{order.nfe_number}</p>
+                  <p className="font-medium text-indigo-600 font-bold">{nfeNumberDisplay}</p>
                 </div>
               )}
             </div>
