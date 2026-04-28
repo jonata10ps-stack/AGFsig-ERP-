@@ -169,6 +169,7 @@ export default function SalesOrderDetail() {
 
   const [itemDialogOpen, setItemDialogOpen] = useState(false);
   const [deleteItemConfirm, setDeleteItemConfirm] = useState(null);
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [reservationDialogOpen, setReservationDialogOpen] = useState(false);
   const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false);
   const [nfeNumber, setNfeNumber] = useState('');
