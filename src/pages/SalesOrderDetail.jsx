@@ -277,7 +277,7 @@ export default function SalesOrderDetail() {
     mutationFn: async (status) => {
       // Validação obrigatória solicitada pelo usuário
       if (status === 'CONFIRMADO') {
-        const incompleteItems = items?.filter(item => !item.fulfill_mode);
+        const incompleteItems = items?.filter(item => !item.fulfill_mode || item.fulfill_mode === 'AUTO');
         if (incompleteItems && incompleteItems.length > 0) {
           throw new Error(`Existem ${incompleteItems.length} item(ns) sem a definição de "Gera Solicitação de Produção". Por favor, edite os itens e defina Sim ou Não.`);
         }

@@ -397,25 +397,6 @@ export default function SalesOrders() {
         })));
       }
       
-      // Se pedido criado com status CONFIRMADO, criar ProductionRequests em lote
-      if (orderData.status === 'CONFIRMADO' && items && items.length > 0) {
-        const now = Date.now();
-        await base44.entities.ProductionRequest.bulkCreate(items.map((item, idx) => ({
-          company_id: companyId,
-          request_number: `SOL-${(now + idx).toString().slice(-8)}`,
-          origin_type: 'VENDA',
-          origin_id: order.id,
-          order_id: order.id,
-          order_number: order.order_number,
-          product_id: item.product_id,
-          product_name: item.product_name,
-          qty_requested: item.qty,
-          status: 'PENDENTE',
-          priority: 'NORMAL',
-          due_date: orderData.delivery_date
-        })));
-      }
-      
       return order;
     },
     onSuccess: () => {
@@ -448,13 +429,19 @@ export default function SalesOrders() {
   const updateStatusMutation = useMutation({
     mutationFn: async ({ id, status, cancelOPs }) => {
       const order = orders?.find(o => o.id === id);
-      await base44.entities.SalesOrder.update(id, { status });
       
-      // Se pedido passa para CONFIRMADO, criar ProductionRequest
+      // Validação ANTES de atualizar
       if (status === 'CONFIRMADO') {
         const items = await base44.entities.SalesOrderItem.filter({ company_id: companyId, order_id: id });
+        
+        const incompleteItems = items?.filter(item => !item.fulfill_mode || item.fulfill_mode === 'AUTO');
+        if (incompleteItems && incompleteItems.length > 0) {
+          throw new Error(`Existem ${incompleteItems.length} item(ns) sem a definição de "Gera Solicitação de Produção". Por favor, acesse "Ver Detalhes", edite os itens e defina Sim ou Não.`);
+        }
+
         if (items?.length > 0) {
           for (const item of items) {
+            if (item.fulfill_mode === 'PRODUCAO') {
               const requestNumber = `SOL-${Date.now().toString().slice(-8)}`;
               await base44.entities.ProductionRequest.create({
                 company_id: companyId,
@@ -471,8 +458,12 @@ export default function SalesOrders() {
                 due_date: order?.delivery_date
               });
             }
+          }
         }
       }
+
+      // Atualiza o status apenas se a validação passar
+      await base44.entities.SalesOrder.update(id, { status });
       
       // Se cancelar pedido
       if (status === 'CANCELADO') {
