@@ -169,8 +169,9 @@ export default function SalesOrderDetail() {
 
   const [itemDialogOpen, setItemDialogOpen] = useState(false);
   const [deleteItemConfirm, setDeleteItemConfirm] = useState(null);
-  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [reservationDialogOpen, setReservationDialogOpen] = useState(false);
+  const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false);
+  const [nfeNumber, setNfeNumber] = useState('');
   const [isPrinting, setIsPrinting] = useState(false);
   const printRef = useRef();
 
@@ -274,7 +275,10 @@ export default function SalesOrderDetail() {
   });
 
   const updateStatusMutation = useMutation({
-    mutationFn: async (status) => {
+    mutationFn: async (payload) => {
+      const status = typeof payload === 'string' ? payload : payload.status;
+      const invoice_number = typeof payload === 'string' ? null : payload.invoice_number;
+
       // Validação obrigatória solicitada pelo usuário
       if (status === 'CONFIRMADO') {
         const incompleteItems = items?.filter(item => !item.fulfill_mode || item.fulfill_mode === 'AUTO');
@@ -325,7 +329,10 @@ export default function SalesOrderDetail() {
         }
       }
       
-      return base44.entities.SalesOrder.update(orderId, { status });
+      const updateData = { status };
+      if (invoice_number) updateData.nfe_number = invoice_number;
+      
+      return base44.entities.SalesOrder.update(orderId, updateData);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sales-order', orderId] });
@@ -621,6 +628,13 @@ export default function SalesOrderDetail() {
                   </Button>
                 </Link>
               )}
+              <Button
+                onClick={() => setInvoiceDialogOpen(true)}
+                className="bg-purple-600 hover:bg-purple-700"
+              >
+                <FileText className="h-4 w-4 mr-2" />
+                Faturar
+              </Button>
               <Button onClick={() => setCancelDialogOpen(true)} variant="destructive">
                 <Trash2 className="h-4 w-4 mr-2" />
                 Cancelar Pedido
@@ -652,7 +666,7 @@ export default function SalesOrderDetail() {
                 </Button>
               </Link>
               <Button
-                onClick={() => updateStatusMutation.mutate('FATURADO')}
+                onClick={() => setInvoiceDialogOpen(true)}
                 disabled={updateStatusMutation.isPending}
                 className="bg-purple-600 hover:bg-purple-700"
               >
@@ -680,7 +694,7 @@ export default function SalesOrderDetail() {
                 Voltar para Confirmado
               </Button>
               <Button
-                onClick={() => updateStatusMutation.mutate('FATURADO')}
+                onClick={() => setInvoiceDialogOpen(true)}
                 disabled={updateStatusMutation.isPending}
                 className="bg-purple-600 hover:bg-purple-700"
               >
@@ -793,6 +807,12 @@ export default function SalesOrderDetail() {
                 <p className="text-sm text-slate-500">Observações</p>
                 <p className="font-medium">{order.notes || '-'}</p>
               </div>
+              {order.nfe_number && (
+                <div>
+                  <p className="text-sm text-slate-500">Nota Fiscal</p>
+                  <p className="font-medium text-indigo-600 font-bold">{order.nfe_number}</p>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -1026,6 +1046,37 @@ export default function SalesOrderDetail() {
         />
 
       {/* Hidden Print Template */}
+      <Dialog open={invoiceDialogOpen} onOpenChange={setInvoiceDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Faturar Pedido</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Número da Nota Fiscal</Label>
+              <Input
+                value={nfeNumber}
+                onChange={(e) => setNfeNumber(e.target.value)}
+                placeholder="Ex: 123456"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setInvoiceDialogOpen(false)}>Cancelar</Button>
+            <Button
+              onClick={() => {
+                updateStatusMutation.mutate({ status: 'FATURADO', invoice_number: nfeNumber });
+                setInvoiceDialogOpen(false);
+              }}
+              disabled={updateStatusMutation.isPending || !nfeNumber}
+              className="bg-purple-600 hover:bg-purple-700"
+            >
+              Confirmar Faturamento
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <div style={{ display: 'none' }}>
         <div ref={printRef}>
           <OrderPrintTemplate order={order} items={items || []} />
