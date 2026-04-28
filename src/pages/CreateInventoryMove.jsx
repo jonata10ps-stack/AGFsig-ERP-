@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { processProductionOrderControls } from '@/utils/productionControlUtils';
 import { executeInventoryTransaction } from '@/utils/inventoryTransactionUtils';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -50,6 +50,7 @@ export default function CreateInventoryMove() {
   });
 
   const [availableStock, setAvailableStock] = useState(null);
+  const [stockDetails, setStockDetails] = useState(null);
   const [stockError, setStockError] = useState(null);
   const [showBaixaDialog, setShowBaixaDialog] = useState(false);
   const [createdMove, setCreatedMove] = useState(null);
@@ -106,7 +107,7 @@ export default function CreateInventoryMove() {
   // Validar saldo disponível em tempo real
   useEffect(() => {
     const validateStock = async () => {
-      console.log('=== VALIDAÁ‡ÁƒO DE ESTOQUE ===');
+      console.log('=== VALIDAÇÃO DE ESTOQUE ===');
       console.log('companyId:', companyId);
       console.log('product_id:', form.product_id);
       console.log('from_warehouse_id:', form.from_warehouse_id);
@@ -114,9 +115,10 @@ export default function CreateInventoryMove() {
       console.log('qty:', form.qty);
       console.log('type:', form.type);
       
-      if (!companyId || !form.product_id || !form.from_warehouse_id || form.qty <= 0) {
+      if (!companyId || !form.product_id) {
         console.log('Validação ignorada - dados incompletos');
         setAvailableStock(null);
+        setStockDetails(null);
         setStockError(null);
         return;
       }
@@ -125,11 +127,13 @@ export default function CreateInventoryMove() {
         try {
           const filterQuery = {
             company_id: companyId,
-            product_id: form.product_id,
-            warehouse_id: form.from_warehouse_id
+            product_id: form.product_id
           };
           
-          // Se tiver location_id específico, filtrar por ele
+          if (form.from_warehouse_id) {
+            filterQuery.warehouse_id = form.from_warehouse_id;
+          }
+
           if (form.from_location_id) {
             filterQuery.location_id = form.from_location_id;
           }
@@ -137,21 +141,39 @@ export default function CreateInventoryMove() {
           console.log('Buscando estoque com filtro:', JSON.stringify(filterQuery, null, 2));
           const balances = await base44.entities.StockBalance.filter(filterQuery);
           console.log('Saldos encontrados:', balances.length, 'registros');
-          console.log('Detalhes dos saldos:', JSON.stringify(balances, null, 2));
 
           const totalAvailable = balances.reduce((sum, b) => sum + (b.qty_available || 0), 0);
+          const totalReserved = balances.reduce((sum, b) => sum + (b.qty_reserved || 0), 0);
+          const totalSeparated = balances.reduce((sum, b) => sum + (b.qty_separated || 0), 0);
+          
           console.log('Total disponível calculado:', totalAvailable);
           setAvailableStock(totalAvailable);
 
-          if (totalAvailable < form.qty) {
-            setStockError(`Estoque insuficiente! Disponível: ${totalAvailable}`);
+          let detailsText = '';
+          if (!form.from_warehouse_id) {
+            detailsText += '(Todos os armazéns) ';
+          }
+          if (totalReserved > 0 || totalSeparated > 0) {
+            detailsText += `| Reservado: ${totalReserved} | Separado: ${totalSeparated}`;
+          }
+          setStockDetails(detailsText);
+
+          if (form.from_warehouse_id && form.qty > 0) {
+            if (totalAvailable < form.qty) {
+              setStockError(`Estoque insuficiente! Disponível: ${totalAvailable}`);
+            } else {
+              setStockError(null);
+            }
           } else {
             setStockError(null);
           }
         } catch (err) {
           console.error('ERRO ao buscar estoque:', err);
-          console.error('Detalhes do erro:', JSON.stringify(err, null, 2));
         }
+      } else {
+        setAvailableStock(null);
+        setStockDetails(null);
+        setStockError(null);
       }
     };
 
@@ -443,7 +465,7 @@ export default function CreateInventoryMove() {
               />
               {availableStock !== null && (form.type === 'SAIDA' || form.type === 'TRANSFERENCIA' || form.type === 'BAIXA') && (
                 <p className={`text-sm ${stockError ? 'text-red-600' : 'text-emerald-600'}`}>
-                  Disponível: {availableStock}
+                  Disponível: {availableStock} <span className="text-slate-500 text-xs ml-1">{stockDetails}</span>
                 </p>
               )}
             </div>
