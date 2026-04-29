@@ -120,7 +120,7 @@ export default function Shipping() {
     queryFn: async () => {
       // Buscar últimos pedidos e mostrar Sepados e Expedidos
       const all = await base44.entities.SalesOrder.filter({ company_id: companyId }, '-created_date', 300);
-      return (all || []).filter(o => ['SEPARADO', 'EXPEDIDO', 'FATURADO'].includes(o.status));
+      return (all || []).filter(o => ['SEPARADO', 'EXPEDIDO'].includes(o.status));
     },
     enabled: !!companyId,
   });
@@ -524,8 +524,7 @@ export default function Shipping() {
 
   const pendingSelected = orders?.filter(o => 
     selectedIds.includes(o.id) && 
-    o.status !== 'EXPEDIDO' && 
-    o.status !== 'FATURADO'
+    o.status !== 'EXPEDIDO'
   ) || [];
 
   return (
@@ -550,7 +549,7 @@ export default function Shipping() {
                     : 'text-slate-500 hover:text-slate-700'
                 }`}
               >
-                Prontos ({orders?.filter(o => o.status !== 'EXPEDIDO' && o.status !== 'FATURADO').length || 0})
+                Prontos ({orders?.filter(o => o.status !== 'EXPEDIDO').length || 0})
               </button>
               <button
                 onClick={() => setActiveTab('expedidos')}
@@ -560,7 +559,7 @@ export default function Shipping() {
                     : 'text-slate-500 hover:text-slate-700'
                 }`}
               >
-                Expedidos ({orders?.filter(o => o.status === 'EXPEDIDO' || o.status === 'FATURADO').length || 0})
+                Expedidos ({orders?.filter(o => o.status === 'EXPEDIDO').length || 0})
               </button>
             </div>
           </CardHeader>
@@ -600,7 +599,7 @@ export default function Shipping() {
               </div>
             ) : (()=>{
                 const tabOrders = orders?.filter(o => {
-                  const isExp = o.status === 'EXPEDIDO' || o.status === 'FATURADO';
+                  const isExp = o.status === 'EXPEDIDO';
                   return activeTab === 'expedidos' ? isExp : !isExp;
                 });
                 
@@ -647,7 +646,6 @@ export default function Shipping() {
                         <div className="flex justify-between items-center mt-1">
                           <Badge className={`text-[10px] px-1.5 py-0 ${
                             order.status === 'EXPEDIDO' ? 'bg-emerald-100 text-emerald-700' :
-                            order.status === 'FATURADO' ? 'bg-blue-100 text-blue-700' :
                             'bg-slate-100 text-slate-700'
                           }`}>
                             {order.status}

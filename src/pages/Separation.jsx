@@ -150,7 +150,7 @@ export default function Separation() {
       // Buscar itens de todos os pedidos que podem estar na tela
       const activeOrders = await base44.entities.SalesOrder.filter({ 
         company_id: companyId, 
-        status: ['CONFIRMADO', 'RESERVADO', 'SEPARANDO', 'SEPARADO'] 
+        status: ['CONFIRMADO', 'RESERVADO', 'SEPARANDO', 'SEPARADO', 'FATURADO'] 
       });
       const orderIds = activeOrders.map(o => o.id);
       if (orderIds.length === 0) return [];
@@ -162,7 +162,7 @@ export default function Separation() {
 
   const { data: rawOrders, isLoading } = useQuery({
     queryKey: ['orders-for-separation-raw', companyId],
-    queryFn: () => companyId ? base44.entities.SalesOrder.filter({ company_id: companyId, status: ['CONFIRMADO', 'RESERVADO', 'SEPARANDO', 'SEPARADO'] }) : Promise.resolve([]),
+    queryFn: () => companyId ? base44.entities.SalesOrder.filter({ company_id: companyId, status: ['CONFIRMADO', 'RESERVADO', 'SEPARANDO', 'SEPARADO', 'FATURADO'] }) : Promise.resolve([]),
     enabled: !!companyId,
     refetchInterval: 15000,
   });
@@ -213,7 +213,7 @@ export default function Separation() {
     const advanceOrders = async () => {
       for (const order of rawOrders) {
         // Reservado também pode ser auto-avançado se for só serviço
-        if (!['CONFIRMADO', 'RESERVADO', 'SEPARANDO'].includes(order.status)) continue;
+        if (!['CONFIRMADO', 'RESERVADO', 'SEPARANDO', 'FATURADO'].includes(order.status)) continue;
         
         const orderItems = allItems.filter(item => item.order_id === order.id);
         if (orderItems.length === 0) continue;
@@ -225,7 +225,7 @@ export default function Separation() {
 
         if (!hasPhysical) {
           try {
-            if (order.status === 'CONFIRMADO' || order.status === 'RESERVADO') {
+            if (order.status === 'CONFIRMADO' || order.status === 'RESERVADO' || order.status === 'FATURADO') {
               console.log(`Auto-iniciando separação para pedido de serviço: ${order.order_number}`);
               await startSeparationMutation.mutateAsync(order);
             } else if (order.status === 'SEPARANDO') {
@@ -613,7 +613,7 @@ export default function Separation() {
                       <div className="text-right">
                         <Badge className={
                           order.status === 'SEPARANDO' ? 'bg-amber-100 text-amber-700' :
-                          order.status === 'CONFIRMADO' ? 'bg-blue-100 text-blue-700' :
+                          order.status === 'CONFIRMADO' || order.status === 'FATURADO' ? 'bg-blue-100 text-blue-700' :
                           'bg-indigo-100 text-indigo-700'
                         }>
                           {order.status}
@@ -676,7 +676,7 @@ export default function Separation() {
               </div>
             ) : (
               <div className="space-y-4">
-                {selectedOrder.status === 'CONFIRMADO' && (
+                {(selectedOrder.status === 'CONFIRMADO' || selectedOrder.status === 'FATURADO') && (
                   <Button
                     onClick={() => startSeparationMutation.mutate(selectedOrder)}
                     className="w-full"

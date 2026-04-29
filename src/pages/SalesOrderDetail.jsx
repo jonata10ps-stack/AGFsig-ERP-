@@ -277,8 +277,12 @@ export default function SalesOrderDetail() {
 
   const updateStatusMutation = useMutation({
     mutationFn: async (payload) => {
-      const status = typeof payload === 'string' ? payload : payload.status;
+      let status = typeof payload === 'string' ? payload : payload.status;
       const invoice_number = typeof payload === 'string' ? null : payload.invoice_number;
+
+      if (status === 'FATURADO' && ['RESERVADO', 'SEPARANDO', 'SEPARADO'].includes(order.status)) {
+        status = order.status;
+      }
 
       // Validação obrigatória solicitada pelo usuário
       if (status === 'CONFIRMADO') {
