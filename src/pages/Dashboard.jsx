@@ -130,32 +130,42 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between bg-white/50 backdrop-blur-sm p-6 rounded-2xl border border-white/20 shadow-sm mb-6">
-        <div>
-          <h1 className="text-3xl font-extrabold text-primary tracking-tight">Dashboard</h1>
-          <p className="text-slate-500 mt-1 font-medium italic">
-            {editMode ? 'Arraste os widgets para reorganizar' : 'Visão geral personalizada'}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          {editMode && (
-            <>
-              <Button variant="outline" onClick={() => setShowSelector(true)}>
-                <Plus className="h-4 w-4 mr-2" />
-                Adicionar Widget
-              </Button>
-              <Button variant="outline" onClick={handleResetDefault}>
-                Restaurar Padrão
-              </Button>
-            </>
-          )}
-          <Button
-            variant={editMode ? 'default' : 'outline'}
-            onClick={() => setEditMode(!editMode)}
-          >
-            <Settings className="h-4 w-4 mr-2" />
-            {editMode ? 'Concluir' : 'Personalizar'}
-          </Button>
+      <div className="relative overflow-hidden flex flex-col sm:flex-row items-start sm:items-center justify-between bg-gradient-to-br from-indigo-600 via-violet-600 to-fuchsia-600 p-8 rounded-2xl shadow-lg mb-8 border border-white/10 group">
+        {/* Decorative backdrop shapes */}
+        <div className="absolute -top-24 -right-24 w-64 h-64 bg-white opacity-10 rounded-full blur-3xl group-hover:scale-110 transition-transform duration-1000"></div>
+        <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-white opacity-10 rounded-full blur-3xl group-hover:scale-110 transition-transform duration-1000"></div>
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full bg-gradient-to-r from-transparent via-white/5 to-transparent skew-x-12 translate-x-[-150%] group-hover:translate-x-[150%] transition-transform duration-1000 ease-in-out"></div>
+        
+        <div className="relative z-10 w-full flex flex-col sm:flex-row justify-between items-start sm:items-center">
+          <div>
+            <h1 className="text-4xl font-extrabold text-white tracking-tight drop-shadow-md pb-1">
+              Dashboard
+            </h1>
+            <p className="text-indigo-100/90 font-medium text-sm md:text-base mt-2 flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse shadow-[0_0_8px_rgba(74,222,128,0.6)]"></span>
+              {editMode ? 'Modo de Edição — Arraste os painéis para reorganizar' : 'Visão estratégica e monitoramento em tempo real'}
+            </p>
+          </div>
+          <div className="flex gap-3 mt-6 sm:mt-0">
+            {editMode && (
+              <>
+                <Button variant="secondary" className="bg-white/20 hover:bg-white/30 text-white border-none shadow-sm backdrop-blur-md" onClick={() => setShowSelector(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Adicionar Widget
+                </Button>
+                <Button variant="secondary" className="bg-white/20 hover:bg-white/30 text-white border-none shadow-sm backdrop-blur-md" onClick={handleResetDefault}>
+                  Restaurar Padrão
+                </Button>
+              </>
+            )}
+            <Button
+              className={editMode ? 'bg-emerald-500 hover:bg-emerald-600 text-white border-transparent shadow-md' : 'bg-white text-indigo-600 hover:bg-slate-50 transition-all shadow-md hover:shadow-lg'}
+              onClick={() => setEditMode(!editMode)}
+            >
+              <Settings className="h-4 w-4 mr-2" />
+              {editMode ? 'Concluir Edição' : 'Personalizar'}
+            </Button>
+          </div>
         </div>
       </div>
 

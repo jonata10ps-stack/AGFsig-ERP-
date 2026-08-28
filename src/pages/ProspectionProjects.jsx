@@ -41,6 +41,19 @@ const VOLTAGE_CONFIG = {
   TRIFASICO_440V: '440V Trifásico'
 };
 
+const parseJsonArray = (val) => {
+  if (Array.isArray(val)) return val;
+  if (typeof val === 'string' && val.trim()) {
+    try {
+      const parsed = JSON.parse(val);
+      if (Array.isArray(parsed)) return parsed;
+    } catch (e) {
+      return [];
+    }
+  }
+  return [];
+};
+
 export default function ProspectionProjects() {
   const { companyId } = useCompanyId();
   const { user } = useAuth();
@@ -103,7 +116,12 @@ export default function ProspectionProjects() {
     queryKey: ['prospection-projects', companyId],
     queryFn: async () => {
       if (!companyId) return [];
-      return base44.entities.ProspectionProjectItem.filter({ company_id: companyId });
+      const res = await base44.entities.ProspectionProjectItem.filter({ company_id: companyId });
+      return (res || []).map(p => ({
+        ...p,
+        photos: parseJsonArray(p.photos),
+        attachments: parseJsonArray(p.attachments),
+      }));
     },
     enabled: !!companyId,
     refetchInterval: 60000,
@@ -222,8 +240,8 @@ export default function ProspectionProjects() {
       // Ensure photos and attachments are arrays
       const sanitizedProject = {
         ...project,
-        photos: Array.isArray(project.photos) ? project.photos : [],
-        attachments: Array.isArray(project.attachments) ? project.attachments : []
+        photos: parseJsonArray(project.photos),
+        attachments: parseJsonArray(project.attachments)
       };
       setEditingProject(sanitizedProject);
       setFormData(sanitizedProject);
@@ -463,7 +481,7 @@ export default function ProspectionProjects() {
                   )}
 
                   {/* Photos Count */}
-                  {project.photos?.length > 0 && (
+                  {Array.isArray(project.photos) && project.photos.length > 0 && (
                     <div className="flex items-center gap-2">
                       <Image className="h-4 w-4 text-indigo-600" />
                       <span className="text-sm text-slate-600">{project.photos.length} foto(s)</span>
@@ -471,7 +489,7 @@ export default function ProspectionProjects() {
                   )}
 
                   {/* Attachments Count */}
-                  {project.attachments?.length > 0 && (
+                  {Array.isArray(project.attachments) && project.attachments.length > 0 && (
                     <div className="flex items-center gap-2">
                       <FileText className="h-4 w-4 text-slate-600" />
                       <span className="text-sm text-slate-600">{project.attachments.length} arquivo(s)</span>

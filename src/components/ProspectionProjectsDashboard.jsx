@@ -12,6 +12,19 @@ const STATUS_CONFIG = {
   CANCELADO: { color: 'bg-red-100 text-red-700', label: 'Cancelado', icon: AlertCircle }
 };
 
+const parseJsonArray = (val) => {
+  if (Array.isArray(val)) return val;
+  if (typeof val === 'string' && val.trim()) {
+    try {
+      const parsed = JSON.parse(val);
+      if (Array.isArray(parsed)) return parsed;
+    } catch (e) {
+      return [];
+    }
+  }
+  return [];
+};
+
 export default function ProspectionProjectsDashboard({ projects }) {
   const stats = {
     total: projects.length,
@@ -19,11 +32,11 @@ export default function ProspectionProjectsDashboard({ projects }) {
       acc[status] = projects.filter(p => p.status === status).length;
       return acc;
     }, {}),
-    withPhotos: projects.filter(p => p.photos?.length > 0).length,
-    withAttachments: projects.filter(p => p.attachments?.length > 0).length,
+    withPhotos: projects.filter(p => parseJsonArray(p.photos).length > 0).length,
+    withAttachments: projects.filter(p => parseJsonArray(p.attachments).length > 0).length,
     uniqueSellers: new Set(projects.map(p => p.seller_id).filter(Boolean)).size,
-    totalPhotos: projects.reduce((sum, p) => sum + (p.photos?.length || 0), 0),
-    totalAttachments: projects.reduce((sum, p) => sum + (p.attachments?.length || 0), 0)
+    totalPhotos: projects.reduce((sum, p) => sum + parseJsonArray(p.photos).length, 0),
+    totalAttachments: projects.reduce((sum, p) => sum + parseJsonArray(p.attachments).length, 0)
   };
 
   const kpis = [

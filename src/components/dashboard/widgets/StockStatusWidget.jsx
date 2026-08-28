@@ -32,23 +32,31 @@ export default function StockStatusWidget() {
   }
 
   return (
-    <Card className="hover:shadow-lg transition-shadow">
-      <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <CardTitle className="text-sm font-medium text-slate-600">
+    <Card className="bg-white border-transparent shadow-md hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 relative overflow-hidden group">
+      <div className="absolute top-0 left-0 w-1 h-full bg-blue-500"></div>
+      <div className="absolute -right-6 -bottom-6 opacity-[0.04] text-blue-900 group-hover:scale-110 group-hover:opacity-[0.08] transition-all duration-500 pointer-events-none">
+        <Package size={120} />
+      </div>
+      <CardHeader className="flex flex-row items-center justify-between pb-2 relative z-10">
+        <CardTitle className="text-sm font-semibold text-slate-600 uppercase tracking-wider">
           Status de Estoque
         </CardTitle>
-        <Package className="h-4 w-4 text-slate-400" />
+        <div className="p-2 bg-blue-50 rounded-lg">
+          <Package className="h-5 w-5 text-blue-600" />
+        </div>
       </CardHeader>
-      <CardContent>
-        <div className="text-2xl font-bold text-slate-900">{totalItems}</div>
-        <p className="text-xs text-slate-500 mt-1">
+      <CardContent className="relative z-10">
+        <div className="text-3xl font-extrabold text-slate-900 tracking-tight">{totalItems}</div>
+        <p className="text-sm text-slate-500 mt-2 font-medium">
           {lowStock > 0 ? (
-            <span className="text-red-600 font-medium flex items-center gap-1">
-              <AlertCircle className="h-3 w-3" />
+            <span className="text-red-600 flex items-center gap-1.5 bg-red-50 w-fit px-2 py-0.5 rounded-full">
+              <AlertCircle className="h-3.5 w-3.5" />
               {lowStock} sem estoque
             </span>
           ) : (
-            <span className="text-emerald-600">Todos com estoque</span>
+            <span className="text-emerald-600 flex items-center gap-1.5 bg-emerald-50 w-fit px-2 py-0.5 rounded-full">
+              Todos com estoque
+            </span>
           )}
         </p>
       </CardContent>

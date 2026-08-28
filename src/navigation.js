@@ -131,6 +131,7 @@ export const navigation = [
     moduleId: 'GestaoCustos',
     children: [
       { name: 'Dashboard de Rentabilidade', icon: BarChart3, page: 'CostManagement' },
+      { name: 'Margens de Produtos', icon: TrendingUp, page: 'ProductMargins' },
     ]
   },
   { 
