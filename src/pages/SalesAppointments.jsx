@@ -397,7 +397,7 @@ export default function SalesAppointments() {
     total: filteredVisits?.length || 0,
     realizadas: filteredVisits?.filter(v => v.status === 'REALIZADA').length || 0,
     planejadas: filteredVisits?.filter(v => v.status === 'PLANEJADA').length || 0,
-    comProposta: filteredVisits?.filter(v => v.proposal_sent).length || 0,
+    comProposta: filteredVisits?.filter(v => v.proposal_sent === true || v.proposal_sent === 'true').length || 0,
   };
 
   if (!user) {
@@ -633,15 +633,16 @@ export default function SalesAppointments() {
                     </Select>
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
                     <input
                       type="checkbox"
-                      checked={!!formData.proposal_sent}
-                      onChange={(e) => setFormData({ ...formData, proposal_sent: e.target.checked })}
-                      className="w-4 h-4"
+                      id="proposal_sent_check"
+                      checked={formData.proposal_sent === true || formData.proposal_sent === 'true'}
+                      onChange={(e) => setFormData(prev => ({ ...prev, proposal_sent: e.target.checked }))}
+                      className="w-4 h-4 cursor-pointer"
                     />
-                    <Label>Proposta enviada</Label>
-                  </div>
+                    <span className="text-sm font-medium text-slate-700">Proposta enviada</span>
+                  </label>
 
                   <div>
                     <Label>Próxima Ação</Label>
@@ -872,7 +873,7 @@ export default function SalesAppointments() {
                           <Users className="h-4 w-4" />
                           <span className="font-medium">{visit.seller_name || 'Vendedor Desconhecido'}</span>
                         </div>
-                        {visit.proposal_sent && (
+                        {(visit.proposal_sent === true || visit.proposal_sent === 'true') && (
                           <Badge className="bg-green-100 text-green-700">
                             Proposta Enviada
                           </Badge>

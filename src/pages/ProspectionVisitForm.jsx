@@ -503,15 +503,16 @@ export default function ProspectionVisitForm() {
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <label className="flex items-center gap-2 cursor-pointer select-none">
               <input
                 type="checkbox"
-                checked={formData.proposal_sent}
-                onChange={(e) => setFormData({ ...formData, proposal_sent: e.target.checked })}
-                className="w-4 h-4"
+                id="proposal_sent_check"
+                checked={formData.proposal_sent === true || formData.proposal_sent === 'true'}
+                onChange={(e) => setFormData(prev => ({ ...prev, proposal_sent: e.target.checked }))}
+                className="w-4 h-4 cursor-pointer"
               />
-              <label className="text-sm font-medium">Proposta enviada</label>
-            </div>
+              <span className="text-sm font-medium text-slate-700">Proposta enviada</span>
+            </label>
 
             <div>
               <label className="text-sm font-medium">Resultado da Visita</label>
