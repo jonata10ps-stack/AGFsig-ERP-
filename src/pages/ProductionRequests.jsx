@@ -268,15 +268,25 @@ export default function ProductionRequests() {
         throw new Error('Produto não encontrado no cadastro mestre');
       }
 
-      const routeId = product.route_id;
-       let routeName = '';
+      let routeId = product.route_id;
+      let routeName = '';
 
-       if (routeId) {
-         const route = await base44.entities.ProductionRoute.get(routeId);
-         routeName = route?.name || '';
-       } else {
-         console.warn(`Produto ${product.name} não possui roteiro associado`);
-       }
+      if (!routeId) {
+        // Fallback: buscar na tabela ProductionRoute
+        const prodRoutes = await base44.entities.ProductionRoute.filter({ 
+          company_id: companyId, 
+          product_id: request.product_id 
+        });
+        if (prodRoutes && prodRoutes.length > 0) {
+          routeId = prodRoutes[0].id;
+          routeName = prodRoutes[0].name;
+        }
+      }
+
+      if (routeId && !routeName) {
+        const route = await base44.entities.ProductionRoute.get(routeId);
+        routeName = route?.name || '';
+      }
 
       const warehouse = warehouses?.find(w => w.id === warehouseId);
       const location = locations?.find(l => l.id === locationId);

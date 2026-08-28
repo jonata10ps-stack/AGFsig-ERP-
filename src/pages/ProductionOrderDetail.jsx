@@ -227,18 +227,37 @@ export default function ProductionOrderDetail() {
           console.warn('Erro ao ler roteiros da versão');
         }
 
-        // Se a OP tem um roteiro principal associado diretamente (op.route_id), incluir também
-        if (op.route_id && !versionRoutes.some(r => (r.route_id || r.id) === op.route_id)) {
-          versionRoutes.push({ route_id: op.route_id });
+        // Se a OP tem um roteiro principal associado diretamente, ou buscar pelo produto
+        let mainRouteId = op.route_id;
+        if (!mainRouteId && op.product_id) {
+          const prodRoutes = await base44.entities.ProductionRoute.filter({
+            company_id: companyId,
+            product_id: op.product_id
+          });
+          if (prodRoutes && prodRoutes.length > 0) {
+            mainRouteId = prodRoutes[0].id;
+            console.log('🔍 Fallback roteiro principal encontrado:', mainRouteId);
+          }
+        }
+
+        if (mainRouteId) {
+          const alreadyExists = versionRoutes.some(r => {
+            const rId = typeof r === 'string' ? r : (r?.route_id || r?.id || r?.route);
+            return rId === mainRouteId;
+          });
+          if (!alreadyExists) {
+            versionRoutes.push({ route_id: mainRouteId });
+          }
         }
 
         if (versionRoutes.length > 0) {
           console.log(`🏭 Gerando ${versionRoutes.length} roteiros de MONTAGEM FINAL`);
           for (const routeRef of versionRoutes) {
-            const routeId = routeRef.route_id || routeRef.id;
+            const routeId = typeof routeRef === 'string' ? routeRef : (routeRef?.route_id || routeRef?.id || routeRef?.route);
             if (!routeId) continue;
 
             const routeSteps = await base44.entities.ProductionRouteStep.filter({ route_id: routeId });
+            console.log(`🔍 Etapas encontradas para a rota principal ${routeId}:`, routeSteps.length);
             for (const rs of (routeSteps || []).sort((a, b) => (Number(a.sequence) || 0) - (Number(b.sequence) || 0))) {
               stepsToCreate.push({
                 company_id: companyId,
