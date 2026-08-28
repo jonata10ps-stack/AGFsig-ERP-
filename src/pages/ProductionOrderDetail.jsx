@@ -227,6 +227,11 @@ export default function ProductionOrderDetail() {
           console.warn('Erro ao ler roteiros da versão');
         }
 
+        // Se a OP tem um roteiro principal associado diretamente (op.route_id), incluir também
+        if (op.route_id && !versionRoutes.some(r => (r.route_id || r.id) === op.route_id)) {
+          versionRoutes.push({ route_id: op.route_id });
+        }
+
         if (versionRoutes.length > 0) {
           console.log(`🏭 Gerando ${versionRoutes.length} roteiros de MONTAGEM FINAL`);
           for (const routeRef of versionRoutes) {
