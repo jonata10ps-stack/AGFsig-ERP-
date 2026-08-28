@@ -69,6 +69,50 @@ export default function ProductionOrderDetail() {
   const initializingRef = useRef(false);
   const initializingTimeoutRef = useRef(null);
 
+
+  const { data: op, isLoading: loadingOP } = useQuery({
+    queryKey: ['production-order', opId, companyId],
+    queryFn: () => base44.entities.ProductionOrder.filter({ company_id: companyId, id: opId }),
+    select: (data) => data?.[0],
+    enabled: !!opId && !!companyId,
+  });
+
+  const { data: steps = [], refetch: refetchSteps, isLoading: stepsLoading } = useQuery({
+    queryKey: ['production-steps', opId, companyId],
+    queryFn: () => base44.entities.ProductionStep.filter({ company_id: companyId, op_id: opId }),
+    enabled: !!opId && !!companyId,
+  });
+
+  const { data: resources = [] } = useQuery({
+    queryKey: ['resources-detail', companyId],
+    queryFn: () => base44.entities.Resource.filter({ company_id: companyId }, 'name', 1000),
+    enabled: !!companyId,
+  });
+
+  const { data: warehouses = [] } = useQuery({
+    queryKey: ['warehouses', companyId],
+    queryFn: () => base44.entities.Warehouse.filter({ company_id: companyId, active: true }),
+    enabled: !!companyId,
+  });
+
+  const { data: locations = [] } = useQuery({
+    queryKey: ['locations', companyId],
+    queryFn: () => base44.entities.Location.filter({ company_id: companyId, active: true }),
+    enabled: !!companyId,
+  });
+
+  const { data: bomDeliveries = [] } = useQuery({
+    queryKey: ['bom-deliveries-op', opId, companyId],
+    queryFn: () => base44.entities.BOMDeliveryControl.filter({ op_id: opId }),
+    enabled: !!opId && !!companyId,
+  });
+
+  const { data: materialConsumptions = [] } = useQuery({
+    queryKey: ['material-consumptions-op', opId, companyId],
+    queryFn: () => base44.entities.MaterialConsumption.filter({ company_id: companyId, op_id: opId }),
+    enabled: !!opId && !!companyId,
+  });
+
   const [diagnostics, setDiagnostics] = useState(null);
 
   useEffect(() => {
@@ -136,49 +180,6 @@ export default function ProductionOrderDetail() {
 
     runDiagnostics();
   }, [op, companyId]);
-
-  const { data: op, isLoading: loadingOP } = useQuery({
-    queryKey: ['production-order', opId, companyId],
-    queryFn: () => base44.entities.ProductionOrder.filter({ company_id: companyId, id: opId }),
-    select: (data) => data?.[0],
-    enabled: !!opId && !!companyId,
-  });
-
-  const { data: steps = [], refetch: refetchSteps, isLoading: stepsLoading } = useQuery({
-    queryKey: ['production-steps', opId, companyId],
-    queryFn: () => base44.entities.ProductionStep.filter({ company_id: companyId, op_id: opId }),
-    enabled: !!opId && !!companyId,
-  });
-
-  const { data: resources = [] } = useQuery({
-    queryKey: ['resources-detail', companyId],
-    queryFn: () => base44.entities.Resource.filter({ company_id: companyId }, 'name', 1000),
-    enabled: !!companyId,
-  });
-
-  const { data: warehouses = [] } = useQuery({
-    queryKey: ['warehouses', companyId],
-    queryFn: () => base44.entities.Warehouse.filter({ company_id: companyId, active: true }),
-    enabled: !!companyId,
-  });
-
-  const { data: locations = [] } = useQuery({
-    queryKey: ['locations', companyId],
-    queryFn: () => base44.entities.Location.filter({ company_id: companyId, active: true }),
-    enabled: !!companyId,
-  });
-
-  const { data: bomDeliveries = [] } = useQuery({
-    queryKey: ['bom-deliveries-op', opId, companyId],
-    queryFn: () => base44.entities.BOMDeliveryControl.filter({ op_id: opId }),
-    enabled: !!opId && !!companyId,
-  });
-
-  const { data: materialConsumptions = [] } = useQuery({
-    queryKey: ['material-consumptions-op', opId, companyId],
-    queryFn: () => base44.entities.MaterialConsumption.filter({ company_id: companyId, op_id: opId }),
-    enabled: !!opId && !!companyId,
-  });
 
   // Scroll to anchor on load
   useEffect(() => {
