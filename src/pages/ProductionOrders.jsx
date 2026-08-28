@@ -1,11 +1,11 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { validateProductionOrderCancellation, validateProductionOrderClose } from '@/functions/validateOperationCancellation';
 import { useCompanyId } from '@/components/useCompanyId';
 import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
-import { Plus, Search, Eye, MoreHorizontal, Factory, Play, Pause, CheckCircle, XCircle, Link as LinkIcon, QrCode, AlertCircle, Loader2, Users } from 'lucide-react';
+import { Plus, Search, Eye, MoreHorizontal, Factory, Play, Pause, CheckCircle, XCircle, Link as LinkIcon, QrCode, AlertCircle, Loader2, Users, Copy } from 'lucide-react';
 import QRCode from 'qrcode.react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -53,28 +53,40 @@ const PRIORITY_CONFIG = {
   URGENTE: { color: 'bg-rose-100 text-rose-700', label: 'Urgente' },
 };
 
-function CreateOPForm({ products, routes, orders, warehouses, locations, onSave, onCancel, loading, companyId }) {
+function CreateOPForm({ products, routes, orders, warehouses, locations, onSave, onCancel, loading, companyId, initialData }) {
   const [form, setForm] = useState({
-    numero_op_externo: '',
-    product_id: '',
-    product_name: '',
-    route_id: '',
-    route_name: '',
-    qty_planned: 1,
-    priority: 'NORMAL',
-    start_date: '',
-    due_date: '',
-    parent_op_id: '',
-    warehouse_id: '',
-    warehouse_name: '',
-    location_id: '',
-    location_barcode: '',
-    notes: '',
-    client_id: '',
-    client_name: ''
+    numero_op_externo: initialData?.numero_op_externo || '',
+    product_id: initialData?.product_id || '',
+    product_name: initialData?.product_name || '',
+    route_id: initialData?.route_id || '',
+    route_name: initialData?.route_name || '',
+    qty_planned: initialData?.qty_planned || 1,
+    priority: initialData?.priority || 'NORMAL',
+    start_date: initialData?.start_date || '',
+    due_date: initialData?.due_date || '',
+    parent_op_id: initialData?.parent_op_id || '',
+    warehouse_id: initialData?.warehouse_id || '',
+    warehouse_name: initialData?.warehouse_name || '',
+    location_id: initialData?.location_id || '',
+    location_barcode: initialData?.location_barcode || '',
+    notes: initialData?.notes || '',
+    client_id: initialData?.client_id || '',
+    client_name: initialData?.client_name || ''
   });
 
   const [warehouseLocations, setWarehouseLocations] = useState([]);
+
+  useEffect(() => {
+    if (initialData?.warehouse_id && companyId) {
+      base44.entities.Location.filter({
+        company_id: companyId,
+        warehouse_id: initialData.warehouse_id,
+        active: true
+      }).then(locs => {
+        setWarehouseLocations(locs || []);
+      });
+    }
+  }, [initialData, companyId]);
 
   const handleProductChange = (productId, product) => {
     const route = routes?.find(r => r.product_id === productId);
@@ -291,6 +303,7 @@ export default function ProductionOrders() {
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [copyOPData, setCopyOPData] = useState(null);
   const [qrDialogOpen, setQrDialogOpen] = useState(false);
   const [selectedOPForQR, setSelectedOPForQR] = useState(null);
   const [showCloseWarning, setShowCloseWarning] = useState(false);
@@ -663,7 +676,7 @@ export default function ProductionOrders() {
           <h1 className="text-2xl font-bold text-slate-900">Ordens de Produção</h1>
           <p className="text-slate-500">Gerencie as ordens de produção</p>
         </div>
-        <Button onClick={() => setDialogOpen(true)} className="bg-indigo-600 hover:bg-indigo-700">
+        <Button onClick={() => { setCopyOPData(null); setDialogOpen(true); }} className="bg-indigo-600 hover:bg-indigo-700">
           <Plus className="h-4 w-4 mr-2" />
           Nova OP
         </Button>
@@ -794,6 +807,31 @@ export default function ProductionOrders() {
                                 <Eye className="h-4 w-4 mr-2" />
                                 Ver Detalhes
                               </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => {
+                              setCopyOPData({
+                                numero_op_externo: op.numero_op_externo ? `${op.numero_op_externo}_COPIA` : '',
+                                product_id: op.product_id || '',
+                                product_name: op.product_name || '',
+                                route_id: op.route_id || '',
+                                route_name: op.route_name || '',
+                                qty_planned: op.qty_planned || 1,
+                                priority: op.priority || 'NORMAL',
+                                start_date: op.start_date || '',
+                                due_date: op.due_date || '',
+                                parent_op_id: op.parent_op_id || '',
+                                warehouse_id: op.warehouse_id || '',
+                                warehouse_name: op.warehouse_name || '',
+                                location_id: op.location_id || '',
+                                location_barcode: op.location_barcode || '',
+                                notes: op.notes || '',
+                                client_id: op.client_id || '',
+                                client_name: op.client_name || ''
+                              });
+                              setDialogOpen(true);
+                            }}>
+                              <Copy className="h-4 w-4 mr-2" />
+                              Copiar OP
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => {
                               setSelectedOPForQR(op);
@@ -930,6 +968,7 @@ export default function ProductionOrders() {
             onSave={(data) => createMutation.mutate(data)}
             onCancel={() => setDialogOpen(false)}
             loading={createMutation.isPending}
+            initialData={copyOPData}
           />
         </DialogContent>
       </Dialog>
