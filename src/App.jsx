@@ -12,6 +12,7 @@ import FactoryDashboard from './pages/FactoryDashboard';
 import DeduplicateProducts from './pages/DeduplicateProducts';
 import Login from './pages/Login';
 import PublicServiceOrderReport from './pages/PublicServiceOrderReport';
+import ErrorBoundary from '@/components/ErrorBoundary';
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -84,7 +85,11 @@ function App() {
         <NavigationTracker />
         <Routes>
           <Route path="/public/os/:id" element={<PublicServiceOrderReport />} />
-          <Route path="*" element={<AuthenticatedApp />} />
+          <Route path="*" element={
+            <ErrorBoundary>
+              <AuthenticatedApp />
+            </ErrorBoundary>
+          } />
         </Routes>
       </Router>
       <Toaster />

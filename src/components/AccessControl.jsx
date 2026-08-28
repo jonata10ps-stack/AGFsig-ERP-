@@ -134,7 +134,7 @@ export default function AccessControl({ children, currentPageName }) {
               Dúvidas? Fale com seu gestor.
             </p>
             <Button
-              onClick={() => window.location.href = '#/Dashboard'}
+              onClick={() => window.location.href = '/'}
               className="w-full bg-indigo-600"
             >
               Voltar ao Início

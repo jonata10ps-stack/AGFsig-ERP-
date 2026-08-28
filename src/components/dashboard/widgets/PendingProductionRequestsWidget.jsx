@@ -115,7 +115,15 @@ export default function PendingProductionRequestsWidget() {
                           </Badge>
                         </TableCell>
                         <TableCell className="text-sm text-slate-500">
-                          {request.due_date ? format(new Date(request.due_date), 'dd/MM', { locale: ptBR }) : '-'}
+                          {(() => {
+                            if (!request.due_date) return '-';
+                            try {
+                              const d = new Date(request.due_date);
+                              return !isNaN(d.getTime()) ? format(d, 'dd/MM', { locale: ptBR }) : '-';
+                            } catch (e) {
+                              return '-';
+                            }
+                          })()}
                         </TableCell>
                       </TableRow>
                     );

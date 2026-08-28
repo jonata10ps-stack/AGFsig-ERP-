@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { useCompanyId } from '@/components/useCompanyId';
@@ -70,8 +70,8 @@ export default function ProspectionDashboard() {
   }, [user, allSellers]);
 
   // If user is a seller but not manager/admin, fix the selected seller
-  useMemo(() => {
-    if (selectedSeller === 'all' && !accessContext.isAdmin && !accessContext.isManager && accessContext.isSeller) {
+  useEffect(() => {
+    if (selectedSeller === 'all' && !accessContext.isAdmin && !accessContext.isManager && accessContext.isSeller && accessContext.currentSellerId) {
         setSelectedSeller(accessContext.currentSellerId);
     }
   }, [accessContext, selectedSeller]);
