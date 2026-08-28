@@ -10,6 +10,7 @@ import { ArrowLeft, Plus, Trash2, Save, CheckCircle, FileText, Download, X, Prin
 import { Button } from '@/components/ui/button';
 import QuotePrintTemplate from '@/components/quotes/QuotePrintTemplate';
 import CancelOrderDialog from '@/components/sales/CancelOrderDialog';
+import CommercialPipelineBadge from '@/components/commercial/CommercialPipelineBadge';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -657,6 +658,8 @@ export default function QuoteDetail() {
         total_amount: quote.total_amount,
         delivery_date: quote.delivery_date,
         notes: quote.notes,
+        project_id: quote.project_id || null,
+        visit_id: quote.visit_id || null,
       });
 
       await Promise.all(
@@ -788,9 +791,18 @@ export default function QuoteDetail() {
             <h1 className="text-2xl font-bold text-slate-900">
               Orçamento {quote.quote_number}
             </h1>
-            <Badge className={STATUS_CONFIG[quote.status]?.color}>
-              {STATUS_CONFIG[quote.status]?.label}
-            </Badge>
+            <div className="flex items-center gap-2 flex-wrap mt-1">
+              <Badge className={STATUS_CONFIG[quote.status]?.color}>
+                {STATUS_CONFIG[quote.status]?.label}
+              </Badge>
+              {(quote.project_id || quote.visit_id) && (
+                <CommercialPipelineBadge
+                  current="quote"
+                  visitId={quote.visit_id || undefined}
+                  projectId={quote.project_id || undefined}
+                />
+              )}
+            </div>
           </div>
         </div>
         <div className="flex gap-2">

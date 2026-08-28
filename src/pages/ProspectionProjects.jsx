@@ -1,15 +1,16 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { useCompanyId } from '@/components/useCompanyId';
 import { useAuth } from '@/lib/AuthContext';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import ProspectionProjectsDashboard from '@/components/ProspectionProjectsDashboard';
 import ClientSearchSelect from '@/components/clients/ClientSearchSelect';
+import CommercialPipelineBadge from '@/components/commercial/CommercialPipelineBadge';
 import {
   Plus, Search, Filter, MapPin, Image, Zap, Eye, Trash2, Edit,
-  ArrowLeft, X, Clock, CheckCircle2, AlertCircle, Share2, FileText, Download
+  ArrowLeft, X, Clock, CheckCircle2, AlertCircle, Share2, FileText, Download, ShoppingCart
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -58,6 +59,16 @@ export default function ProspectionProjects() {
   const { companyId } = useCompanyId();
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // Read URL params from visit navigation
+  const urlP = new URLSearchParams(location.search);
+  const urlVisitId = urlP.get('visit_id') || '';
+  const urlClientId = urlP.get('client_id') || '';
+  const urlClientName = urlP.get('client_name') || '';
+  const urlSellerId = urlP.get('seller_id') || '';
+  const urlSellerName = urlP.get('seller_name') || '';
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -79,9 +90,25 @@ export default function ProspectionProjects() {
     photos: [],
     attachments: [],
     seller_id: '',
-    seller_name: ''
+    seller_name: '',
+    visit_id: ''
   });
   const [clientInputMode, setClientInputMode] = useState('select');
+
+  // Auto-open form when coming from a visit
+  useEffect(() => {
+    if (urlVisitId) {
+      setFormData(prev => ({
+        ...prev,
+        visit_id: urlVisitId,
+        client_id: urlClientId,
+        client_name: urlClientName,
+        seller_id: urlSellerId,
+        seller_name: urlSellerName,
+      }));
+      setDialogOpen(true);
+    }
+  }, [urlVisitId]);
 
   // Fetch all sellers first to determine management/team
   const { data: allSellers = [] } = useQuery({
@@ -127,6 +154,12 @@ export default function ProspectionProjects() {
     refetchInterval: 60000,
   });
 
+  const { data: visits = [] } = useQuery({
+    queryKey: ['prospection-visits', companyId],
+    queryFn: () => companyId ? base44.entities.ProspectionVisit.filter({ company_id: companyId }, '-visit_date') : Promise.resolve([]),
+    enabled: !!companyId,
+  });
+
   const authorizedSellers = useMemo(() => {
     if (accessContext.isAdmin) return allSellers;
     if (accessContext.isManager) {
@@ -168,7 +201,8 @@ export default function ProspectionProjects() {
         photos: formData.photos,
         attachments: formData.attachments,
         seller_id: formData.seller_id || user?.id,
-        seller_name: formData.seller_name || user?.full_name
+        seller_name: formData.seller_name || user?.full_name,
+        visit_id: formData.visit_id || null,
       };
 
       if (editingProject) {
@@ -229,10 +263,25 @@ export default function ProspectionProjects() {
       photos: [],
       attachments: [],
       seller_id: user?.id || '',
-      seller_name: user?.full_name || ''
+      seller_name: user?.full_name || '',
+      visit_id: ''
     });
     setEditingProject(null);
     setClientInputMode('select');
+  };
+
+  const handleGenerateQuote = (project) => {
+    // Navigate to Quotes page with project context encoded in URL
+    const params = new URLSearchParams({
+      project_id: project.id,
+      project_name: project.project_name,
+      client_id: project.client_id || '',
+      client_name: project.client_name || '',
+      seller_id: project.seller_id || '',
+      seller_name: project.seller_name || '',
+      visit_id: project.visit_id || '',
+    });
+    navigate(createPageUrl('Quotes') + '?' + params.toString());
   };
 
   const handleOpenDialog = (project = null) => {
@@ -511,8 +560,31 @@ export default function ProspectionProjects() {
                     </div>
                   )}
 
+                  {/* Pipeline Badge */}
+                  {(project.visit_id || project.quote_id || project.sales_order_id) && (
+                    <div className="pt-2 border-t">
+                      <CommercialPipelineBadge
+                        current="project"
+                        visitId={project.visit_id || undefined}
+                        quoteId={project.quote_id || undefined}
+                        orderId={project.sales_order_id || undefined}
+                      />
+                    </div>
+                  )}
+
                   {/* Actions */}
                   <div className="flex gap-2 pt-3 border-t">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleGenerateQuote(project)}
+                      className="flex-1 text-blue-600 hover:text-blue-700 border-blue-200 hover:border-blue-400"
+                    >
+                      <ShoppingCart className="h-4 w-4 mr-2" />
+                      Gerar Orçamento
+                    </Button>
+                  </div>
+                  <div className="flex gap-2">
                     <Button
                       variant="outline"
                       size="sm"
@@ -675,6 +747,24 @@ export default function ProspectionProjects() {
                 <SelectContent>
                   {Object.entries(STATUS_CONFIG).map(([key, config]) => (
                     <SelectItem key={key} value={key}>{config.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Visita de Origem */}
+            <div>
+              <label className="text-sm font-medium text-slate-700">Visita de Prospecção de Origem (opcional)</label>
+              <Select value={formData.visit_id || ''} onValueChange={(val) => setFormData({ ...formData, visit_id: val === '__none__' ? '' : val })}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Vincular a uma visita existente..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Nenhuma visita</SelectItem>
+                  {visits.map(v => (
+                    <SelectItem key={v.id} value={v.id}>
+                      {v.visit_date} – {v.client_name || v.prospective_client_name || 'Sem nome'} ({v.seller_name})
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>

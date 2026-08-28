@@ -11,6 +11,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import OrderPrintTemplate from '@/components/sales/OrderPrintTemplate';
+import CommercialPipelineBadge from '@/components/commercial/CommercialPipelineBadge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -596,14 +597,23 @@ export default function SalesOrderDetail() {
             <h1 className="text-2xl font-bold text-slate-900">
               Pedido {order.order_number || `#${order.id.slice(0, 8)}`}
             </h1>
-            <Badge className={STATUS_CONFIG[order.status]?.color}>
-              {STATUS_CONFIG[order.status]?.label || order.status}
-            </Badge>
-            {order.is_shipment && (
-              <Badge variant="outline" className="ml-2 border-indigo-200 text-indigo-700 bg-indigo-50 font-bold uppercase text-[10px]">
-                Remessa
+            <div className="flex items-center gap-2 flex-wrap mt-1">
+              <Badge className={STATUS_CONFIG[order.status]?.color}>
+                {STATUS_CONFIG[order.status]?.label || order.status}
               </Badge>
-            )}
+              {order.is_shipment && (
+                <Badge variant="outline" className="border-indigo-200 text-indigo-700 bg-indigo-50 font-bold uppercase text-[10px]">
+                  Remessa
+                </Badge>
+              )}
+              {(order.project_id || order.visit_id) && (
+                <CommercialPipelineBadge
+                  current="order"
+                  visitId={order.visit_id || undefined}
+                  projectId={order.project_id || undefined}
+                />
+              )}
+            </div>
           </div>
         </div>
         <div className="flex gap-2">

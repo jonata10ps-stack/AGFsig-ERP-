@@ -1,9 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { createPageUrl } from '@/utils';
-import { Link } from 'react-router-dom';
-import { Plus, Search, Eye, Trash2, MoreHorizontal, FileText } from 'lucide-react';
+import { Link, useLocation } from 'react-router-dom';
+import { Plus, Search, Eye, Trash2, MoreHorizontal, FileText, Layers } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
@@ -28,6 +28,7 @@ import { ptBR } from 'date-fns/locale';
 import { useCompanyId } from '@/components/useCompanyId';
 import { useAuth } from '@/lib/AuthContext';
 import ClientSearchSelect from '@/components/clients/ClientSearchSelect';
+import CommercialPipelineBadge from '@/components/commercial/CommercialPipelineBadge';
 
 const STATUS_CONFIG = {
   RASCUNHO: { color: 'bg-slate-100 text-slate-700', label: 'Rascunho' },
@@ -37,12 +38,12 @@ const STATUS_CONFIG = {
   EXPIRADO: { color: 'bg-amber-100 text-amber-700', label: 'Expirado' },
 };
 
-function NewQuoteForm({ clients, sellers, paymentConditions, onSave, onCancel, loading }) {
+function NewQuoteForm({ clients, sellers, paymentConditions, onSave, onCancel, loading, initialData }) {
   const [form, setForm] = useState({ 
-    client_id: '', 
-    client_name: '',
-    seller_id: '',
-    seller_name: '',
+    client_id: initialData?.client_id || '', 
+    client_name: initialData?.client_name || '',
+    seller_id: initialData?.seller_id || '',
+    seller_name: initialData?.seller_name || '',
     payment_condition_id: '',
     payment_condition_name: '',
     validity_date: '',
@@ -156,10 +157,28 @@ export default function Quotes() {
   const queryClient = useQueryClient();
   const { companyId, loading: companyLoading } = useCompanyId();
   const { user } = useAuth();
+  const location = useLocation();
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
+
+  // Read project/visit context from URL
+  const urlParams = new URLSearchParams(location.search);
+  const urlProjectId = urlParams.get('project_id') || '';
+  const urlProjectName = urlParams.get('project_name') || '';
+  const urlClientId = urlParams.get('client_id') || '';
+  const urlClientName = urlParams.get('client_name') || '';
+  const urlSellerId = urlParams.get('seller_id') || '';
+  const urlSellerName = urlParams.get('seller_name') || '';
+  const urlVisitId = urlParams.get('visit_id') || '';
+
+  // Auto-open dialog when navigated from project
+  useEffect(() => {
+    if (urlProjectId) {
+      setDialogOpen(true);
+    }
+  }, [urlProjectId]);
 
   // Fetch all sellers first to determine management/team
   const { data: allSellers = [] } = useQuery({
@@ -308,6 +327,8 @@ export default function Quotes() {
         notes: data.notes || '',
         status: 'RASCUNHO',
         total_amount: 0,
+        project_id: urlProjectId || null,
+        visit_id: urlVisitId || null,
       });
     },
     onSuccess: (quote) => {
@@ -443,7 +464,18 @@ export default function Quotes() {
                         {quote.quote_number || `#${quote.id.slice(0, 8)}`}
                       </span>
                     </TableCell>
-                    <TableCell className="font-medium">{quote.client_name}</TableCell>
+                  <TableCell className="font-medium">
+                      <div>{quote.client_name}</div>
+                      {quote.project_id && (
+                        <div className="mt-1">
+                          <CommercialPipelineBadge
+                            current="quote"
+                            projectId={quote.project_id || undefined}
+                            visitId={quote.visit_id || undefined}
+                          />
+                        </div>
+                      )}
+                  </TableCell>
                     <TableCell className="text-slate-500">
                       {quote.created_date ? format(new Date(quote.created_date), 'dd/MM/yyyy', { locale: ptBR }) : 'N/A'}
                     </TableCell>
@@ -551,6 +583,12 @@ export default function Quotes() {
             onSave={(data) => createMutation.mutate(data)}
             onCancel={() => setDialogOpen(false)}
             loading={createMutation.isPending}
+            initialData={{
+              client_id: urlClientId,
+              client_name: urlClientName,
+              seller_id: urlSellerId,
+              seller_name: urlSellerName,
+            }}
           />
         </DialogContent>
       </Dialog>

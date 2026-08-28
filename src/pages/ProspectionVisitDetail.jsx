@@ -3,14 +3,15 @@ import { useQuery } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { useAuth } from '@/lib/AuthContext';
 import { useCompanyId } from '@/components/useCompanyId';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
-import { ArrowLeft, Edit, Calendar, MapPin, Clock, Car, FileText, TrendingUp } from 'lucide-react';
+import { ArrowLeft, Edit, Calendar, MapPin, Clock, Car, FileText, TrendingUp, Layers } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
+import CommercialPipelineBadge from '@/components/commercial/CommercialPipelineBadge';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -30,6 +31,7 @@ const resultColors = {
 export default function ProspectionVisitDetail() {
   const { companyId } = useCompanyId();
   const { user } = useAuth();
+  const navigate = useNavigate();
   const urlParams = new URLSearchParams(window.location.search);
   const visitId = urlParams.get('id');
 
@@ -93,6 +95,17 @@ export default function ProspectionVisitDetail() {
 
   const kmPercorridos = visit.vehicle_km_end - visit.vehicle_km_start;
 
+  const handleGenerateProject = () => {
+    const params = new URLSearchParams({
+      visit_id: visit.id,
+      client_id: visit.client_id || '',
+      client_name: visit.client_name || visit.prospective_client_name || '',
+      seller_id: visit.seller_id || '',
+      seller_name: visit.seller_name || '',
+    });
+    navigate(createPageUrl('ProspectionProjects') + '?' + params.toString());
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -104,7 +117,7 @@ export default function ProspectionVisitDetail() {
           </Link>
           <div>
             <h1 className="text-2xl font-bold text-slate-900">Visita {visit.visit_number}</h1>
-            <div className="flex gap-2 mt-1">
+            <div className="flex gap-2 mt-1 flex-wrap items-center">
               <Badge className={statusColors[visit.status]}>{visit.status}</Badge>
               {visit.result && (
                 <Badge className={resultColors[visit.result]}>
@@ -112,15 +125,27 @@ export default function ProspectionVisitDetail() {
                 </Badge>
               )}
               <Badge variant="outline">{visit.visit_type?.replace('_', ' ')}</Badge>
+              {visit.project_id && (
+                <CommercialPipelineBadge
+                  current="visit"
+                  projectId={visit.project_id || undefined}
+                />
+              )}
             </div>
           </div>
         </div>
-        <Link to={createPageUrl('ProspectionVisitForm') + '?id=' + visit.id}>
-          <Button>
-            <Edit className="h-4 w-4 mr-2" />
-            Editar
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleGenerateProject} className="gap-2 text-purple-600 border-purple-200 hover:border-purple-400">
+            <Layers className="h-4 w-4" />
+            Gerar Projeto
           </Button>
-        </Link>
+          <Link to={createPageUrl('ProspectionVisitForm') + '?id=' + visit.id}>
+            <Button>
+              <Edit className="h-4 w-4 mr-2" />
+              Editar
+            </Button>
+          </Link>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
