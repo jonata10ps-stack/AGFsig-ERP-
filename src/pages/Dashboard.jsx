@@ -62,10 +62,22 @@ export default function Dashboard() {
   });
 
   useEffect(() => {
-    if (config?.widgets && config.widgets.length > 0) {
-      setWidgets(config.widgets);
+    if (config?.widgets) {
+      let parsed = config.widgets;
+      if (typeof parsed === 'string') {
+        try {
+          parsed = JSON.parse(parsed);
+        } catch (e) {
+          parsed = [];
+        }
+      }
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        setWidgets(parsed);
+      }
     }
   }, [config]);
+
+  const safeWidgets = Array.isArray(widgets) ? widgets : DEFAULT_WIDGETS;
 
   const saveConfigMutation = useMutation({
     mutationFn: async (newWidgets) => {
@@ -91,7 +103,7 @@ export default function Dashboard() {
   const handleDragEnd = (result) => {
     if (!result.destination) return;
 
-    const newWidgets = Array.from(widgets);
+    const newWidgets = Array.from(safeWidgets);
     const [reordered] = newWidgets.splice(result.source.index, 1);
     newWidgets.splice(result.destination.index, 0, reordered);
 
@@ -101,13 +113,13 @@ export default function Dashboard() {
   };
 
   const handleRemoveWidget = (widgetId) => {
-    const newWidgets = widgets.filter(w => w.id !== widgetId).map((w, index) => ({ ...w, position: index }));
+    const newWidgets = safeWidgets.filter(w => w.id !== widgetId).map((w, index) => ({ ...w, position: index }));
     setWidgets(newWidgets);
     saveConfigMutation.mutate(newWidgets);
   };
 
   const handleAddWidget = (widget) => {
-    const newWidgets = [...widgets, widget];
+    const newWidgets = [...safeWidgets, widget];
     setWidgets(newWidgets);
     saveConfigMutation.mutate(newWidgets);
   };
@@ -184,7 +196,7 @@ export default function Dashboard() {
               ref={provided.innerRef}
               className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"
             >
-              {widgets.map((widget, index) => {
+              {safeWidgets.map((widget, index) => {
                 const WidgetComponent = WIDGET_COMPONENTS[widget.id];
                 if (!WidgetComponent) return null;
 
@@ -233,7 +245,7 @@ export default function Dashboard() {
         </Droppable>
       </DragDropContext>
 
-      {widgets.length === 0 && (
+      {safeWidgets.length === 0 && (
         <div className="text-center py-12 border-2 border-dashed border-slate-200 rounded-lg">
           <p className="text-slate-500 mb-4">Nenhum widget adicionado</p>
           <Button onClick={() => setShowSelector(true)}>
