@@ -55,9 +55,10 @@ const AVAILABLE_WIDGETS = [
   },
 ];
 
-export default function WidgetSelector({ open, onClose, onAddWidget, existingWidgets }) {
+export default function WidgetSelector({ open, onClose, onAddWidget, existingWidgets = [] }) {
+  const safeExisting = Array.isArray(existingWidgets) ? existingWidgets : [];
   const availableToAdd = AVAILABLE_WIDGETS.filter(
-    w => !existingWidgets.find(ew => ew.id === w.id)
+    w => !safeExisting.find(ew => ew?.id === w.id)
   );
 
   return (

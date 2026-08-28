@@ -27,11 +27,12 @@ export default function CompanySelector() {
   if (!user) return null;
 
   // Filtrar apenas empresas que o usuário tem acesso
-  const companies = user.company_ids && user.company_ids.length > 0 
-    ? allCompanies.filter(c => user.company_ids.includes(c.id))
-    : allCompanies;
+  const safeAllCompanies = Array.isArray(allCompanies) ? allCompanies : [];
+  const companies = (Array.isArray(user?.company_ids) && user.company_ids.length > 0)
+    ? safeAllCompanies.filter(c => user.company_ids.includes(c.id))
+    : safeAllCompanies;
 
-  const currentCompany = companies.find(c => c.id === userCompanyId);
+  const currentCompany = Array.isArray(companies) ? companies.find(c => c?.id === userCompanyId) : null;
 
   const handleCompanyChange = async (companyId) => {
     try {

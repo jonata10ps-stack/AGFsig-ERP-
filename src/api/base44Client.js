@@ -254,9 +254,10 @@ export const base44 = {
           .order('created_at', { ascending: false });
         
         // Pega o melhor perfil disponível (prioriza admin e ativos de forma estável)
-        const profile = (profiles || []).find(p => String(p.role).toLowerCase() === 'admin') 
-                        || (profiles || []).find(p => p.account_status === 'ATIVO' || p.account_status === 'APROVADO')
-                        || (profiles || [])[0] 
+        const profileList = Array.isArray(profiles) ? profiles : [];
+        const profile = profileList.find(p => String(p.role).toLowerCase() === 'admin') 
+                        || profileList.find(p => p.account_status === 'ATIVO' || p.account_status === 'APROVADO')
+                        || profileList[0] 
                         || null;
 
         // Utilitário de parsing robusto

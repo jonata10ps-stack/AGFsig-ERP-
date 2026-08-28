@@ -22,6 +22,8 @@ export default function ProductionOPWidget() {
     enabled: !!companyId,
   });
 
+  const safeOrders = Array.isArray(orders) ? orders : [];
+
   const statusColors = {
     ABERTA: 'bg-blue-100 text-blue-700',
     EM_ANDAMENTO: 'bg-amber-100 text-amber-700',
@@ -58,14 +60,14 @@ export default function ProductionOPWidget() {
         </Link>
       </CardHeader>
       <CardContent>
-        {orders?.length === 0 ? (
+        {safeOrders.length === 0 ? (
           <div className="text-center py-6 text-slate-500">
             <Factory className="h-10 w-10 mx-auto mb-2 text-slate-300" />
             <p className="text-sm">Nenhuma OP ativa</p>
           </div>
         ) : (
           <div className="space-y-2">
-            {orders?.map((op) => (
+            {safeOrders.map((op) => (
               <div key={op.id} className="p-2 bg-slate-50 rounded-lg">
                 <div className="flex items-center justify-between mb-1">
                   <p className="font-medium text-sm text-slate-900">

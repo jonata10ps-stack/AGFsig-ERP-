@@ -20,6 +20,8 @@ export default function RecentOrdersWidget() {
     enabled: !!companyId,
   });
 
+  const safeOrders = Array.isArray(orders) ? orders : [];
+
   const statusColors = {
     RASCUNHO: 'bg-slate-100 text-slate-700',
     CONFIRMADO: 'bg-blue-100 text-blue-700',
@@ -59,14 +61,14 @@ export default function RecentOrdersWidget() {
         </Link>
       </CardHeader>
       <CardContent>
-        {orders?.length === 0 ? (
+        {safeOrders.length === 0 ? (
           <div className="text-center py-6 text-slate-500">
             <ShoppingCart className="h-10 w-10 mx-auto mb-2 text-slate-300" />
             <p className="text-sm">Nenhum pedido</p>
           </div>
         ) : (
           <div className="space-y-3">
-            {orders?.map((order) => (
+            {safeOrders.map((order) => (
               <div key={order.id} className="flex items-center justify-between p-2 bg-slate-50 rounded-lg cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => navigate(createPageUrl('SalesOrderDetail') + `?id=${order.id}`)}>
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-sm text-slate-900 truncate">

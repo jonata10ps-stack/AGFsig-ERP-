@@ -49,17 +49,18 @@ export default function ProspectionDashboard() {
 
   // Calculate access context
   const accessContext = useMemo(() => {
-    if (!user || !allSellers) return { isAdmin: false, isManager: false, isSeller: false, managedSellerIds: [], currentSellerId: null };
+    const safeSellers = Array.isArray(allSellers) ? allSellers : [];
+    if (!user || safeSellers.length === 0) return { isAdmin: false, isManager: false, isSeller: false, managedSellerIds: [], currentSellerId: null };
 
     const isAdmin = user.role?.toLowerCase() === 'admin' || user.email?.toLowerCase() === 'jonata.santos@agfequipamentos.com.br';
     
     // Check if user is a seller (by email)
-    const sellerRecord = allSellers.find(s => s.email?.toLowerCase() === user.email?.toLowerCase());
+    const sellerRecord = safeSellers.find(s => s.email?.toLowerCase() === user.email?.toLowerCase());
     const isSeller = !!sellerRecord;
     const currentSellerId = sellerRecord?.id || null;
 
     // Check if user is a manager (any seller has them in manager_ids)
-    const managedSellers = allSellers.filter(s => {
+    const managedSellers = safeSellers.filter(s => {
         const managers = Array.isArray(s.manager_ids) ? s.manager_ids : [];
         return managers.includes(user.id);
     });
