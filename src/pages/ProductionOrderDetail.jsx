@@ -69,6 +69,74 @@ export default function ProductionOrderDetail() {
   const initializingRef = useRef(false);
   const initializingTimeoutRef = useRef(null);
 
+  const [diagnostics, setDiagnostics] = useState(null);
+
+  useEffect(() => {
+    if (!op?.product_id || !companyId) return;
+
+    const runDiagnostics = async () => {
+      try {
+        const boms = await base44.entities.BOM.filter({ company_id: companyId, product_id: op.product_id });
+        const activeBOM = boms?.find(b => b.is_active === true || b.is_active === 'true' || b.is_active === 'TRUE') || boms?.[0];
+        
+        let activeVersion = null;
+        let versionRoutes = [];
+        let versionRoutesSteps = [];
+
+        if (activeBOM) {
+          const versions = await base44.entities.BOMVersion.filter({ bom_id: activeBOM.id }, '-version_number');
+          activeVersion = versions.find(v => v.id === activeBOM.current_version_id) || 
+                          versions.find(v => v.is_active === true || v.is_active === 'true' || v.is_active === 'TRUE') || 
+                          versions[0];
+          
+          if (activeVersion?.routes) {
+            versionRoutes = typeof activeVersion.routes === 'string' 
+              ? JSON.parse(activeVersion.routes) 
+              : activeVersion.routes;
+            
+            if (!Array.isArray(versionRoutes)) versionRoutes = [];
+
+            for (const r of versionRoutes) {
+              const rId = typeof r === 'string' ? r : (r?.route_id || r?.id || r?.route);
+              if (rId) {
+                const stepsList = await base44.entities.ProductionRouteStep.filter({ route_id: rId });
+                versionRoutesSteps.push({
+                  route_id: rId,
+                  route_name: typeof r === 'string' ? 'Desconhecido' : (r?.route_name || r?.name),
+                  steps: stepsList.map(s => s.name)
+                });
+              }
+            }
+          }
+        }
+
+        let opRouteSteps = [];
+        if (op.route_id) {
+          const stepsList = await base44.entities.ProductionRouteStep.filter({ route_id: op.route_id });
+          opRouteSteps = stepsList.map(s => s.name);
+        }
+
+        setDiagnostics({
+          bomsCount: boms?.length || 0,
+          activeBOMId: activeBOM?.id || 'Nenhum',
+          activeBOMName: activeBOM?.name || 'Nenhum',
+          activeBOMIsActive: activeBOM?.is_active,
+          activeVersionId: activeVersion?.id || 'Nenhum',
+          activeVersionNumber: activeVersion?.version_number || 'Nenhum',
+          versionRoutes,
+          versionRoutesSteps,
+          opRouteId: op.route_id || 'Nenhum',
+          opRouteName: op.route_name || 'Nenhum',
+          opRouteSteps
+        });
+      } catch (err) {
+        console.error('Error running diagnostics:', err);
+      }
+    };
+
+    runDiagnostics();
+  }, [op, companyId]);
+
   const { data: op, isLoading: loadingOP } = useQuery({
     queryKey: ['production-order', opId, companyId],
     queryFn: () => base44.entities.ProductionOrder.filter({ company_id: companyId, id: opId }),
@@ -1456,6 +1524,40 @@ export default function ProductionOrderDetail() {
         </DialogContent>
       </Dialog>
 
+
+      {/* Bloco de Diagnóstico */}
+      <div className="mt-8 p-6 bg-slate-900 text-slate-100 rounded-xl space-y-4 font-mono text-xs">
+        <h3 className="text-sm font-bold text-amber-400">🔧 Diagnóstico do Fluxo de Produção</h3>
+        {diagnostics ? (
+          <div className="space-y-2">
+            <p><strong>BOMs Encontradas:</strong> {diagnostics.bomsCount}</p>
+            <p><strong>BOM Ativa:</strong> ID: {diagnostics.activeBOMId} | Nome: {diagnostics.activeBOMName} | is_active: {String(diagnostics.activeBOMIsActive)}</p>
+            <p><strong>Versão Ativa:</strong> ID: {diagnostics.activeVersionId} | Versão: {diagnostics.activeVersionNumber}</p>
+            <div>
+              <strong>Roteiros na Versão ({diagnostics.versionRoutes.length}):</strong>
+              <pre className="bg-slate-800 p-2 rounded mt-1 overflow-x-auto text-[10px]">
+                {JSON.stringify(diagnostics.versionRoutes, null, 2)}
+              </pre>
+            </div>
+            <div>
+              <strong>Passos dos Roteiros da Versão:</strong>
+              <ul className="list-disc pl-4 space-y-1 mt-1">
+                {diagnostics.versionRoutesSteps.map((vr, i) => (
+                  <li key={i}>
+                    Roteiro: {vr.route_name} ({vr.route_id}) {"->"} Etapas ({vr.steps.length}): {vr.steps.join(', ') || 'NENHUMA ETAPA ENCONTRADA'}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="border-t border-slate-800 pt-2">
+              <p><strong>Rota Direta da OP:</strong> ID: {diagnostics.opRouteId} | Nome: {diagnostics.opRouteName}</p>
+              <p><strong>Passos da Rota da OP ({diagnostics.opRouteSteps.length}):</strong> {diagnostics.opRouteSteps.join(', ') || 'NENHUMA ETAPA ENCONTRADA'}</p>
+            </div>
+          </div>
+        ) : (
+          <p>Carregando diagnóstico...</p>
+        )}
+      </div>
 
     </div>
   );
