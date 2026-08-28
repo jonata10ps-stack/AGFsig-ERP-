@@ -155,9 +155,8 @@ export default function ProductionOrderDetail() {
 
         console.log('🏭 Iniciando geração de etapas para OP:', opId);
         
-        // 1. Buscar a BOM e sua versão ativa
         const boms = await base44.entities.BOM.filter({ company_id: companyId, product_id: op.product_id });
-        const bom = boms?.find(b => b.is_active) || boms?.[0];
+        const bom = boms?.find(b => b.is_active === true || b.is_active === 'true' || b.is_active === 'TRUE') || boms?.[0];
         
         if (!bom) throw new Error('BOM ativa não encontrada para este produto.');
 

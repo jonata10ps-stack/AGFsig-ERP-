@@ -318,15 +318,21 @@ export default function ProductionRequests() {
         const boms = await base44.entities.BOM.filter({
           company_id: companyId,
           product_id: request.product_id,
-          active: true
         });
 
-        if (boms?.[0]) {
-          const bom = boms[0];
-          const bomItems = await base44.entities.BOMItem.filter({
-            company_id: companyId,
-            bom_version_id: bom.current_version_id
-          });
+        const bom = boms?.find(b => b.is_active === true || b.is_active === 'true' || b.is_active === 'TRUE') || boms?.[0];
+
+        if (bom) {
+          const versions = await base44.entities.BOMVersion.filter({ bom_id: bom.id }, '-version_number');
+          const activeVersion = versions.find(v => v.id === bom.current_version_id) || 
+                               versions.find(v => v.is_active === true || v.is_active === 'true' || v.is_active === 'TRUE') || 
+                               versions[0];
+          
+          if (activeVersion) {
+            const bomItems = await base44.entities.BOMItem.filter({
+              company_id: companyId,
+              bom_version_id: activeVersion.id
+            });
 
           if (bomItems && bomItems.length > 0) {
             // Otimização: Coletar todos os IDs de roteiro de uma vez para evitar N chamadas ao banco
@@ -410,6 +416,7 @@ export default function ProductionRequests() {
 
             if (stepsToCreate.length > 0) {
               await base44.entities.ProductionStep.bulkCreate(stepsToCreate);
+            }
             }
           }
         }
