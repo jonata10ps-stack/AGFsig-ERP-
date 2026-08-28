@@ -375,6 +375,29 @@ export default function ProductionRequests() {
               }
             }
 
+            // 2. Incluir etapas do roteiro principal do produto (se associado à OP)
+            if (routeId) {
+              const mainRouteSteps = await base44.entities.ProductionRouteStep.filter({
+                company_id: companyId,
+                route_id: routeId
+              });
+              if (mainRouteSteps && mainRouteSteps.length > 0) {
+                for (const routeStep of mainRouteSteps.sort((a, b) => (Number(a.sequence) || 0) - (Number(b.sequence) || 0))) {
+                  stepsToCreate.push({
+                    company_id: companyId,
+                    op_id: newOP.id,
+                    sequence: globalSequence++,
+                    name: `${request.product_name}: ${routeStep.name}`,
+                    description: `Montagem Final - ${routeStep.description || ''}`,
+                    resource_type: routeStep.resource_type,
+                    resource_id: routeStep.resource_id,
+                    status: 'PENDENTE',
+                    estimated_time: routeStep.estimated_time
+                  });
+                }
+              }
+            }
+
             if (stepsToCreate.length > 0) {
               await base44.entities.ProductionStep.bulkCreate(stepsToCreate);
             }
