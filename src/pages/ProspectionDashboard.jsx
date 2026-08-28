@@ -76,33 +76,35 @@ export default function ProspectionDashboard() {
     }
   }, [accessContext, selectedSeller]);
 
-  const { data: visits, isLoading } = useQuery({
+  const { data: visits = [], isLoading: isLoadingVisits } = useQuery({
     queryKey: ['prospection-visits-dashboard', companyId],
     queryFn: () => companyId ? base44.entities.ProspectionVisit.filter({ company_id: companyId }, '-visit_date') : Promise.resolve([]),
     enabled: !!companyId,
     refetchInterval: 60000,
   });
 
-  const { data: dailyLogs } = useQuery({
+  const { data: dailyLogs = [], isLoading: isLoadingLogs } = useQuery({
     queryKey: ['daily-vehicle-logs-report', companyId],
     queryFn: () => companyId ? base44.entities.DailyVehicleLog.filter({ company_id: companyId }, '-log_date') : Promise.resolve([]),
     enabled: !!companyId,
     refetchInterval: 60000,
   });
 
-  const { data: quotes } = useQuery({
+  const { data: quotes = [], isLoading: isLoadingQuotes } = useQuery({
     queryKey: ['quotes-dashboard', companyId],
     queryFn: () => companyId ? base44.entities.Quote.filter({ company_id: companyId }, '-created_date') : Promise.resolve([]),
     enabled: !!companyId,
     refetchInterval: 60000,
   });
 
-  const { data: salesOrders } = useQuery({
+  const { data: salesOrders = [], isLoading: isLoadingOrders } = useQuery({
     queryKey: ['sales-orders-dashboard', companyId],
     queryFn: () => companyId ? base44.entities.SalesOrder.filter({ company_id: companyId }, '-created_date') : Promise.resolve([]),
     enabled: !!companyId,
     refetchInterval: 60000,
   });
+
+  const isLoading = isLoadingVisits || isLoadingLogs || isLoadingQuotes || isLoadingOrders;
 
   const { data: performances = [] } = useQuery({
     queryKey: ['consolidated-performances-dash', companyId, selectedYear],
@@ -458,7 +460,17 @@ export default function ProspectionDashboard() {
     );
   }
 
-  if (!stats || !kmReport || !quotesStats) return null;
+  if (!stats || !kmReport || !quotesStats) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-8 w-64" />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Skeleton className="h-96" />
+          <Skeleton className="h-96" />
+        </div>
+      </div>
+    );
+  }
 
   // Get years from all data items and ensure current year is an option
   const currentYear = new Date().getFullYear();

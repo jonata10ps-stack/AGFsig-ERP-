@@ -117,13 +117,19 @@ export default function Dashboard() {
     saveConfigMutation.mutate(DEFAULT_WIDGETS);
   };
 
-  // "Minha Agenda" only: usuário não-admin sem nenhum módulo dos AVAILABLE_MODULES
-  // (tem apenas acesso à agenda/prospecção)
   const MAIN_MODULES = ['Cadastros', 'Vendas', 'Estoque', 'Producao', 'PosVendas', 'Qualidade', 'Relatorios', 'Engenharia', 'GerenciamentoDados'];
-  const hasAnyMainModule = user?.role === 'admin' || MAIN_MODULES.some(m => user?.allowed_modules?.includes(m));
+  const userRole = String(user?.role || '').toLowerCase();
+  const userAllowed = Array.isArray(user?.allowed_modules) ? user.allowed_modules : [];
+  const hasAnyMainModule = userRole === 'admin' || MAIN_MODULES.some(m => userAllowed.includes(m));
   
   // Aguardar carregamento do usuário antes de decidir
-  if (!user) return null;
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center p-12 min-h-[400px]">
+        <div className="w-8 h-8 border-4 border-slate-200 border-t-indigo-600 rounded-full animate-spin"></div>
+      </div>
+    );
+  }
   
   if (!hasAnyMainModule) return <ProspectionDashboard />;
 
