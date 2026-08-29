@@ -276,8 +276,8 @@ export default function ProductionOrderDetail() {
                   name: `${bomItem.component_name}: ${rs.name}`,
                   description: rs.description || '',
                   status: 'PENDENTE',
-                  resource_type: rs.resource_type,
-                  resource_id: rs.resource_id,
+                  resource_type: rs.resource_type || null,
+                  resource_id: rs.resource_id || null,
                 });
               }
             } else {
@@ -349,8 +349,8 @@ export default function ProductionOrderDetail() {
                   name: `${op.product_name}: ${rs.name}`,
                   description: `Montagem Final - ${rs.description || ''}`,
                   status: 'PENDENTE',
-                  resource_type: rs.resource_type,
-                  resource_id: rs.resource_id,
+                  resource_type: rs.resource_type || null,
+                  resource_id: rs.resource_id || null,
                 });
               }
             } else {

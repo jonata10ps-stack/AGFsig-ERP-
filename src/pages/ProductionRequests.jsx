@@ -385,10 +385,10 @@ export default function ProductionRequests() {
                         sequence: globalSequence++,
                         name: routeStep.name,
                         description: `${bomItem.component_name} - ${routeStep.description || ''}`,
-                        resource_type: routeStep.resource_type,
-                        resource_id: routeStep.resource_id,
+                        resource_type: routeStep.resource_type || null,
+                        resource_id: routeStep.resource_id || null,
                         status: 'PENDENTE',
-                        estimated_time: routeStep.estimated_time
+                        estimated_time: routeStep.estimated_time || 0
                       });
                     }
                   } else {
@@ -423,10 +423,10 @@ export default function ProductionRequests() {
                     sequence: globalSequence++,
                     name: `${request.product_name}: ${routeStep.name}`,
                     description: `Montagem Final - ${routeStep.description || ''}`,
-                    resource_type: routeStep.resource_type,
-                    resource_id: routeStep.resource_id,
+                    resource_type: routeStep.resource_type || null,
+                    resource_id: routeStep.resource_id || null,
                     status: 'PENDENTE',
-                    estimated_time: routeStep.estimated_time
+                    estimated_time: routeStep.estimated_time || 0
                   });
                 }
               } else {
