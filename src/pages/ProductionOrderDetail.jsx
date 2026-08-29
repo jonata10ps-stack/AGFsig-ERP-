@@ -289,6 +289,8 @@ export default function ProductionOrderDetail() {
                 name: `${bomItem.component_name}: ${route?.name || 'Produção'}`,
                 description: `Processo de Fabricação`,
                 status: 'PENDENTE',
+                resource_type: null,
+                resource_id: null,
               });
             }
           }
@@ -360,6 +362,8 @@ export default function ProductionOrderDetail() {
                 name: `${op.product_name}: ${routeName}`,
                 description: `Montagem Final`,
                 status: 'PENDENTE',
+                resource_type: null,
+                resource_id: null,
               });
             }
           }

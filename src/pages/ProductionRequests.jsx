@@ -368,8 +368,11 @@ export default function ProductionRequests() {
                   op_id: newOP.id,
                   sequence: globalSequence++,
                   name: `${bomItem.component_name}`,
-                  description: `Componente: ${bomItem.component_sku}`,
-                  status: 'PENDENTE'
+                  description: `Componente: ${bomItem.component_sku || ''}`,
+                  status: 'PENDENTE',
+                  resource_type: null,
+                  resource_id: null,
+                  estimated_time: 0
                 });
               } else {
                 for (const rId of currentItemRouteIds) {
@@ -397,6 +400,9 @@ export default function ProductionRequests() {
                       name: `${bomItem.component_name}: ${route?.name || 'Produção'}`,
                       description: `Processo de Fabricação`,
                       status: 'PENDENTE',
+                      resource_type: null,
+                      resource_id: null,
+                      estimated_time: 0
                     });
                   }
                 }
@@ -431,6 +437,9 @@ export default function ProductionRequests() {
                   name: `${request.product_name}: ${routeName || 'Montagem'}`,
                   description: `Montagem Final`,
                   status: 'PENDENTE',
+                  resource_type: null,
+                  resource_id: null,
+                  estimated_time: 0
                 });
               }
             }
