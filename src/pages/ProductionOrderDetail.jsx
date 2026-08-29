@@ -31,6 +31,13 @@ import ClientSearchSelect from '@/components/clients/ClientSearchSelect';
 import { executeInventoryTransaction } from '@/utils/inventoryTransactionUtils';
 import { processProductionOrderControls } from '@/utils/productionControlUtils';
 
+const PRIORITY_CONFIG = {
+  BAIXA: { color: 'bg-slate-100 text-slate-700 hover:bg-slate-100', label: 'Baixa' },
+  NORMAL: { color: 'bg-blue-100 text-blue-700 hover:bg-blue-100', label: 'Normal' },
+  ALTA: { color: 'bg-amber-100 text-amber-700 hover:bg-amber-100', label: 'Alta' },
+  URGENTE: { color: 'bg-rose-100 text-rose-700 hover:bg-rose-100', label: 'Urgente' },
+};
+
 export default function ProductionOrderDetail() {
   const { companyId } = useCompanyId();
   const navigate = useNavigate();
@@ -66,6 +73,8 @@ export default function ProductionOrderDetail() {
   const [isEditingClient, setIsEditingClient] = useState(false);
   const [tempClientId, setTempClientId] = useState('');
   const [tempClientName, setTempClientName] = useState('');
+  const [isEditingPriority, setIsEditingPriority] = useState(false);
+  const [tempPriority, setTempPriority] = useState('NORMAL');
   const initializingRef = useRef(false);
   const initializingTimeoutRef = useRef(null);
 
@@ -842,6 +851,22 @@ Item ${i} chaves: [${Object.keys(stepsToCreate[i]).sort().join(', ')}]`);
     }
   });
 
+  const updatePriorityMutation = useMutation({
+    mutationFn: async (priority) => {
+      return base44.entities.ProductionOrder.update(opId, { 
+        priority: priority
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['production-order', opId, companyId] });
+      setIsEditingPriority(false);
+      toast.success('Prioridade da OP atualizada');
+    },
+    onError: (error) => {
+      toast.error('Erro ao atualizar prioridade: ' + error.message);
+    }
+  });
+
   if (loadingOP) {
     return (
       <div className="space-y-6">
@@ -998,10 +1023,65 @@ Item ${i} chaves: [${Object.keys(stepsToCreate[i]).sort().join(', ')}]`);
                   <p className="text-sm text-slate-500">Data Conclusão</p>
                   <p className="font-semibold">{op.due_date ? format(new Date(op.due_date), 'dd/MM/yyyy', { locale: ptBR }) : '-'}</p>
                 </div>
-                 <div>
-                   <p className="text-sm text-slate-500">Prioridade</p>
-                   <Badge className="mt-1">{op.priority}</Badge>
-                 </div>
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm text-slate-500">Prioridade</p>
+                      {!isEditingPriority && (
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="h-6 w-6 p-0 hover:bg-slate-100"
+                          onClick={() => {
+                            setTempPriority(op.priority || 'NORMAL');
+                            setIsEditingPriority(true);
+                          }}
+                          disabled={op.status === 'ENCERRADA' || op.status === 'CANCELADA'}
+                        >
+                          <Pencil className="h-3 w-3 text-slate-400" />
+                        </Button>
+                      )}
+                    </div>
+                    
+                    {isEditingPriority ? (
+                      <div className="flex items-center gap-1 mt-1">
+                        <Select 
+                          value={tempPriority} 
+                          onValueChange={setTempPriority}
+                        >
+                          <SelectTrigger className="h-7 w-28 text-xs">
+                            <SelectValue placeholder="Prioridade" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="BAIXA">Baixa</SelectItem>
+                            <SelectItem value="NORMAL">Normal</SelectItem>
+                            <SelectItem value="ALTA">Alta</SelectItem>
+                            <SelectItem value="URGENTE">Urgente</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Button 
+                          size="sm" 
+                          className="h-7 w-7 p-0 bg-emerald-600 hover:bg-emerald-700 text-white"
+                          onClick={() => updatePriorityMutation.mutate(tempPriority)}
+                          disabled={updatePriorityMutation.isPending}
+                        >
+                          {updatePriorityMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="ghost"
+                          className="h-7 w-7 p-0 hover:bg-slate-100"
+                          onClick={() => setIsEditingPriority(false)}
+                          disabled={updatePriorityMutation.isPending}
+                        >
+                          <X className="h-3.5 w-3.5 text-slate-500" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <Badge className={`mt-1 ${PRIORITY_CONFIG[op.priority]?.color || 'bg-slate-100 text-slate-700 hover:bg-slate-100'}`}>
+                        {PRIORITY_CONFIG[op.priority]?.label || op.priority || 'Normal'}
+                      </Badge>
+                    )}
+                  </div>
                  <div className="col-span-2 border-t pt-4">
                    <div className="flex items-center justify-between">
                      <p className="text-sm text-slate-500 italic block">Vinculado ao Cliente</p>
