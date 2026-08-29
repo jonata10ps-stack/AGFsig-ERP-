@@ -373,6 +373,24 @@ export default function ProductionOrderDetail() {
           throw new Error('Nenhum roteiro encontrado na BOM ou nos componentes.');
         }
 
+        // Validação de chaves para evitar "All object keys must match"
+        if (stepsToCreate.length > 0) {
+          const firstKeys = Object.keys(stepsToCreate[0]).sort().join(',');
+          const mismatches = [];
+          for (let i = 1; i < stepsToCreate.length; i++) {
+            const currentKeys = Object.keys(stepsToCreate[i]).sort().join(',');
+            if (firstKeys !== currentKeys) {
+              mismatches.push(`Item ${i} (${stepsToCreate[i].name}) possui chaves diferentes do Item 0. 
+Item 0 chaves: [${Object.keys(stepsToCreate[0]).sort().join(', ')}]
+Item ${i} chaves: [${Object.keys(stepsToCreate[i]).sort().join(', ')}]`);
+            }
+          }
+          if (mismatches.length > 0) {
+            console.error('Diferença de chaves encontrada:', mismatches);
+            throw new Error('Chaves incompatíveis no lote:\n' + mismatches.join('\n'));
+          }
+        }
+
         await base44.entities.ProductionStep.bulkCreate(stepsToCreate);
         toast.success(`${stepsToCreate.length} etapas geradas do BOM (Componentes + Montagem Principal)`);
       } catch (err) {
