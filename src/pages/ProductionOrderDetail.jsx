@@ -267,16 +267,28 @@ export default function ProductionOrderDetail() {
             if (!routeId) continue;
 
             const routeSteps = await base44.entities.ProductionRouteStep.filter({ route_id: routeId });
-            for (const rs of (routeSteps || []).sort((a, b) => (Number(a.sequence) || 0) - (Number(b.sequence) || 0))) {
+            if (routeSteps && routeSteps.length > 0) {
+              for (const rs of (routeSteps || []).sort((a, b) => (Number(a.sequence) || 0) - (Number(b.sequence) || 0))) {
+                stepsToCreate.push({
+                  company_id: companyId,
+                  op_id: opId,
+                  sequence: globalSequence++,
+                  name: `${bomItem.component_name}: ${rs.name}`,
+                  description: rs.description || '',
+                  status: 'PENDENTE',
+                  resource_type: rs.resource_type,
+                  resource_id: rs.resource_id,
+                });
+              }
+            } else {
+              const route = await base44.entities.ProductionRoute.get(routeId);
               stepsToCreate.push({
                 company_id: companyId,
                 op_id: opId,
                 sequence: globalSequence++,
-                name: `${bomItem.component_name}: ${rs.name}`,
-                description: rs.description || '',
+                name: `${bomItem.component_name}: ${route?.name || 'Produção'}`,
+                description: `Processo de Fabricação`,
                 status: 'PENDENTE',
-                resource_type: rs.resource_type,
-                resource_id: rs.resource_id,
               });
             }
           }
@@ -326,16 +338,28 @@ export default function ProductionOrderDetail() {
 
             const routeSteps = await base44.entities.ProductionRouteStep.filter({ route_id: routeId });
             console.log(`🔍 Etapas encontradas para a rota principal ${routeId}:`, routeSteps.length);
-            for (const rs of (routeSteps || []).sort((a, b) => (Number(a.sequence) || 0) - (Number(b.sequence) || 0))) {
+            if (routeSteps && routeSteps.length > 0) {
+              for (const rs of (routeSteps || []).sort((a, b) => (Number(a.sequence) || 0) - (Number(b.sequence) || 0))) {
+                stepsToCreate.push({
+                  company_id: companyId,
+                  op_id: opId,
+                  sequence: globalSequence++,
+                  name: `${op.product_name}: ${rs.name}`,
+                  description: `Montagem Final - ${rs.description || ''}`,
+                  status: 'PENDENTE',
+                  resource_type: rs.resource_type,
+                  resource_id: rs.resource_id,
+                });
+              }
+            } else {
+              const routeName = typeof routeRef === 'string' ? 'Montagem' : (routeRef?.route_name || routeRef?.name || 'Montagem');
               stepsToCreate.push({
                 company_id: companyId,
                 op_id: opId,
                 sequence: globalSequence++,
-                name: `${op.product_name}: ${rs.name}`,
-                description: `Montagem Final - ${rs.description || ''}`,
+                name: `${op.product_name}: ${routeName}`,
+                description: `Montagem Final`,
                 status: 'PENDENTE',
-                resource_type: rs.resource_type,
-                resource_id: rs.resource_id,
               });
             }
           }

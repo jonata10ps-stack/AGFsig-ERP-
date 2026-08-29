@@ -430,6 +430,15 @@ export default function ProductionOrders() {
                 status: 'PENDENTE'
               });
             }
+          } else {
+            stepsToCreate.push({
+              company_id: companyId,
+              op_id: op.id,
+              sequence: stepSequence++,
+              name: data.route_name || 'Montagem',
+              description: `Montagem Final`,
+              status: 'PENDENTE'
+            });
           }
         }
         
@@ -484,6 +493,16 @@ export default function ProductionOrders() {
                     status: 'PENDENTE'
                   });
                 }
+              } else {
+                const route = await base44.entities.ProductionRoute.get(routeRef.route_id);
+                stepsToCreate.push({
+                  company_id: companyId,
+                  op_id: op.id,
+                  sequence: stepSequence++,
+                  name: `${bomItem.component_name}: ${route?.name || 'Produção'}`,
+                  description: 'Processo de Fabricação',
+                  status: 'PENDENTE'
+                });
               }
             }
           }

@@ -374,17 +374,29 @@ export default function ProductionRequests() {
               } else {
                 for (const rId of currentItemRouteIds) {
                   const relevantSteps = allRouteSteps.filter(rs => rs.route_id === rId);
-                  for (const routeStep of relevantSteps) {
+                  if (relevantSteps && relevantSteps.length > 0) {
+                    for (const routeStep of relevantSteps) {
+                      stepsToCreate.push({
+                        company_id: companyId,
+                        op_id: newOP.id,
+                        sequence: globalSequence++,
+                        name: routeStep.name,
+                        description: `${bomItem.component_name} - ${routeStep.description || ''}`,
+                        resource_type: routeStep.resource_type,
+                        resource_id: routeStep.resource_id,
+                        status: 'PENDENTE',
+                        estimated_time: routeStep.estimated_time
+                      });
+                    }
+                  } else {
+                    const route = await base44.entities.ProductionRoute.get(rId);
                     stepsToCreate.push({
                       company_id: companyId,
                       op_id: newOP.id,
                       sequence: globalSequence++,
-                      name: routeStep.name,
-                      description: `${bomItem.component_name} - ${routeStep.description || ''}`,
-                      resource_type: routeStep.resource_type,
-                      resource_id: routeStep.resource_id,
+                      name: `${bomItem.component_name}: ${route?.name || 'Produção'}`,
+                      description: `Processo de Fabricação`,
                       status: 'PENDENTE',
-                      estimated_time: routeStep.estimated_time
                     });
                   }
                 }
@@ -411,6 +423,15 @@ export default function ProductionRequests() {
                     estimated_time: routeStep.estimated_time
                   });
                 }
+              } else {
+                stepsToCreate.push({
+                  company_id: companyId,
+                  op_id: newOP.id,
+                  sequence: globalSequence++,
+                  name: `${request.product_name}: ${routeName || 'Montagem'}`,
+                  description: `Montagem Final`,
+                  status: 'PENDENTE',
+                });
               }
             }
 
